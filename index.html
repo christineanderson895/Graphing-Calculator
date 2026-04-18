@@ -1,0 +1,1128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Graphing Calculator</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      display: flex;
+      height: 100vh;
+      font-family: sans-serif;
+      background: #1e1e2e;
+      color: #cdd6f4;
+    }
+
+    #sidebar {
+      width: 280px;
+      min-width: 280px;
+      background: #181825;
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid #313244;
+    }
+
+    /* ── Mode tabs ── */
+    #mode-tabs {
+      display: flex;
+      border-bottom: 1px solid #313244;
+      flex-shrink: 0;
+    }
+
+    .mode-tab {
+      flex: 1;
+      padding: 10px 6px;
+      background: none;
+      border: none;
+      color: #6c7086;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      letter-spacing: 0.04em;
+      transition: color 0.15s, background 0.15s;
+    }
+    .mode-tab:first-child { border-right: 1px solid #313244; }
+    .mode-tab.active { color: #cba6f7; background: #1e1e2e; }
+    .mode-tab:hover:not(.active) { color: #cdd6f4; }
+
+    /* ── Graphs panel ── */
+    #graphs-panel {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    #function-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-height: 0;
+    }
+
+    .fn-row { display: flex; align-items: center; gap: 6px; }
+
+    .fn-color {
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      cursor: pointer;
+      border: 2px solid transparent;
+    }
+
+    .fn-input {
+      flex: 1;
+      background: #313244;
+      border: 1px solid #45475a;
+      border-radius: 6px;
+      padding: 7px 10px;
+      color: #cdd6f4;
+      font-size: 0.9rem;
+      font-family: monospace;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .fn-input:focus { border-color: #cba6f7; }
+    .fn-input.error { border-color: #f38ba8; }
+
+    .fn-remove {
+      background: none; border: none;
+      color: #6c7086; cursor: pointer;
+      font-size: 1.1rem; padding: 2px 4px;
+      border-radius: 4px; transition: color 0.15s;
+    }
+    .fn-remove:hover { color: #f38ba8; }
+
+    .fn-type {
+      background: #313244; border: 1px solid #45475a;
+      border-radius: 4px; color: #cdd6f4;
+      font-size: 0.75rem; padding: 3px 5px;
+      cursor: pointer; outline: none;
+    }
+
+    #add-fn {
+      margin: 8px; padding: 8px;
+      background: #313244; border: 1px dashed #45475a;
+      border-radius: 6px; color: #6c7086;
+      cursor: pointer; font-size: 0.85rem;
+      transition: all 0.15s; flex-shrink: 0;
+    }
+    #add-fn:hover { border-color: #cba6f7; color: #cba6f7; }
+
+    #controls {
+      padding: 10px; border-top: 1px solid #313244;
+      display: flex; flex-direction: column;
+      gap: 6px; flex-shrink: 0;
+    }
+
+    .ctrl-row {
+      display: flex; align-items: center;
+      gap: 8px; font-size: 0.8rem; color: #a6adc8;
+    }
+    .ctrl-row input[type=range] { flex: 1; accent-color: #cba6f7; }
+
+    /* ── Animations panel ── */
+    #animations-panel {
+      display: none;
+      flex-direction: column;
+      flex: 1; overflow: hidden; min-height: 0;
+    }
+
+    #anim-list {
+      flex: 1; overflow-y: auto;
+      padding: 8px;
+      display: flex; flex-direction: column;
+      gap: 5px; min-height: 0;
+    }
+
+    .anim-row {
+      background: #1e1e2e;
+      border: 1px solid #313244;
+      border-radius: 8px;
+      overflow: hidden;
+      transition: border-color 0.15s;
+    }
+    .anim-row.active { border-color: #cba6f7; background: #1e1e30; }
+
+    .anim-main {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 10px;
+    }
+
+    .anim-label {
+      font-family: monospace;
+      font-size: 0.85rem;
+      color: #a6adc8;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .anim-input {
+      flex: 1; min-width: 0;
+      background: transparent;
+      border: none;
+      border-bottom: 1px solid #45475a;
+      color: #cdd6f4;
+      font-size: 0.85rem;
+      font-family: monospace;
+      outline: none;
+      padding: 2px 4px;
+      transition: border-color 0.15s;
+    }
+    .anim-input:focus { border-bottom-color: #cba6f7; }
+    .anim-input.error { border-bottom-color: #f38ba8; }
+
+    .anim-toggle {
+      background: none; border: none;
+      color: #6c7086; cursor: pointer;
+      font-size: 0.75rem; padding: 2px 4px;
+      border-radius: 4px; flex-shrink: 0;
+      transition: color 0.15s;
+      line-height: 1;
+    }
+    .anim-toggle:hover { color: #cba6f7; }
+
+    /* Accordion */
+    .anim-accordion {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.2s ease;
+    }
+    .anim-accordion.open { max-height: 120px; }
+
+    .anim-accordion-inner {
+      padding: 0 10px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      border-top: 1px solid #313244;
+      padding-top: 8px;
+    }
+
+    .anim-slider-row {
+      display: flex; align-items: center;
+      gap: 6px; font-size: 0.73rem; color: #6c7086;
+    }
+    .anim-slider-row .asr-label { width: 26px; flex-shrink: 0; }
+    .anim-slider-row input[type=range] { flex: 1; accent-color: #cba6f7; cursor: pointer; }
+    .anim-slider-row .asr-val {
+      width: 18px; text-align: right; flex-shrink: 0;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .anim-remove-row {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 2px;
+    }
+
+    .anim-remove {
+      background: none; border: none;
+      color: #6c7086; cursor: pointer;
+      font-size: 0.75rem; padding: 3px 8px;
+      border-radius: 4px; transition: color 0.15s, background 0.15s;
+    }
+    .anim-remove:hover { color: #f38ba8; background: #2a1e2e; }
+
+    #add-anim {
+      margin: 8px; padding: 8px;
+      background: #313244; border: 1px dashed #45475a;
+      border-radius: 6px; color: #6c7086;
+      cursor: pointer; font-size: 0.85rem;
+      transition: all 0.15s; flex-shrink: 0;
+    }
+    #add-anim:hover { border-color: #cba6f7; color: #cba6f7; }
+
+    #anim-controls {
+      padding: 10px; border-top: 1px solid #313244;
+      display: flex; flex-direction: column;
+      gap: 8px; flex-shrink: 0;
+    }
+
+    #anim-playback {
+      display: flex; align-items: center; gap: 6px;
+    }
+
+    .play-btn {
+      background: #313244; border: 1px solid #45475a;
+      border-radius: 6px; color: #cdd6f4;
+      cursor: pointer; font-size: 0.95rem;
+      width: 32px; height: 32px;
+      display: flex; align-items: center; justify-content: center;
+      transition: background 0.15s, border-color 0.15s;
+      flex-shrink: 0;
+    }
+    .play-btn:hover { background: #45475a; border-color: #cba6f7; }
+    .play-btn.active { background: #cba6f7; color: #181825; border-color: #cba6f7; }
+
+    #anim-loop-label {
+      display: flex; align-items: center; gap: 4px;
+      font-size: 0.8rem; color: #a6adc8;
+      cursor: pointer; margin-left: auto;
+    }
+    #anim-loop-label input { accent-color: #cba6f7; cursor: pointer; }
+
+    #anim-duration-row {
+      display: flex; align-items: center;
+      gap: 6px; font-size: 0.8rem; color: #a6adc8;
+    }
+
+    #anim-duration {
+      width: 52px; background: #313244;
+      border: 1px solid #45475a; border-radius: 4px;
+      color: #cdd6f4; font-size: 0.8rem;
+      padding: 3px 6px; outline: none; text-align: right;
+    }
+    #anim-duration:focus { border-color: #cba6f7; }
+
+    #anim-scrubber-row {
+      display: flex; align-items: center;
+      gap: 6px; font-size: 0.75rem; color: #6c7086;
+    }
+    #anim-scrubber { flex: 1; accent-color: #cba6f7; cursor: pointer; }
+    #anim-t-display {
+      width: 38px; text-align: right;
+      font-variant-numeric: tabular-nums; flex-shrink: 0;
+    }
+
+    /* ── Canvas ── */
+    #canvas-wrap { flex: 1; position: relative; overflow: hidden; }
+
+    canvas {
+      display: block; width: 100%; height: 100%; cursor: grab;
+    }
+    canvas:active { cursor: grabbing; }
+  </style>
+</head>
+<body>
+
+<div id="sidebar">
+  <div id="mode-tabs">
+    <button class="mode-tab active" id="tab-graphs">Graphs</button>
+    <button class="mode-tab" id="tab-animations">Animations</button>
+  </div>
+
+  <!-- Graphs panel -->
+  <div id="graphs-panel">
+    <div id="function-list"></div>
+    <button id="add-fn">+ Add function</button>
+    <div id="controls">
+      <div class="ctrl-row">
+        <span>θ step</span>
+        <input type="range" id="theta-step" min="0.001" max="0.1" step="0.001" value="0.02" />
+        <span id="theta-step-val">0.02</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Animations panel -->
+  <div id="animations-panel">
+    <div id="anim-list"></div>
+    <button id="add-anim">+ Add animation</button>
+    <div id="anim-controls">
+      <div id="anim-playback">
+        <button class="play-btn" id="btn-play" title="Play / Pause">▶</button>
+        <button class="play-btn" id="btn-reset" title="Reset">■</button>
+        <label id="anim-loop-label">
+          <input type="checkbox" id="anim-loop"> Loop
+        </label>
+      </div>
+      <div id="anim-duration-row">
+        <span>Duration</span>
+        <input type="number" id="anim-duration" min="0.1" step="0.1" value="5" />
+        <span>s</span>
+      </div>
+      <div id="anim-scrubber-row">
+        <span>t</span>
+        <input type="range" id="anim-scrubber" min="0" max="1" step="0.001" value="0" />
+        <span id="anim-t-display">0.000</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="canvas-wrap">
+  <canvas id="graph"></canvas>
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════
+// SHARED — canvas, viewport, grid
+// ════════════════════════════════════════════════════════
+
+const canvas = document.getElementById('graph');
+const ctx = canvas.getContext('2d');
+
+let originX = 0, originY = 0;
+let scale = 60;
+let dragging = false, dragStartX, dragStartY, dragOriginX, dragOriginY;
+let currentMode = 'graphs';
+
+function resize() {
+  const wrap = canvas.parentElement;
+  canvas.width  = wrap.clientWidth  * devicePixelRatio;
+  canvas.height = wrap.clientHeight * devicePixelRatio;
+  canvas.style.width  = wrap.clientWidth  + 'px';
+  canvas.style.height = wrap.clientHeight + 'px';
+  if (originX === 0 && originY === 0) {
+    originX = canvas.width  / 2;
+    originY = canvas.height / 2;
+  }
+  draw();
+}
+window.addEventListener('resize', resize);
+
+function toCanvas(mathX, mathY) {
+  return [originX + mathX * scale, originY - mathY * scale];
+}
+function toMath(cx, cy) {
+  return [(cx - originX) / scale, (originY - cy) / scale];
+}
+
+function drawGrid() {
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#1e1e2e';
+  ctx.fillRect(0, 0, W, H);
+
+  const step   = scale;
+  const startX = Math.floor(-originX / step) * step + originX;
+  const startY = Math.floor(-originY / step) * step + originY;
+
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = '#313244';
+  for (let x = startX; x < W; x += step) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
+  for (let y = startY; y < H; y += step) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+
+  ctx.strokeStyle = '#585b70';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(originX, 0); ctx.lineTo(originX, H); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0, originY); ctx.lineTo(W, originY); ctx.stroke();
+
+  ctx.fillStyle = '#6c7086';
+  ctx.font = `${11 * devicePixelRatio}px sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  const mathLeft  = Math.ceil(toMath(0, 0)[0]);
+  const mathRight = Math.floor(toMath(W, 0)[0]);
+  for (let n = mathLeft; n <= mathRight; n++) {
+    if (n === 0) continue;
+    const [cx] = toCanvas(n, 0);
+    ctx.fillText(n, cx, originY + 4);
+  }
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  const mathTop    = Math.ceil(toMath(0, 0)[1]);
+  const mathBottom = Math.floor(toMath(0, H)[1]);
+  for (let n = mathBottom; n <= mathTop; n++) {
+    if (n === 0) continue;
+    const [, cy] = toCanvas(0, n);
+    ctx.fillText(n, originX - 6, cy);
+  }
+}
+
+// Pan & zoom
+canvas.addEventListener('mousedown', e => {
+  dragging = true;
+  dragStartX  = e.clientX * devicePixelRatio;
+  dragStartY  = e.clientY * devicePixelRatio;
+  dragOriginX = originX;
+  dragOriginY = originY;
+});
+window.addEventListener('mousemove', e => {
+  if (!dragging) return;
+  originX = dragOriginX + (e.clientX * devicePixelRatio - dragStartX);
+  originY = dragOriginY + (e.clientY * devicePixelRatio - dragStartY);
+  draw();
+});
+window.addEventListener('mouseup', () => { dragging = false; });
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  const factor = e.deltaY < 0 ? 1.1 : 0.9;
+  const mx = e.offsetX * devicePixelRatio;
+  const my = e.offsetY * devicePixelRatio;
+  originX = mx + (originX - mx) * factor;
+  originY = my + (originY - my) * factor;
+  scale *= factor;
+  draw();
+}, { passive: false });
+
+
+// ════════════════════════════════════════════════════════
+// GRAPHS MODE
+// ════════════════════════════════════════════════════════
+
+function makeEval(expr) {
+  const src = expr
+    .replace(/\^/g,      '**')
+    .replace(/\bsin\b/g,  'Math.sin')
+    .replace(/\bcos\b/g,  'Math.cos')
+    .replace(/\btan\b/g,  'Math.tan')
+    .replace(/\bsqrt\b/g, 'Math.sqrt')
+    .replace(/\babs\b/g,  'Math.abs')
+    .replace(/\blog\b/g,  'Math.log10')
+    .replace(/\bln\b/g,   'Math.log')
+    .replace(/\bexp\b/g,  'Math.exp')
+    .replace(/\bpi\b/g,   'Math.PI')
+    .replace(/\be\b/g,    'Math.E')
+    .replace(/\bfloor\b/g,'Math.floor')
+    .replace(/\bceil\b/g, 'Math.ceil');
+  // eslint-disable-next-line no-new-func
+  return new Function('x','theta','t',`"use strict"; try { return ${src}; } catch(e) { return NaN; }`);
+}
+
+const GRAPH_COLORS = ['#f38ba8','#a6e3a1','#89b4fa','#fab387','#f9e2af','#cba6f7','#89dceb','#94e2d5'];
+let functions = [];
+let graphColorIdx = 0;
+
+function addFunction(expr = '', type = 'cartesian') {
+  const color = GRAPH_COLORS[graphColorIdx++ % GRAPH_COLORS.length];
+  const f = { id: Date.now() + Math.random(), expr, type, color,
+               compiled: null, compiledX: null, compiledY: null, error: false };
+  functions.push(f);
+  renderFunctionList();
+  return f;
+}
+
+function compileFunction(f) {
+  f.error = false;
+  try {
+    if (f.type === 'parametric') {
+      const parts = f.expr.split(',');
+      if (parts.length < 2) throw new Error('need two expressions');
+      f.compiledX = makeEval(parts[0].trim());
+      f.compiledY = makeEval(parts[1].trim());
+      f.compiled  = true;
+    } else {
+      f.compiled = makeEval(f.expr);
+    }
+  } catch(e) { f.error = true; f.compiled = null; }
+}
+
+function renderFunctionList() {
+  const list = document.getElementById('function-list');
+  list.innerHTML = '';
+  for (const f of functions) {
+    const row = document.createElement('div');
+    row.className = 'fn-row';
+
+    const dot = document.createElement('div');
+    dot.className = 'fn-color';
+    dot.style.background = f.color;
+
+    const typeSelect = document.createElement('select');
+    typeSelect.className = 'fn-type';
+    ['cartesian','polar','parametric'].forEach(t => {
+      const opt = document.createElement('option');
+      opt.value = t; opt.textContent = t[0].toUpperCase();
+      if (t === f.type) opt.selected = true;
+      typeSelect.appendChild(opt);
+    });
+    typeSelect.title = 'Function type';
+    typeSelect.addEventListener('change', () => {
+      f.type = typeSelect.value;
+      compileFunction(f);
+      input.classList.toggle('error', f.error);
+      draw();
+    });
+
+    const input = document.createElement('input');
+    input.className = 'fn-input' + (f.error ? ' error' : '');
+    input.type = 'text';
+    input.value = f.expr;
+    input.placeholder = f.type === 'polar' ? 'r = f(theta)' : f.type === 'parametric' ? 'x(t), y(t)' : 'y = f(x)';
+    input.addEventListener('input', () => {
+      f.expr = input.value;
+      compileFunction(f);
+      input.classList.toggle('error', f.error && f.expr.trim() !== '');
+      draw();
+    });
+
+    const rm = document.createElement('button');
+    rm.className = 'fn-remove';
+    rm.textContent = '×';
+    rm.addEventListener('click', () => {
+      functions = functions.filter(x => x.id !== f.id);
+      renderFunctionList();
+      draw();
+    });
+
+    row.append(dot, typeSelect, input, rm);
+    list.appendChild(row);
+  }
+}
+
+document.getElementById('add-fn').addEventListener('click', () => addFunction('', 'cartesian'));
+
+const thetaStepInput = document.getElementById('theta-step');
+const thetaStepVal   = document.getElementById('theta-step-val');
+thetaStepInput.addEventListener('input', () => {
+  thetaStepVal.textContent = parseFloat(thetaStepInput.value).toFixed(3);
+  draw();
+});
+
+function plotCartesian(fn, color) {
+  const W = canvas.width, step = 1 / devicePixelRatio;
+  ctx.beginPath();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2 * devicePixelRatio;
+  let first = true, prevPy = null;
+  for (let px = 0; px <= W; px += step) {
+    const y = fn((px - originX) / scale, 0, 0);
+    if (!isFinite(y)) { first = true; prevPy = null; continue; }
+    const py = originY - y * scale;
+    if (prevPy !== null) {
+      if ((py < 0 && prevPy > canvas.height) || (py > canvas.height && prevPy < 0)) first = true;
+    }
+    if (first) { ctx.moveTo(px, py); first = false; } else ctx.lineTo(px, py);
+    prevPy = py;
+  }
+  ctx.stroke();
+}
+
+function plotPolar(fn, color, thetaStep) {
+  ctx.beginPath();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2 * devicePixelRatio;
+  let first = true;
+  for (let theta = 0; theta <= Math.PI * 2 + thetaStep; theta += thetaStep) {
+    const r = fn(0, theta, theta);
+    if (!isFinite(r)) { first = true; continue; }
+    const [px, py] = toCanvas(r * Math.cos(theta), r * Math.sin(theta));
+    if (first) { ctx.moveTo(px, py); first = false; } else ctx.lineTo(px, py);
+  }
+  ctx.stroke();
+}
+
+function plotParametric(fnX, fnY, color) {
+  ctx.beginPath();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2 * devicePixelRatio;
+  const steps = 2000, tMin = -20, tMax = 20;
+  let first = true;
+  for (let i = 0; i <= steps; i++) {
+    const t = tMin + (tMax - tMin) * i / steps;
+    const x = fnX(0, 0, t), y = fnY(0, 0, t);
+    if (!isFinite(x) || !isFinite(y)) { first = true; continue; }
+    const [px, py] = toCanvas(x, y);
+    if (first) { ctx.moveTo(px, py); first = false; } else ctx.lineTo(px, py);
+  }
+  ctx.stroke();
+}
+
+function drawGraphs() {
+  drawGrid();
+  const thetaStep = parseFloat(thetaStepInput.value);
+  for (const f of functions) {
+    if (!f.compiled || f.error) continue;
+    try {
+      if      (f.type === 'cartesian')  plotCartesian(f.compiled, f.color);
+      else if (f.type === 'polar')      plotPolar(f.compiled, f.color, thetaStep);
+      else if (f.type === 'parametric') plotParametric(f.compiledX, f.compiledY, f.color);
+    } catch(e) {}
+  }
+}
+
+
+// ════════════════════════════════════════════════════════
+// ANIMATIONS MODE — complex number engine
+// ════════════════════════════════════════════════════════
+
+class Cx {
+  constructor(re = 0, im = 0) { this.re = re; this.im = im; }
+  add(b) { return new Cx(this.re + b.re, this.im + b.im); }
+  sub(b) { return new Cx(this.re - b.re, this.im - b.im); }
+  mul(b) { return new Cx(this.re*b.re - this.im*b.im, this.re*b.im + this.im*b.re); }
+  div(b) {
+    const d = b.re*b.re + b.im*b.im;
+    if (d === 0) return new Cx(NaN, NaN);
+    return new Cx((this.re*b.re + this.im*b.im)/d, (this.im*b.re - this.re*b.im)/d);
+  }
+  pow(b) {
+    if (this.re === 0 && this.im === 0) return b.re > 0 ? new Cx(0,0) : new Cx(NaN,NaN);
+    const r = Math.sqrt(this.re*this.re + this.im*this.im);
+    const theta = Math.atan2(this.im, this.re);
+    const lnA = new Cx(Math.log(r), theta);
+    const p   = b.mul(lnA);
+    const eR  = Math.exp(p.re);
+    return new Cx(eR * Math.cos(p.im), eR * Math.sin(p.im));
+  }
+  neg() { return new Cx(-this.re, -this.im); }
+  ok()  { return isFinite(this.re) && isFinite(this.im); }
+}
+
+// ── Tokenizer (single-char identifiers so "it" → [i][t]) ──
+function animTokenize(expr) {
+  const toks = [];
+  let i = 0;
+  while (i < expr.length) {
+    if (/\s/.test(expr[i])) { i++; continue; }
+    if (/\d/.test(expr[i]) || (expr[i] === '.' && /\d/.test(expr[i+1] ?? ''))) {
+      let j = i;
+      while (j < expr.length && /[\d.]/.test(expr[j])) j++;
+      toks.push({t:'num', v: parseFloat(expr.slice(i,j))}); i = j;
+    } else if (/[a-zA-Z]/.test(expr[i])) {
+      toks.push({t:'id', v: expr[i++]});
+    } else {
+      const ch = expr[i++];
+      if      (ch==='+') toks.push({t:'+'});
+      else if (ch==='-') toks.push({t:'-'});
+      else if (ch==='*') toks.push({t:'*'});
+      else if (ch==='/') toks.push({t:'/'});
+      else if (ch==='^') toks.push({t:'^'});
+      else if (ch==='(') toks.push({t:'('});
+      else if (ch===')') toks.push({t:')'});
+    }
+  }
+  return toks;
+}
+
+// ── Parser → AST ──
+function animParse(toks) {
+  let p = 0;
+  const peek = () => toks[p];
+  const next = () => toks[p++];
+
+  function expr() {
+    let L = term();
+    while (peek() && (peek().t==='+' || peek().t==='-')) {
+      const op = next().t;
+      L = {n:'op', op, L, R: term()};
+    }
+    return L;
+  }
+
+  function term() {
+    let L = unary();
+    while (peek()) {
+      const t = peek().t;
+      if (t==='*' || t==='/') { const op=next().t; L={n:'op',op,L,R:unary()}; }
+      else if (t==='num' || t==='id' || t==='(') { L={n:'op',op:'*',L,R:unary()}; }
+      else break;
+    }
+    return L;
+  }
+
+  function unary() {
+    if (peek() && peek().t==='-') { next(); return {n:'neg', arg: power()}; }
+    return power();
+  }
+
+  function power() {
+    const base = atom();
+    if (peek() && peek().t==='^') { next(); return {n:'op',op:'^',L:base,R:unary()}; }
+    return base;
+  }
+
+  function atom() {
+    const tok = peek();
+    if (!tok) throw new Error('Unexpected end');
+    if (tok.t === 'num') { next(); return {n:'num', v: tok.v}; }
+    if (tok.t === 'id') {
+      next();
+      const name = tok.v;
+      if (peek() && peek().t === '(') {
+        next();
+        let depth = 1;
+        while (p < toks.length && depth > 0) {
+          if (toks[p].t==='(') depth++;
+          else if (toks[p].t===')') depth--;
+          p++;
+        }
+        if (/^[A-Z]$/.test(name)) return {n:'ref', name};
+        throw new Error(`Unknown function: ${name}`);
+      }
+      if (name === 'i') return {n:'i'};
+      if (name === 't') return {n:'t'};
+      if (/^[A-Z]$/.test(name)) return {n:'ref', name};
+      throw new Error(`Unknown identifier: ${name}`);
+    }
+    if (tok.t === '(') {
+      next();
+      const node = expr();
+      if (!peek() || peek().t !== ')') throw new Error('Expected )');
+      next();
+      return node;
+    }
+    throw new Error(`Unexpected token: ${tok.t}`);
+  }
+
+  const ast = expr();
+  if (p < toks.length) throw new Error('Unexpected extra tokens');
+  return ast;
+}
+
+// ── AST evaluator ──
+function evalAST(node, t, aCtx) {
+  switch (node.n) {
+    case 'num': return new Cx(node.v, 0);
+    case 'i':   return new Cx(0, 1);
+    case 't':   return new Cx(t, 0);
+    case 'ref': {
+      const v = aCtx[node.name];
+      if (!v) throw new Error(`Undefined: ${node.name}`);
+      return v;
+    }
+    case 'neg': return evalAST(node.arg, t, aCtx).neg();
+    case 'op': {
+      const L = evalAST(node.L, t, aCtx);
+      const R = evalAST(node.R, t, aCtx);
+      if (node.op==='+') return L.add(R);
+      if (node.op==='-') return L.sub(R);
+      if (node.op==='*') return L.mul(R);
+      if (node.op==='/') return L.div(R);
+      if (node.op==='^') return L.pow(R);
+      throw new Error(`Unknown op: ${node.op}`);
+    }
+    default: throw new Error(`Unknown node: ${node.n}`);
+  }
+}
+
+function compileAnimExpr(expr) {
+  const ast = animParse(animTokenize(expr));
+  return (t, aCtx) => evalAST(ast, t, aCtx);
+}
+
+// ── Animation state ──
+const ANIM_COLORS = ['#f38ba8','#89b4fa','#a6e3a1','#fab387','#cba6f7','#f9e2af','#89dceb','#94e2d5'];
+let animations   = [];
+let animColorIdx = 0;
+let currentT     = 0;
+let isPlaying    = false;
+let animDuration = 5;
+let animLoop     = false;
+let animRafId    = null;
+let animElapsed  = 0;
+let animLastFrame = null;
+
+function nextLetter() {
+  const used = new Set(animations.map(a => a.letter));
+  for (let c = 65; c <= 90; c++) {
+    const ch = String.fromCharCode(c);
+    if (!used.has(ch)) return ch;
+  }
+  return '?';
+}
+
+function addAnimation(expr = '') {
+  const letter = nextLetter();
+  const color  = ANIM_COLORS[animColorIdx++ % ANIM_COLORS.length];
+  const anim   = {
+    id: Date.now() + Math.random(),
+    letter, color, expr,
+    compiled: null, error: false,
+    expanded: false,
+    dotIntensity:   5,
+    trailIntensity: 5,
+  };
+  if (expr) compileAnim(anim);
+  animations.push(anim);
+  renderAnimList();
+  draw();
+  return anim;
+}
+
+function animIsActive(anim) {
+  return anim.dotIntensity > 0 || anim.trailIntensity > 0;
+}
+
+function compileAnim(anim) {
+  anim.error    = false;
+  anim.compiled = null;
+  if (!anim.expr.trim()) return;
+  try {
+    anim.compiled = compileAnimExpr(anim.expr);
+  } catch(e) {
+    anim.error = true;
+  }
+}
+
+function evalAt(t) {
+  const aCtx = {};
+  for (const anim of animations) {
+    if (!anim.compiled || anim.error) { aCtx[anim.letter] = null; continue; }
+    try {
+      const v = anim.compiled(t, aCtx);
+      aCtx[anim.letter] = (v && v.ok()) ? v : null;
+    } catch(e) {
+      aCtx[anim.letter] = null;
+    }
+  }
+  return aCtx;
+}
+
+// ── Animation rendering ──
+function drawAnimations() {
+  drawGrid();
+
+  const active     = animations.filter(a => animIsActive(a) && a.compiled && !a.error);
+  const trailAnims = active.filter(a => a.trailIntensity > 0 && currentT > 0);
+
+  // Single pass over t to build all trail point arrays
+  const STEPS = 400;
+  const trailPts = new Map();
+  if (trailAnims.length > 0) {
+    for (const a of trailAnims) trailPts.set(a.letter, []);
+    for (let i = 0; i <= STEPS; i++) {
+      const tSample = currentT * i / STEPS;
+      const aCtx    = evalAt(tSample);
+      for (const a of trailAnims) {
+        const v = aCtx[a.letter];
+        trailPts.get(a.letter).push(v ? toCanvas(v.re, v.im) : null);
+      }
+    }
+  }
+
+  const nowCtx = evalAt(currentT);
+
+  // Trails first, dots on top
+  for (const anim of trailAnims) {
+    const pts = trailPts.get(anim.letter);
+    ctx.beginPath();
+    ctx.strokeStyle = anim.color;
+    ctx.lineWidth   = (1 + 5 * (anim.trailIntensity / 10)) * devicePixelRatio;
+    ctx.lineCap  = 'round';
+    ctx.lineJoin = 'round';
+    let first = true;
+    for (const pt of pts) {
+      if (!pt) { first = true; continue; }
+      if (first) { ctx.moveTo(pt[0], pt[1]); first = false; }
+      else ctx.lineTo(pt[0], pt[1]);
+    }
+    ctx.stroke();
+  }
+
+  for (const anim of active) {
+    if (anim.dotIntensity <= 0) continue;
+    const v = nowCtx[anim.letter];
+    if (!v) continue;
+    const [px, py] = toCanvas(v.re, v.im);
+    const radius   = (2 + 6 * (anim.dotIntensity / 10)) * devicePixelRatio;
+    ctx.beginPath();
+    ctx.arc(px, py, radius, 0, Math.PI * 2);
+    ctx.fillStyle = anim.color;
+    ctx.fill();
+  }
+}
+
+// ── Render animation sidebar list ──
+function renderAnimList() {
+  const list = document.getElementById('anim-list');
+  list.innerHTML = '';
+
+  for (const anim of animations) {
+    const row = document.createElement('div');
+    row.className = 'anim-row' + (animIsActive(anim) ? ' active' : '');
+
+    // ── Main row: label + input + toggle ──
+    const main = document.createElement('div');
+    main.className = 'anim-main';
+
+    const lbl = document.createElement('span');
+    lbl.className = 'anim-label';
+    lbl.textContent = `${anim.letter}(t) =`;
+
+    const inp = document.createElement('input');
+    inp.className = 'anim-input' + (anim.error ? ' error' : '');
+    inp.type  = 'text';
+    inp.value = anim.expr;
+    inp.addEventListener('input', () => {
+      anim.expr = inp.value;
+      compileAnim(anim);
+      inp.classList.toggle('error', anim.error && anim.expr.trim() !== '');
+      draw();
+    });
+
+    const toggle = document.createElement('button');
+    toggle.className = 'anim-toggle';
+    toggle.textContent = anim.expanded ? '▾' : '▸';
+    toggle.title = 'Options';
+
+    // ── Accordion ──
+    const accordion = document.createElement('div');
+    accordion.className = 'anim-accordion' + (anim.expanded ? ' open' : '');
+
+    const inner = document.createElement('div');
+    inner.className = 'anim-accordion-inner';
+
+    inner.appendChild(makeIntSliderRow('Dot', anim.dotIntensity, v => {
+      anim.dotIntensity = v;
+      row.classList.toggle('active', animIsActive(anim));
+      draw();
+    }));
+    inner.appendChild(makeIntSliderRow('Trail', anim.trailIntensity, v => {
+      anim.trailIntensity = v;
+      row.classList.toggle('active', animIsActive(anim));
+      draw();
+    }));
+
+    const rmRow = document.createElement('div');
+    rmRow.className = 'anim-remove-row';
+    const rm = document.createElement('button');
+    rm.className = 'anim-remove';
+    rm.textContent = 'Remove';
+    rm.addEventListener('click', () => {
+      animations = animations.filter(a => a.id !== anim.id);
+      renderAnimList();
+      draw();
+    });
+    rmRow.appendChild(rm);
+    inner.appendChild(rmRow);
+    accordion.appendChild(inner);
+
+    toggle.addEventListener('click', () => {
+      anim.expanded = !anim.expanded;
+      toggle.textContent = anim.expanded ? '▾' : '▸';
+      accordion.classList.toggle('open', anim.expanded);
+    });
+
+    main.append(lbl, inp, toggle);
+    row.append(main, accordion);
+    list.appendChild(row);
+  }
+}
+
+function makeIntSliderRow(label, value, onChange) {
+  const row = document.createElement('div');
+  row.className = 'anim-slider-row';
+
+  const lbl = document.createElement('span');
+  lbl.className = 'asr-label';
+  lbl.textContent = label;
+
+  const slider = document.createElement('input');
+  slider.type = 'range';
+  slider.min = 0; slider.max = 10; slider.step = 1;
+  slider.value = value;
+  slider.addEventListener('input', () => {
+    const v = parseInt(slider.value);
+    valSpan.textContent = v;
+    onChange(v);
+  });
+
+  const valSpan = document.createElement('span');
+  valSpan.className = 'asr-val';
+  valSpan.textContent = value;
+
+  row.append(lbl, slider, valSpan);
+  return row;
+}
+
+// ── Playback ──
+const btnPlay    = document.getElementById('btn-play');
+const btnReset   = document.getElementById('btn-reset');
+const animLoopEl = document.getElementById('anim-loop');
+const animDurEl  = document.getElementById('anim-duration');
+const scrubber   = document.getElementById('anim-scrubber');
+const tDisplay   = document.getElementById('anim-t-display');
+
+function setT(t) {
+  currentT = Math.max(0, Math.min(1, t));
+  scrubber.value       = currentT;
+  tDisplay.textContent = currentT.toFixed(3);
+  draw();
+}
+
+function playAnim() {
+  if (isPlaying) return;
+  if (currentT >= 1) setT(0);
+  animElapsed   = currentT * animDuration;
+  animLastFrame = null;
+  isPlaying = true;
+  btnPlay.textContent = '⏸';
+  btnPlay.classList.add('active');
+  animRafId = requestAnimationFrame(animFrame);
+}
+
+function pauseAnim() {
+  if (!isPlaying) return;
+  isPlaying = false;
+  btnPlay.textContent = '▶';
+  btnPlay.classList.remove('active');
+  if (animRafId) { cancelAnimationFrame(animRafId); animRafId = null; }
+}
+
+function resetAnim() {
+  pauseAnim();
+  setT(0);
+}
+
+function animFrame(now) {
+  if (animLastFrame !== null) animElapsed += (now - animLastFrame) / 1000;
+  animLastFrame = now;
+  let t = animElapsed / animDuration;
+  if (t >= 1) {
+    if (animLoop) { animElapsed = 0; animLastFrame = now; t = 0; }
+    else { setT(1); pauseAnim(); return; }
+  }
+  setT(t);
+  animRafId = requestAnimationFrame(animFrame);
+}
+
+btnPlay.addEventListener('click',  () => { isPlaying ? pauseAnim() : playAnim(); });
+btnReset.addEventListener('click', resetAnim);
+animLoopEl.addEventListener('change', () => { animLoop = animLoopEl.checked; });
+animDurEl.addEventListener('change', () => {
+  const v = parseFloat(animDurEl.value);
+  if (!isFinite(v) || v <= 0) { animDurEl.value = animDuration; return; }
+  animDuration = v;
+  if (isPlaying) { animElapsed = currentT * animDuration; animLastFrame = null; }
+});
+scrubber.addEventListener('input', () => {
+  pauseAnim();
+  setT(parseFloat(scrubber.value));
+});
+
+document.getElementById('add-anim').addEventListener('click', () => addAnimation());
+
+
+// ════════════════════════════════════════════════════════
+// MODE SWITCHING
+// ════════════════════════════════════════════════════════
+
+function setMode(mode) {
+  currentMode = mode;
+  const isGraphs = mode === 'graphs';
+  document.getElementById('tab-graphs').classList.toggle('active',      isGraphs);
+  document.getElementById('tab-animations').classList.toggle('active', !isGraphs);
+  document.getElementById('graphs-panel').style.display     = isGraphs ? 'flex' : 'none';
+  document.getElementById('animations-panel').style.display = isGraphs ? 'none' : 'flex';
+  draw();
+}
+
+document.getElementById('tab-graphs').addEventListener('click',     () => setMode('graphs'));
+document.getElementById('tab-animations').addEventListener('click', () => setMode('animations'));
+
+
+// ════════════════════════════════════════════════════════
+// UNIFIED DRAW
+// ════════════════════════════════════════════════════════
+
+function draw() {
+  if (currentMode === 'graphs') drawGraphs(); else drawAnimations();
+}
+
+
+// ════════════════════════════════════════════════════════
+// INIT
+// ════════════════════════════════════════════════════════
+
+addFunction('sin(x)', 'cartesian');
+addFunction('cos(theta)', 'polar');
+functions.forEach(compileFunction);
+renderFunctionList();
+
+addAnimation('t');   // pre-populate A(t) = t
+
+resize();
+</script>
+</body>
+</html>
