@@ -15,6 +15,43 @@
       color: #cdd6f4;
     }
 
+    /* ── Corner fold ── */
+    #corner-fold {
+      position: fixed;
+      top: 0; left: 0;
+      width: 44px; height: 44px;
+      cursor: pointer;
+      z-index: 300;
+    }
+    #corner-fold::before {
+      content: '';
+      display: block;
+      width: 0; height: 0;
+      border-top: 44px solid #3c3c58;
+      border-right: 44px solid transparent;
+      transition: border-top-color 0.2s;
+    }
+    #corner-fold:hover::before  { border-top-color: #5a5a80; }
+    #corner-fold.graphs-mode::before { border-top-color: #4a2e68; }
+    #corner-fold:hover.graphs-mode::before { border-top-color: #7a50a8; }
+
+    /* ── Tooltip ── */
+    #fold-tooltip {
+      position: fixed;
+      top: 48px; left: 4px;
+      background: #313244;
+      color: #cdd6f4;
+      font-size: 0.72rem;
+      padding: 3px 8px;
+      border-radius: 4px;
+      pointer-events: none;
+      display: none;
+      white-space: nowrap;
+      z-index: 400;
+      border: 1px solid #45475a;
+    }
+
+    /* ── Sidebar ── */
     #sidebar {
       width: 280px;
       min-width: 280px;
@@ -22,117 +59,19 @@
       display: flex;
       flex-direction: column;
       border-right: 1px solid #313244;
+      position: relative;
     }
 
-    /* ── Mode tabs ── */
-    #mode-tabs {
-      display: flex;
-      border-bottom: 1px solid #313244;
-      flex-shrink: 0;
-    }
-
-    .mode-tab {
-      flex: 1;
-      padding: 10px 6px;
-      background: none;
-      border: none;
-      color: #6c7086;
-      font-size: 0.82rem;
-      font-weight: 600;
-      cursor: pointer;
-      letter-spacing: 0.04em;
-      transition: color 0.15s, background 0.15s;
-    }
-    .mode-tab:first-child { border-right: 1px solid #313244; }
-    .mode-tab.active { color: #cba6f7; background: #1e1e2e; }
-    .mode-tab:hover:not(.active) { color: #cdd6f4; }
-
-    /* ── Graphs panel ── */
-    #graphs-panel {
+    /* ── Animations panel ── */
+    #animations-panel {
       display: flex;
       flex-direction: column;
       flex: 1;
       overflow: hidden;
       min-height: 0;
+      padding-top: 44px;
     }
 
-    #function-list {
-      flex: 1;
-      overflow-y: auto;
-      padding: 8px;
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      min-height: 0;
-    }
-
-    .fn-row { display: flex; align-items: center; gap: 6px; }
-
-    .fn-color {
-      width: 14px; height: 14px;
-      border-radius: 50%;
-      flex-shrink: 0;
-      cursor: pointer;
-      border: 2px solid transparent;
-    }
-
-    .fn-input {
-      flex: 1;
-      background: #313244;
-      border: 1px solid #45475a;
-      border-radius: 6px;
-      padding: 7px 10px;
-      color: #cdd6f4;
-      font-size: 0.9rem;
-      font-family: monospace;
-      outline: none;
-      transition: border-color 0.15s;
-    }
-    .fn-input:focus { border-color: #cba6f7; }
-    .fn-input.error { border-color: #f38ba8; }
-
-    .fn-remove {
-      background: none; border: none;
-      color: #6c7086; cursor: pointer;
-      font-size: 1.1rem; padding: 2px 4px;
-      border-radius: 4px; transition: color 0.15s;
-    }
-    .fn-remove:hover { color: #f38ba8; }
-
-    .fn-type {
-      background: #313244; border: 1px solid #45475a;
-      border-radius: 4px; color: #cdd6f4;
-      font-size: 0.75rem; padding: 3px 5px;
-      cursor: pointer; outline: none;
-    }
-
-    #add-fn {
-      margin: 8px; padding: 8px;
-      background: #313244; border: 1px dashed #45475a;
-      border-radius: 6px; color: #6c7086;
-      cursor: pointer; font-size: 0.85rem;
-      transition: all 0.15s; flex-shrink: 0;
-    }
-    #add-fn:hover { border-color: #cba6f7; color: #cba6f7; }
-
-    #controls {
-      padding: 10px; border-top: 1px solid #313244;
-      display: flex; flex-direction: column;
-      gap: 6px; flex-shrink: 0;
-    }
-
-    .ctrl-row {
-      display: flex; align-items: center;
-      gap: 8px; font-size: 0.8rem; color: #a6adc8;
-    }
-    .ctrl-row input[type=range] { flex: 1; accent-color: #cba6f7; }
-
-    /* ── Animations panel ── */
-    #animations-panel {
-      display: none;
-      flex-direction: column;
-      flex: 1; overflow: hidden; min-height: 0;
-    }
 
     #anim-list {
       flex: 1; overflow-y: auto;
@@ -141,101 +80,114 @@
       gap: 5px; min-height: 0;
     }
 
+    /* ── Animation rows ── */
     .anim-row {
-      background: #1e1e2e;
       border: 1px solid #313244;
       border-radius: 8px;
       overflow: hidden;
+      display: flex;
+      flex-direction: column;
       transition: border-color 0.15s;
+      background: #1e1e2e;
     }
     .anim-row.active { border-color: #cba6f7; background: #1e1e30; }
 
-    .anim-main {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      padding: 8px 10px;
+    .anim-header {
+      display: flex; align-items: center;
+      gap: 5px; padding: 7px 8px; cursor: pointer;
     }
-
-    .anim-label {
-      font-family: monospace;
-      font-size: 0.85rem;
-      color: #a6adc8;
-      white-space: nowrap;
-      flex-shrink: 0;
+    .anim-swatch {
+      width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+      box-sizing: border-box;
     }
-
-    .anim-input {
+    .anim-vis-section {
+      flex-shrink: 0; align-self: center;
+      width: 14px; height: 14px;
+      cursor: pointer; padding: 0;
+      border-radius: 3px;
+      margin: 0 3px 0 2px;
+    }
+    .anim-expr {
       flex: 1; min-width: 0;
-      background: transparent;
-      border: none;
-      border-bottom: 1px solid #45475a;
-      color: #cdd6f4;
-      font-size: 0.85rem;
-      font-family: monospace;
-      outline: none;
-      padding: 2px 4px;
-      transition: border-color 0.15s;
+      font-family: monospace; font-size: 0.82rem;
+      color: #cdd6f4; overflow: hidden;
+      text-overflow: ellipsis; white-space: nowrap;
     }
-    .anim-input:focus { border-bottom-color: #cba6f7; }
-    .anim-input.error { border-bottom-color: #f38ba8; }
+
+    .anim-mode-row { display: flex; gap: 4px; }
+    .anim-mode-btn {
+      flex: 1; padding: 3px 0;
+      background: #313244; border: 1px solid #45475a;
+      border-radius: 4px; color: #a6adc8;
+      font-size: 0.72rem; cursor: pointer; transition: all 0.15s;
+    }
+    .anim-mode-btn.active { background: #45475a; border-color: #cba6f7; color: #cdd6f4; }
+
+    .anim-from-to {
+      display: flex; align-items: center; gap: 5px;
+      font-size: 0.75rem; color: #a6adc8;
+    }
+    .anim-from-to input {
+      flex: 1; min-width: 0;
+      background: #313244; border: 1px solid #45475a;
+      border-radius: 4px; color: #cdd6f4;
+      font-size: 0.75rem; font-family: monospace;
+      padding: 3px 5px; outline: none; transition: border-color 0.15s;
+    }
+    .anim-from-to input:focus { border-color: #cba6f7; }
+    .anim-from-to input.error { border-color: #f38ba8; }
+
+    .anim-bottom-row { display: flex; align-items: center; justify-content: space-between; }
 
     .anim-toggle {
       background: none; border: none;
-      color: #6c7086; cursor: pointer;
-      font-size: 0.75rem; padding: 2px 4px;
-      border-radius: 4px; flex-shrink: 0;
-      transition: color 0.15s;
-      line-height: 1;
+      color: #a6adc8; cursor: pointer;
+      font-size: 0.65rem; padding: 1px 3px;
+      border-radius: 3px; flex-shrink: 0;
+      line-height: 1; transition: color 0.15s;
     }
     .anim-toggle:hover { color: #cba6f7; }
 
-    /* Accordion */
     .anim-accordion {
-      max-height: 0;
-      overflow: hidden;
+      max-height: 0; overflow: hidden;
       transition: max-height 0.2s ease;
     }
-    .anim-accordion.open { max-height: 120px; }
+    .anim-accordion.open { max-height: 200px; }
 
     .anim-accordion-inner {
-      padding: 0 10px 10px;
-      display: flex;
-      flex-direction: column;
-      gap: 5px;
+      padding: 6px 7px 7px;
+      display: flex; flex-direction: column; gap: 5px;
       border-top: 1px solid #313244;
-      padding-top: 8px;
     }
 
     .anim-slider-row {
       display: flex; align-items: center;
-      gap: 6px; font-size: 0.73rem; color: #6c7086;
+      gap: 5px; font-size: 0.7rem; color: #a6adc8;
     }
-    .anim-slider-row .asr-label { width: 26px; flex-shrink: 0; }
     .anim-slider-row input[type=range] { flex: 1; accent-color: #cba6f7; cursor: pointer; }
     .anim-slider-row .asr-val {
-      width: 18px; text-align: right; flex-shrink: 0;
+      width: 14px; text-align: right; flex-shrink: 0;
       font-variant-numeric: tabular-nums;
     }
 
-    .anim-remove-row {
-      display: flex;
-      justify-content: flex-end;
-      margin-top: 2px;
+    .anim-check-row {
+      display: flex; align-items: center;
+      gap: 5px; font-size: 0.7rem; color: #a6adc8; cursor: pointer;
     }
+    .anim-check-row input[type=checkbox] { accent-color: #cba6f7; cursor: pointer; }
 
     .anim-remove {
       background: none; border: none;
-      color: #6c7086; cursor: pointer;
-      font-size: 0.75rem; padding: 3px 8px;
-      border-radius: 4px; transition: color 0.15s, background 0.15s;
+      color: #a6adc8; cursor: pointer;
+      font-size: 0.7rem; padding: 2px 6px;
+      border-radius: 3px; transition: color 0.15s, background 0.15s;
     }
     .anim-remove:hover { color: #f38ba8; background: #2a1e2e; }
 
     #add-anim {
       margin: 8px; padding: 8px;
       background: #313244; border: 1px dashed #45475a;
-      border-radius: 6px; color: #6c7086;
+      border-radius: 6px; color: #a6adc8;
       cursor: pointer; font-size: 0.85rem;
       transition: all 0.15s; flex-shrink: 0;
     }
@@ -243,49 +195,36 @@
 
     #anim-controls {
       padding: 10px; border-top: 1px solid #313244;
-      display: flex; flex-direction: column;
-      gap: 8px; flex-shrink: 0;
+      display: flex; flex-direction: column; gap: 8px; flex-shrink: 0;
     }
-
-    #anim-playback {
-      display: flex; align-items: center; gap: 6px;
-    }
-
+    #anim-playback { display: flex; align-items: center; gap: 6px; }
     .play-btn {
       background: #313244; border: 1px solid #45475a;
-      border-radius: 6px; color: #cdd6f4;
-      cursor: pointer; font-size: 0.95rem;
-      width: 32px; height: 32px;
+      border-radius: 6px; color: #cdd6f4; cursor: pointer;
+      font-size: 0.95rem; width: 32px; height: 32px;
       display: flex; align-items: center; justify-content: center;
-      transition: background 0.15s, border-color 0.15s;
-      flex-shrink: 0;
+      transition: background 0.15s, border-color 0.15s; flex-shrink: 0;
     }
     .play-btn:hover { background: #45475a; border-color: #cba6f7; }
     .play-btn.active { background: #cba6f7; color: #181825; border-color: #cba6f7; }
-
     #anim-loop-label {
       display: flex; align-items: center; gap: 4px;
-      font-size: 0.8rem; color: #a6adc8;
-      cursor: pointer; margin-left: auto;
+      font-size: 0.8rem; color: #a6adc8; cursor: pointer; margin-left: auto;
     }
     #anim-loop-label input { accent-color: #cba6f7; cursor: pointer; }
-
     #anim-duration-row {
-      display: flex; align-items: center;
-      gap: 6px; font-size: 0.8rem; color: #a6adc8;
+      display: flex; align-items: center; gap: 6px;
+      font-size: 0.8rem; color: #a6adc8;
     }
-
     #anim-duration {
-      width: 52px; background: #313244;
-      border: 1px solid #45475a; border-radius: 4px;
-      color: #cdd6f4; font-size: 0.8rem;
+      width: 52px; background: #313244; border: 1px solid #45475a;
+      border-radius: 4px; color: #cdd6f4; font-size: 0.8rem;
       padding: 3px 6px; outline: none; text-align: right;
     }
     #anim-duration:focus { border-color: #cba6f7; }
-
     #anim-scrubber-row {
-      display: flex; align-items: center;
-      gap: 6px; font-size: 0.75rem; color: #6c7086;
+      display: flex; align-items: center; gap: 6px;
+      font-size: 0.75rem; color: #a6adc8;
     }
     #anim-scrubber { flex: 1; accent-color: #cba6f7; cursor: pointer; }
     #anim-t-display {
@@ -293,40 +232,86 @@
       font-variant-numeric: tabular-nums; flex-shrink: 0;
     }
 
+    /* ── Graphs panel ── */
+    #graphs-panel {
+      display: none;
+      flex-direction: column;
+      flex: 1; overflow: hidden; min-height: 0;
+      padding-top: 44px;
+    }
+    #graphs-header {
+      display: flex; align-items: center;
+      padding: 0 12px;
+      height: 38px;
+      border-bottom: 1px solid #313244;
+      flex-shrink: 0;
+    }
+    #graphs-header span {
+      font-size: 0.82rem; font-weight: 600;
+      color: #a6adc8; letter-spacing: 0.05em;
+    }
+    #function-list {
+      flex: 1; overflow-y: auto; padding: 8px;
+      display: flex; flex-direction: column; gap: 6px; min-height: 0;
+    }
+    .fn-row { display: flex; align-items: center; gap: 6px; }
+    .fn-color {
+      width: 14px; height: 14px; border-radius: 50%;
+      flex-shrink: 0; cursor: pointer; border: 2px solid transparent;
+    }
+    .fn-input {
+      flex: 1; background: #313244; border: 1px solid #45475a;
+      border-radius: 6px; padding: 7px 10px; color: #cdd6f4;
+      font-size: 0.9rem; font-family: monospace; outline: none;
+      transition: border-color 0.15s;
+    }
+    .fn-input:focus { border-color: #cba6f7; }
+    .fn-input.error { border-color: #f38ba8; }
+    .fn-remove {
+      background: none; border: none; color: #a6adc8; cursor: pointer;
+      font-size: 1.1rem; padding: 2px 4px; border-radius: 4px; transition: color 0.15s;
+    }
+    .fn-remove:hover { color: #f38ba8; }
+    .fn-type {
+      background: #313244; border: 1px solid #45475a; border-radius: 4px;
+      color: #cdd6f4; font-size: 0.75rem; padding: 3px 5px; cursor: pointer; outline: none;
+    }
+    #add-fn {
+      margin: 8px; padding: 8px;
+      background: #313244; border: 1px dashed #45475a; border-radius: 6px;
+      color: #a6adc8; cursor: pointer; font-size: 0.85rem;
+      transition: all 0.15s; flex-shrink: 0;
+    }
+    #add-fn:hover { border-color: #cba6f7; color: #cba6f7; }
+    #graphs-controls {
+      padding: 10px; border-top: 1px solid #313244;
+      display: flex; flex-direction: column; gap: 6px; flex-shrink: 0;
+    }
+    .ctrl-row {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 0.8rem; color: #a6adc8;
+    }
+    .ctrl-row input[type=range] { flex: 1; accent-color: #cba6f7; }
+
     /* ── Canvas ── */
     #canvas-wrap { flex: 1; position: relative; overflow: hidden; }
-
-    canvas {
-      display: block; width: 100%; height: 100%; cursor: grab;
-    }
+    canvas { display: block; width: 100%; height: 100%; cursor: grab; }
     canvas:active { cursor: grabbing; }
   </style>
 </head>
 <body>
 
+<!-- Corner fold: toggles between Animations and Graphs modes -->
+<div id="corner-fold"></div>
+<div id="fold-tooltip">Switch to Graphs</div>
+
 <div id="sidebar">
-  <div id="mode-tabs">
-    <button class="mode-tab active" id="tab-graphs">Graphs</button>
-    <button class="mode-tab" id="tab-animations">Animations</button>
-  </div>
 
-  <!-- Graphs panel -->
-  <div id="graphs-panel">
-    <div id="function-list"></div>
-    <button id="add-fn">+ Add function</button>
-    <div id="controls">
-      <div class="ctrl-row">
-        <span>θ step</span>
-        <input type="range" id="theta-step" min="0.001" max="0.1" step="0.001" value="0.02" />
-        <span id="theta-step-val">0.02</span>
-      </div>
-    </div>
-  </div>
-
-  <!-- Animations panel -->
+  <!-- Animations panel (default) -->
   <div id="animations-panel">
-    <div id="anim-list"></div>
-    <button id="add-anim">+ Add animation</button>
+    <div id="anim-list">
+      <button id="add-anim">+ Add function</button>
+    </div>
     <div id="anim-controls">
       <div id="anim-playback">
         <button class="play-btn" id="btn-play" title="Play / Pause">▶</button>
@@ -337,7 +322,7 @@
       </div>
       <div id="anim-duration-row">
         <span>Duration</span>
-        <input type="number" id="anim-duration" min="0.1" step="0.1" value="5" />
+        <input type="number" id="anim-duration" min="0.1" step="0.1" value="10" />
         <span>s</span>
       </div>
       <div id="anim-scrubber-row">
@@ -347,6 +332,21 @@
       </div>
     </div>
   </div>
+
+  <!-- Graphs panel (hidden by default) -->
+  <div id="graphs-panel">
+    <div id="graphs-header"><span>Graphs</span></div>
+    <div id="function-list"></div>
+    <button id="add-fn">+ Add function</button>
+    <div id="graphs-controls">
+      <div class="ctrl-row">
+        <span>θ step</span>
+        <input type="range" id="theta-step" min="0.001" max="0.1" step="0.001" value="0.02" />
+        <span id="theta-step-val">0.02</span>
+      </div>
+    </div>
+  </div>
+
 </div>
 
 <div id="canvas-wrap">
@@ -355,7 +355,7 @@
 
 <script>
 // ════════════════════════════════════════════════════════
-// SHARED — canvas, viewport, grid
+// SHARED
 // ════════════════════════════════════════════════════════
 
 const canvas = document.getElementById('graph');
@@ -364,7 +364,7 @@ const ctx = canvas.getContext('2d');
 let originX = 0, originY = 0;
 let scale = 60;
 let dragging = false, dragStartX, dragStartY, dragOriginX, dragOriginY;
-let currentMode = 'graphs';
+let currentMode = 'animations';
 
 function resize() {
   const wrap = canvas.parentElement;
@@ -390,38 +390,32 @@ function toMath(cx, cy) {
 function drawGrid() {
   const W = canvas.width, H = canvas.height;
   ctx.clearRect(0, 0, W, H);
-  ctx.fillStyle = '#1e1e2e';
+  ctx.fillStyle = '#000000';
   ctx.fillRect(0, 0, W, H);
-
   const step   = scale;
   const startX = Math.floor(-originX / step) * step + originX;
   const startY = Math.floor(-originY / step) * step + originY;
-
   ctx.lineWidth = 1;
   ctx.strokeStyle = '#313244';
   for (let x = startX; x < W; x += step) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
   for (let y = startY; y < H; y += step) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
-
   ctx.strokeStyle = '#585b70';
   ctx.lineWidth = 1.5;
   ctx.beginPath(); ctx.moveTo(originX, 0); ctx.lineTo(originX, H); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(0, originY); ctx.lineTo(W, originY); ctx.stroke();
-
   ctx.fillStyle = '#6c7086';
   ctx.font = `${11 * devicePixelRatio}px sans-serif`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'top';
-  const mathLeft  = Math.ceil(toMath(0, 0)[0]);
-  const mathRight = Math.floor(toMath(W, 0)[0]);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  const mathLeft  = Math.ceil(toMath(0,0)[0]);
+  const mathRight = Math.floor(toMath(W,0)[0]);
   for (let n = mathLeft; n <= mathRight; n++) {
     if (n === 0) continue;
     const [cx] = toCanvas(n, 0);
     ctx.fillText(n, cx, originY + 4);
   }
-  ctx.textAlign = 'right';
-  ctx.textBaseline = 'middle';
-  const mathTop    = Math.ceil(toMath(0, 0)[1]);
-  const mathBottom = Math.floor(toMath(0, H)[1]);
+  ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  const mathTop    = Math.ceil(toMath(0,0)[1]);
+  const mathBottom = Math.floor(toMath(0,H)[1]);
   for (let n = mathBottom; n <= mathTop; n++) {
     if (n === 0) continue;
     const [, cy] = toCanvas(0, n);
@@ -429,21 +423,129 @@ function drawGrid() {
   }
 }
 
-// Pan & zoom
+function updateCursor() {
+  canvas.style.cursor = pickTarget ? 'crosshair' : (pointDrag || dragging ? 'grabbing' : 'grab');
+}
+
+let mouseDownClientX = 0, mouseDownClientY = 0;
 canvas.addEventListener('mousedown', e => {
+  const rect = canvas.getBoundingClientRect();
+  const cx = (e.clientX - rect.left) * devicePixelRatio;
+  const cy = (e.clientY - rect.top)  * devicePixelRatio;
+  if (pickTarget) {
+    e.preventDefault();
+    _pickModeClick = true;
+    const h = queryPickHover(cx, cy);
+    const val = pickHoverValue(h);
+    if (val !== null) {
+      const { input: inp, partner, anim } = pickTarget;
+      if (!partner) pickMousedown = { anim, cx: pickHoverCx(h) };
+      inp.value = val;
+      inp.dispatchEvent(new Event('input'));
+      if (partner) partner.focus(); else inp.blur();
+    } else {
+      pickTarget.input.blur();
+    }
+    return;
+  }
+  // Point drag detection
+  const [mathX, mathY] = toMath(cx, cy);
+  const visAnims = animations.filter(a => a.visible);
+  let bestDist = 0.1, bestCx = null;
+  for (const a of visAnims) {
+    if (a.fromCx && a.fromCx.ok()) {
+      const d = Math.hypot(a.fromCx.re - mathX, a.fromCx.im - mathY);
+      if (d < bestDist) { bestDist = d; bestCx = a.fromCx; }
+    }
+    if (a.toCx && a.toCx.ok()) {
+      const d = Math.hypot(a.toCx.re - mathX, a.toCx.im - mathY);
+      if (d < bestDist) { bestDist = d; bestCx = a.toCx; }
+    }
+  }
+  if (bestCx) {
+    const fromAnims = visAnims.filter(a => a.fromCx && a.fromCx.re === bestCx.re && a.fromCx.im === bestCx.im);
+    const toAnims   = visAnims.filter(a => a.toCx   && a.toCx.re   === bestCx.re && a.toCx.im   === bestCx.im);
+    pointDrag = { fromAnims, toAnims, currentCx: bestCx };
+    e.preventDefault();
+    updateCursor();
+    draw();
+    return;
+  }
   dragging = true;
+  mouseDownClientX = e.clientX; mouseDownClientY = e.clientY;
   dragStartX  = e.clientX * devicePixelRatio;
   dragStartY  = e.clientY * devicePixelRatio;
-  dragOriginX = originX;
-  dragOriginY = originY;
+  dragOriginX = originX; dragOriginY = originY;
+  updateCursor();
 });
 window.addEventListener('mousemove', e => {
+  const rect = canvas.getBoundingClientRect();
+  const cx = (e.clientX - rect.left) * devicePixelRatio;
+  const cy = (e.clientY - rect.top)  * devicePixelRatio;
+  if (pickTarget) {
+    pickHover = (cx >= 0 && cy >= 0 && cx <= canvas.width && cy <= canvas.height)
+      ? queryPickHover(cx, cy) : null;
+    draw();
+    return;
+  }
+  if (pointDrag) {
+    const [mathX, mathY] = toMath(cx, cy);
+    const newCx = new Cx(mathX, mathY);
+    pointDrag.currentCx = newCx;
+    const newStr = formatCx(newCx);
+    for (const a of pointDrag.fromAnims) {
+      a.fromStr = newStr; a.fromCx = newCx;
+      a.compiled = buildCompiledFn(a.mode, a.fromStr, a.toStr, a.submode);
+    }
+    for (const a of pointDrag.toAnims) {
+      a.toStr = newStr; a.toCx = newCx;
+      a.compiled = buildCompiledFn(a.mode, a.fromStr, a.toStr, a.submode);
+    }
+    draw();
+    return;
+  }
   if (!dragging) return;
   originX = dragOriginX + (e.clientX * devicePixelRatio - dragStartX);
   originY = dragOriginY + (e.clientY * devicePixelRatio - dragStartY);
   draw();
 });
-window.addEventListener('mouseup', () => { dragging = false; });
+window.addEventListener('mouseup', e => {
+  if (pointDrag) {
+    const rect = canvas.getBoundingClientRect();
+    const cx = (e.clientX - rect.left) * devicePixelRatio;
+    const cy = (e.clientY - rect.top)  * devicePixelRatio;
+    const [mathX, mathY] = toMath(cx, cy);
+    const nearX = Math.round(mathX), nearY = Math.round(mathY);
+    const finalCx = Math.hypot(mathX - nearX, mathY - nearY) <= 0.1
+      ? new Cx(nearX, nearY) : new Cx(mathX, mathY);
+    const finalStr = formatCx(finalCx);
+    for (const a of pointDrag.fromAnims) {
+      a.fromStr = finalStr; a.fromCx = finalCx;
+      a.compiled = buildCompiledFn(a.mode, a.fromStr, a.toStr, a.submode);
+    }
+    for (const a of pointDrag.toAnims) {
+      a.toStr = finalStr; a.toCx = finalCx;
+      a.compiled = buildCompiledFn(a.mode, a.fromStr, a.toStr, a.submode);
+    }
+    pointDrag = null;
+    renderAnimList(); draw();
+    updateCursor();
+    return;
+  }
+  if (dragging && Math.hypot(e.clientX - mouseDownClientX, e.clientY - mouseDownClientY) < 5) {
+    const rect = canvas.getBoundingClientRect();
+    const cx = (e.clientX - rect.left) * devicePixelRatio;
+    const cy = (e.clientY - rect.top)  * devicePixelRatio;
+    selectedId = hitTestCanvas(cx, cy);
+    renderAnimList(); draw();
+  }
+  dragging = false;
+  if (pickMousedown) { pickMousedown = null; draw(); }
+  updateCursor();
+});
+canvas.addEventListener('click', e => {
+  if (_pickModeClick) { e.stopPropagation(); _pickModeClick = false; }
+});
 canvas.addEventListener('wheel', e => {
   e.preventDefault();
   const factor = e.deltaY < 0 ? 1.1 : 0.9;
@@ -513,11 +615,8 @@ function renderFunctionList() {
   for (const f of functions) {
     const row = document.createElement('div');
     row.className = 'fn-row';
-
     const dot = document.createElement('div');
-    dot.className = 'fn-color';
-    dot.style.background = f.color;
-
+    dot.className = 'fn-color'; dot.style.background = f.color;
     const typeSelect = document.createElement('select');
     typeSelect.className = 'fn-type';
     ['cartesian','polar','parametric'].forEach(t => {
@@ -528,33 +627,20 @@ function renderFunctionList() {
     });
     typeSelect.title = 'Function type';
     typeSelect.addEventListener('change', () => {
-      f.type = typeSelect.value;
-      compileFunction(f);
-      input.classList.toggle('error', f.error);
-      draw();
+      f.type = typeSelect.value; compileFunction(f);
+      input.classList.toggle('error', f.error); draw();
     });
-
     const input = document.createElement('input');
     input.className = 'fn-input' + (f.error ? ' error' : '');
-    input.type = 'text';
-    input.value = f.expr;
+    input.type = 'text'; input.value = f.expr;
     input.placeholder = f.type === 'polar' ? 'r = f(theta)' : f.type === 'parametric' ? 'x(t), y(t)' : 'y = f(x)';
     input.addEventListener('input', () => {
-      f.expr = input.value;
-      compileFunction(f);
-      input.classList.toggle('error', f.error && f.expr.trim() !== '');
-      draw();
+      f.expr = input.value; compileFunction(f);
+      input.classList.toggle('error', f.error && f.expr.trim() !== ''); draw();
     });
-
     const rm = document.createElement('button');
-    rm.className = 'fn-remove';
-    rm.textContent = '×';
-    rm.addEventListener('click', () => {
-      functions = functions.filter(x => x.id !== f.id);
-      renderFunctionList();
-      draw();
-    });
-
+    rm.className = 'fn-remove'; rm.textContent = '×';
+    rm.addEventListener('click', () => { functions = functions.filter(x => x.id !== f.id); renderFunctionList(); draw(); });
     row.append(dot, typeSelect, input, rm);
     list.appendChild(row);
   }
@@ -565,23 +651,18 @@ document.getElementById('add-fn').addEventListener('click', () => addFunction(''
 const thetaStepInput = document.getElementById('theta-step');
 const thetaStepVal   = document.getElementById('theta-step-val');
 thetaStepInput.addEventListener('input', () => {
-  thetaStepVal.textContent = parseFloat(thetaStepInput.value).toFixed(3);
-  draw();
+  thetaStepVal.textContent = parseFloat(thetaStepInput.value).toFixed(3); draw();
 });
 
 function plotCartesian(fn, color) {
   const W = canvas.width, step = 1 / devicePixelRatio;
-  ctx.beginPath();
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 2 * devicePixelRatio;
+  ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = 2 * devicePixelRatio;
   let first = true, prevPy = null;
   for (let px = 0; px <= W; px += step) {
     const y = fn((px - originX) / scale, 0, 0);
     if (!isFinite(y)) { first = true; prevPy = null; continue; }
     const py = originY - y * scale;
-    if (prevPy !== null) {
-      if ((py < 0 && prevPy > canvas.height) || (py > canvas.height && prevPy < 0)) first = true;
-    }
+    if (prevPy !== null && ((py < 0 && prevPy > canvas.height) || (py > canvas.height && prevPy < 0))) first = true;
     if (first) { ctx.moveTo(px, py); first = false; } else ctx.lineTo(px, py);
     prevPy = py;
   }
@@ -589,9 +670,7 @@ function plotCartesian(fn, color) {
 }
 
 function plotPolar(fn, color, thetaStep) {
-  ctx.beginPath();
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 2 * devicePixelRatio;
+  ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = 2 * devicePixelRatio;
   let first = true;
   for (let theta = 0; theta <= Math.PI * 2 + thetaStep; theta += thetaStep) {
     const r = fn(0, theta, theta);
@@ -603,14 +682,12 @@ function plotPolar(fn, color, thetaStep) {
 }
 
 function plotParametric(fnX, fnY, color) {
-  ctx.beginPath();
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 2 * devicePixelRatio;
+  ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = 2 * devicePixelRatio;
   const steps = 2000, tMin = -20, tMax = 20;
   let first = true;
   for (let i = 0; i <= steps; i++) {
     const t = tMin + (tMax - tMin) * i / steps;
-    const x = fnX(0, 0, t), y = fnY(0, 0, t);
+    const x = fnX(0,0,t), y = fnY(0,0,t);
     if (!isFinite(x) || !isFinite(y)) { first = true; continue; }
     const [px, py] = toCanvas(x, y);
     if (first) { ctx.moveTo(px, py); first = false; } else ctx.lineTo(px, py);
@@ -648,9 +725,8 @@ class Cx {
   }
   pow(b) {
     if (this.re === 0 && this.im === 0) return b.re > 0 ? new Cx(0,0) : new Cx(NaN,NaN);
-    const r = Math.sqrt(this.re*this.re + this.im*this.im);
-    const theta = Math.atan2(this.im, this.re);
-    const lnA = new Cx(Math.log(r), theta);
+    const r   = Math.sqrt(this.re*this.re + this.im*this.im);
+    const lnA = new Cx(Math.log(r), argW(this));
     const p   = b.mul(lnA);
     const eR  = Math.exp(p.re);
     return new Cx(eR * Math.cos(p.im), eR * Math.sin(p.im));
@@ -659,7 +735,12 @@ class Cx {
   ok()  { return isFinite(this.re) && isFinite(this.im); }
 }
 
-// ── Tokenizer (single-char identifiers so "it" → [i][t]) ──
+function argW(z) {
+  if (z.im === 0 && z.re > 0) return 2 * Math.PI;
+  const a = Math.atan2(z.im, z.re);
+  return a > 0 ? a : a + 2 * Math.PI;
+}
+
 function animTokenize(expr) {
   const toks = [];
   let i = 0;
@@ -685,21 +766,17 @@ function animTokenize(expr) {
   return toks;
 }
 
-// ── Parser → AST ──
 function animParse(toks) {
   let p = 0;
   const peek = () => toks[p];
   const next = () => toks[p++];
-
   function expr() {
     let L = term();
     while (peek() && (peek().t==='+' || peek().t==='-')) {
-      const op = next().t;
-      L = {n:'op', op, L, R: term()};
+      const op = next().t; L = {n:'op', op, L, R: term()};
     }
     return L;
   }
-
   function term() {
     let L = unary();
     while (peek()) {
@@ -710,28 +787,23 @@ function animParse(toks) {
     }
     return L;
   }
-
   function unary() {
     if (peek() && peek().t==='-') { next(); return {n:'neg', arg: power()}; }
     return power();
   }
-
   function power() {
     const base = atom();
     if (peek() && peek().t==='^') { next(); return {n:'op',op:'^',L:base,R:unary()}; }
     return base;
   }
-
   function atom() {
     const tok = peek();
     if (!tok) throw new Error('Unexpected end');
     if (tok.t === 'num') { next(); return {n:'num', v: tok.v}; }
     if (tok.t === 'id') {
-      next();
-      const name = tok.v;
+      next(); const name = tok.v;
       if (peek() && peek().t === '(') {
-        next();
-        let depth = 1;
+        next(); let depth = 1;
         while (p < toks.length && depth > 0) {
           if (toks[p].t==='(') depth++;
           else if (toks[p].t===')') depth--;
@@ -746,31 +818,23 @@ function animParse(toks) {
       throw new Error(`Unknown identifier: ${name}`);
     }
     if (tok.t === '(') {
-      next();
-      const node = expr();
+      next(); const node = expr();
       if (!peek() || peek().t !== ')') throw new Error('Expected )');
-      next();
-      return node;
+      next(); return node;
     }
     throw new Error(`Unexpected token: ${tok.t}`);
   }
-
   const ast = expr();
   if (p < toks.length) throw new Error('Unexpected extra tokens');
   return ast;
 }
 
-// ── AST evaluator ──
 function evalAST(node, t, aCtx) {
   switch (node.n) {
     case 'num': return new Cx(node.v, 0);
     case 'i':   return new Cx(0, 1);
     case 't':   return new Cx(t, 0);
-    case 'ref': {
-      const v = aCtx[node.name];
-      if (!v) throw new Error(`Undefined: ${node.name}`);
-      return v;
-    }
+    case 'ref': { const v = aCtx[node.name]; if (!v) throw new Error(`Undefined: ${node.name}`); return v; }
     case 'neg': return evalAST(node.arg, t, aCtx).neg();
     case 'op': {
       const L = evalAST(node.L, t, aCtx);
@@ -791,13 +855,130 @@ function compileAnimExpr(expr) {
   return (t, aCtx) => evalAST(ast, t, aCtx);
 }
 
+function parseCx(str) {
+  try {
+    const fn = compileAnimExpr(str.trim() || '0');
+    const v = fn(0, {});
+    return (v && v.ok()) ? v : null;
+  } catch(e) { return null; }
+}
+
+function formatCx(cx) {
+  function fmtN(v) { return Number.isInteger(v) ? String(v) : parseFloat(v.toFixed(6)).toString(); }
+  function fmtIm(v) { return v === 1 ? 'i' : v === -1 ? '-i' : `${fmtN(v)}i`; }
+  const { re, im } = cx;
+  if (im === 0) return fmtN(re);
+  if (re === 0) return fmtIm(im);
+  return `${fmtN(re)}${im > 0 ? '+' : ''}${fmtIm(im)}`;
+}
+
+function buildExprDisplay(anim) {
+  const p = 't';
+  const a = anim.fromCx, b = anim.toCx;
+  const fs = anim.fromStr.trim(), ts = anim.toStr.trim();
+
+  if (anim.submode === 'average') {
+    if (anim.mode === 'linear') {
+      const sym = `(${fs}+${ts})/2`;
+      if (a && b) { const r = a.add(b).div(new Cx(2,0)); if (r.ok()) return `${sym} = ${formatCx(r)}`; }
+      return sym;
+    } else {
+      const sym = `(${fs}·${ts})^(1/2)`;
+      if (a && b) { const r = a.mul(b).pow(new Cx(0.5,0)); if (r.ok()) return `${sym} = ${formatCx(r)}`; }
+      return sym;
+    }
+  }
+
+  if (a && b) {
+    // Both numeric — compute exact formula
+    if (anim.mode === 'linear') {
+      const d = b.sub(a);
+      if (d.re === 0 && d.im === 0) return formatCx(a);
+      const dPart = (() => {
+        if (d.re === 1  && d.im === 0) return p;
+        if (d.re === -1 && d.im === 0) return `-${p}`;
+        const s = formatCx(d);
+        return (d.re !== 0 && d.im !== 0) ? `(${s})${p}` : `${s}${p}`;
+      })();
+      if (a.re === 0 && a.im === 0) return dPart;
+      return dPart.startsWith('-') ? `${formatCx(a)}${dPart}` : `${formatCx(a)}+${dPart}`;
+    } else {
+      if (a.re === 0 && a.im === 0) return '0';
+      const ratio = b.div(a);
+      const rStr = formatCx(ratio);
+      const rPart = ratio.im !== 0 ? `(${rStr})^${p}` : `${rStr}^${p}`;
+      if (a.re === 1 && a.im === 0) return rPart;
+      return `${formatCx(a)}·${rPart}`;
+    }
+  } else {
+    // Symbolic — at least one is a reference
+    if (anim.mode === 'linear') {
+      if (fs === '0') return `${ts}${p}`;
+      if (ts === '0') return `${fs}(1-${p})`;
+      return `${fs}(1-${p})+${ts}${p}`;
+    } else {
+      if (fs === '1') return `${ts}^${p}`;
+      return `${fs}·(${ts}/${fs})^${p}`;
+    }
+  }
+}
+
+function buildCompiledFn(mode, fromStr, toStr, submode = 'connector') {
+  let cfrom, cto;
+  try { cfrom = compileAnimExpr(fromStr || '0'); } catch(e) { cfrom = () => new Cx(NaN,NaN); }
+  try { cto   = compileAnimExpr(toStr   || '0'); } catch(e) { cto   = () => new Cx(NaN,NaN); }
+  if (submode === 'average') {
+    if (mode === 'linear') {
+      return (p, aCtx) => {
+        try {
+          const a = cfrom(p, aCtx || {}), b = cto(p, aCtx || {});
+          if (!a||!a.ok()||!b||!b.ok()) return new Cx(NaN,NaN);
+          return a.add(b).div(new Cx(2,0));
+        } catch(e) { return new Cx(NaN,NaN); }
+      };
+    } else {
+      return (p, aCtx) => {
+        try {
+          const a = cfrom(p, aCtx || {}), b = cto(p, aCtx || {});
+          if (!a||!a.ok()||!b||!b.ok()) return new Cx(NaN,NaN);
+          return a.mul(b).pow(new Cx(0.5,0));
+        } catch(e) { return new Cx(NaN,NaN); }
+      };
+    }
+  }
+  if (mode === 'linear') {
+    return (p, aCtx) => {
+      try {
+        const a = cfrom(0, aCtx || {}), b = cto(0, aCtx || {});
+        if (!a||!a.ok()||!b||!b.ok()) return new Cx(NaN,NaN);
+        return a.add(b.sub(a).mul(new Cx(p,0)));
+      } catch(e) { return new Cx(NaN,NaN); }
+    };
+  } else {
+    return (p, aCtx) => {
+      try {
+        const a = cfrom(0, aCtx || {}), b = cto(0, aCtx || {});
+        if (!a||!a.ok()||!b||!b.ok()) return new Cx(NaN,NaN);
+        if (a.re===0 && a.im===0) return new Cx(NaN,NaN);
+        return a.mul(b.div(a).pow(new Cx(p,0)));
+      } catch(e) { return new Cx(NaN,NaN); }
+    };
+  }
+}
+
 // ── Animation state ──
 const ANIM_COLORS = ['#f38ba8','#89b4fa','#a6e3a1','#fab387','#cba6f7','#f9e2af','#89dceb','#94e2d5'];
 let animations   = [];
 let animColorIdx = 0;
 let currentT     = 0;
+let selectedId   = null;
+let pickTarget     = null;   // { input, anim, partner } | null — which from/to input is in pick mode
+let pickHover      = null;   // { type:'anim', anim } | { type:'lattice', re, im } | null
+let pickMousedown  = null;   // { anim, cx: Cx } — size-5 dot shown while mouse held on a To pick
+let _pickModeClick = false;  // suppresses document click handler after canvas pick
+let pointDrag      = null;   // { fromAnims, toAnims, currentCx } | null — endpoint drag state
 let isPlaying    = false;
-let animDuration = 5;
+let animDuration = 10;
 let animLoop     = false;
 let animRafId    = null;
 let animElapsed  = 0;
@@ -812,208 +993,474 @@ function nextLetter() {
   return '?';
 }
 
-function addAnimation(expr = '') {
-  const letter = nextLetter();
-  const color  = ANIM_COLORS[animColorIdx++ % ANIM_COLORS.length];
-  const anim   = {
+function addAnimation(mode = 'linear', expanded = true) {
+  if (expanded) animations.forEach(a => { a.expanded = false; });
+  const letter  = nextLetter();
+  const color   = ANIM_COLORS[animColorIdx++ % ANIM_COLORS.length];
+  const fromStr = mode === 'spiral' ? '1' : '0';
+  const toStr   = '1';
+  const fromCx  = parseCx(fromStr);
+  const toCx    = parseCx(toStr);
+  const anim = {
     id: Date.now() + Math.random(),
-    letter, color, expr,
-    compiled: null, error: false,
-    expanded: false,
-    dotIntensity:   5,
-    trailIntensity: 5,
+    letter, color, mode, submode: 'connector',
+    hasObject: false, hasAnimation: true,
+    fromStr, toStr, fromCx, toCx,
+    intensity: 5, trailOn: true, visible: true, expanded,
+    compiled: buildCompiledFn(mode, fromStr, toStr, 'connector'),
   };
-  if (expr) compileAnim(anim);
   animations.push(anim);
   renderAnimList();
   draw();
-  return anim;
-}
-
-function animIsActive(anim) {
-  return anim.dotIntensity > 0 || anim.trailIntensity > 0;
-}
-
-function compileAnim(anim) {
-  anim.error    = false;
-  anim.compiled = null;
-  if (!anim.expr.trim()) return;
-  try {
-    anim.compiled = compileAnimExpr(anim.expr);
-  } catch(e) {
-    anim.error = true;
+  if (expanded) {
+    const ftRows = document.querySelectorAll('.anim-from-to');
+    if (ftRows.length > 0) ftRows[ftRows.length - 1].querySelector('input').focus();
   }
+  return anim;
 }
 
 function evalAt(t) {
   const aCtx = {};
   for (const anim of animations) {
-    if (!anim.compiled || anim.error) { aCtx[anim.letter] = null; continue; }
     try {
       const v = anim.compiled(t, aCtx);
       aCtx[anim.letter] = (v && v.ok()) ? v : null;
-    } catch(e) {
-      aCtx[anim.letter] = null;
-    }
+    } catch(e) { aCtx[anim.letter] = null; }
   }
   return aCtx;
 }
 
-// ── Animation rendering ──
+function strokePath(pts, color, lineWidth) {
+  ctx.beginPath();
+  ctx.strokeStyle = color; ctx.lineWidth = lineWidth;
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  let first = true;
+  for (const pt of pts) {
+    if (!pt) { first = true; continue; }
+    if (first) { ctx.moveTo(pt[0], pt[1]); first = false; } else ctx.lineTo(pt[0], pt[1]);
+  }
+  ctx.stroke();
+}
+
 function drawAnimations() {
   drawGrid();
-
-  const active     = animations.filter(a => animIsActive(a) && a.compiled && !a.error);
-  const trailAnims = active.filter(a => a.trailIntensity > 0 && currentT > 0);
-
-  // Single pass over t to build all trail point arrays
   const STEPS = 400;
+  const lineW = a => (1 + 5*(a.intensity/10)) * devicePixelRatio;
+  const dotR  = a => a.intensity * devicePixelRatio;
+
+  // Thin full-path preview for all animation-type anims (drawn first, covered by higher rendering)
+  const animTypeAll = animations.filter(a => a.hasAnimation && !a.hasObject && a.compiled && a.visible);
+  const fullPts = new Map();
+  if (animTypeAll.length > 0) {
+    for (const a of animTypeAll) fullPts.set(a.letter, []);
+    for (let i = 0; i <= STEPS; i++) {
+      const s = i / STEPS;
+      const stepCtx = evalAt(s);
+      for (const a of animTypeAll) {
+        try { const v = a.compiled(s, stepCtx); fullPts.get(a.letter).push((v&&v.ok()) ? toCanvas(v.re,v.im) : null); }
+        catch(e) { fullPts.get(a.letter).push(null); }
+      }
+    }
+    for (const a of animTypeAll) strokePath(fullPts.get(a.letter), a.color, 1 * devicePixelRatio);
+  }
+
+  // Endpoint markers at fromCx / toCx (draggable)
+  for (const a of animations.filter(a => a.visible)) {
+    if (a.fromCx && a.fromCx.ok()) {
+      const [px, py] = toCanvas(a.fromCx.re, a.fromCx.im);
+      ctx.beginPath(); ctx.arc(px, py, 2 * devicePixelRatio, 0, Math.PI * 2);
+      ctx.fillStyle = a.color; ctx.fill();
+    }
+    if (a.toCx && a.toCx.ok()) {
+      const [px, py] = toCanvas(a.toCx.re, a.toCx.im);
+      ctx.beginPath(); ctx.arc(px, py, 2 * devicePixelRatio, 0, Math.PI * 2);
+      ctx.fillStyle = a.color; ctx.fill();
+    }
+  }
+
+  const active     = animations.filter(a => a.visible && a.intensity > 0 && a.compiled);
+  const objAnims   = active.filter(a => a.hasObject);
+  const dotAnims   = active.filter(a => a.hasAnimation);
+  const trailAnims = dotAnims.filter(a => a.trailOn && currentT > 0);
+
+  const nowCtx = evalAt(currentT);
+
+  const objPts = new Map();
+  for (const a of objAnims) {
+    const pts = [];
+    for (let i = 0; i <= STEPS; i++) {
+      try { const v = a.compiled(i/STEPS, nowCtx); pts.push((v&&v.ok()) ? toCanvas(v.re,v.im) : null); }
+      catch(e) { pts.push(null); }
+    }
+    objPts.set(a.letter, pts);
+  }
+
   const trailPts = new Map();
   if (trailAnims.length > 0) {
     for (const a of trailAnims) trailPts.set(a.letter, []);
     for (let i = 0; i <= STEPS; i++) {
-      const tSample = currentT * i / STEPS;
-      const aCtx    = evalAt(tSample);
+      const stepCtx = evalAt(currentT * i / STEPS);
       for (const a of trailAnims) {
-        const v = aCtx[a.letter];
-        trailPts.get(a.letter).push(v ? toCanvas(v.re, v.im) : null);
+        try { const v = a.compiled(currentT * i / STEPS, stepCtx); trailPts.get(a.letter).push((v&&v.ok()) ? toCanvas(v.re,v.im) : null); }
+        catch(e) { trailPts.get(a.letter).push(null); }
       }
     }
   }
 
-  const nowCtx = evalAt(currentT);
-
-  // Trails first, dots on top
-  for (const anim of trailAnims) {
-    const pts = trailPts.get(anim.letter);
-    ctx.beginPath();
-    ctx.strokeStyle = anim.color;
-    ctx.lineWidth   = (1 + 5 * (anim.trailIntensity / 10)) * devicePixelRatio;
-    ctx.lineCap  = 'round';
-    ctx.lineJoin = 'round';
-    let first = true;
-    for (const pt of pts) {
-      if (!pt) { first = true; continue; }
-      if (first) { ctx.moveTo(pt[0], pt[1]); first = false; }
-      else ctx.lineTo(pt[0], pt[1]);
-    }
-    ctx.stroke();
+  const dotPos = {};
+  for (const a of dotAnims) {
+    try { const v = a.compiled(currentT, nowCtx); dotPos[a.letter] = (v&&v.ok()) ? v : null; }
+    catch(e) { dotPos[a.letter] = null; }
   }
 
-  for (const anim of active) {
-    if (anim.dotIntensity <= 0) continue;
-    const v = nowCtx[anim.letter];
-    if (!v) continue;
+  // Glow pre-pass for pick hover (animation reference)
+  if (pickTarget && pickHover && pickHover.type === 'anim') {
+    const ha = pickHover.anim;
+    const glow = 14 * devicePixelRatio;
+    ctx.globalAlpha = 0.5;
+    if (objPts.has(ha.letter))  strokePath(objPts.get(ha.letter),  ha.color, lineW(ha) + glow);
+    if (fullPts.has(ha.letter)) strokePath(fullPts.get(ha.letter), ha.color, lineW(ha) + glow);
+    const vd = dotPos[ha.letter];
+    if (vd) {
+      const [px, py] = toCanvas(vd.re, vd.im);
+      ctx.beginPath(); ctx.arc(px, py, dotR(ha) + glow/2, 0, Math.PI*2);
+      ctx.fillStyle = ha.color; ctx.fill();
+    }
+    ctx.globalAlpha = 1.0;
+  }
+
+  for (const a of objAnims)   strokePath(objPts.get(a.letter),   a.color, lineW(a));
+  for (const a of trailAnims) strokePath(trailPts.get(a.letter), a.color, lineW(a));
+  for (const a of dotAnims) {
+    const v = dotPos[a.letter]; if (!v) continue;
     const [px, py] = toCanvas(v.re, v.im);
-    const radius   = (2 + 6 * (anim.dotIntensity / 10)) * devicePixelRatio;
+    ctx.beginPath(); ctx.arc(px, py, dotR(a), 0, Math.PI*2);
+    ctx.fillStyle = a.color; ctx.fill();
+  }
+
+  // Size-5 dot while mouse is held during a To pick
+  if (pickMousedown) {
+    const { anim, cx } = pickMousedown;
+    if (cx && cx.ok()) {
+      const [px, py] = toCanvas(cx.re, cx.im);
+      ctx.beginPath(); ctx.arc(px, py, 5 * devicePixelRatio, 0, Math.PI * 2);
+      ctx.fillStyle = anim.color; ctx.fill();
+    }
+  }
+
+  // Point drag glow
+  if (pointDrag && pointDrag.currentCx && pointDrag.currentCx.ok()) {
+    const [px, py] = toCanvas(pointDrag.currentCx.re, pointDrag.currentCx.im);
+    ctx.globalAlpha = 0.5;
+    ctx.beginPath(); ctx.arc(px, py, 12 * devicePixelRatio, 0, Math.PI * 2);
+    ctx.fillStyle = '#ffffff'; ctx.fill();
+    ctx.globalAlpha = 1.0;
+    ctx.beginPath(); ctx.arc(px, py, 4 * devicePixelRatio, 0, Math.PI * 2);
+    ctx.fillStyle = '#ffffff'; ctx.fill();
+  }
+
+  // Lattice hover highlight
+  if (pickTarget && pickHover && pickHover.type === 'lattice') {
+    const [px, py] = toCanvas(pickHover.re, pickHover.im);
+    ctx.globalAlpha = 0.8;
     ctx.beginPath();
-    ctx.arc(px, py, radius, 0, Math.PI * 2);
-    ctx.fillStyle = anim.color;
-    ctx.fill();
+    ctx.arc(px, py, 7 * devicePixelRatio, 0, Math.PI * 2);
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2 * devicePixelRatio;
+    ctx.stroke();
+    ctx.globalAlpha = 1.0;
   }
 }
 
-// ── Render animation sidebar list ──
+// ── Render sidebar list ──
 function renderAnimList() {
   const list = document.getElementById('anim-list');
-  list.innerHTML = '';
-
+  list.innerHTML = '';  // addAnimBtn is now detached but its JS reference stays valid
   for (const anim of animations) {
     const row = document.createElement('div');
-    row.className = 'anim-row' + (animIsActive(anim) ? ' active' : '');
+    row.className = 'anim-row' + (anim.visible && anim.intensity > 0 ? ' active' : '');
+    row.style.borderColor = !anim.visible ? '#585b70' : anim.visible && anim.intensity > 0 ? anim.color : '';
+    if (selectedId === anim.id)
+      row.style.boxShadow = `0 0 0 1px ${anim.color}, 0 0 14px 5px ${anim.color}99`;
 
-    // ── Main row: label + input + toggle ──
-    const main = document.createElement('div');
-    main.className = 'anim-main';
-
-    const lbl = document.createElement('span');
-    lbl.className = 'anim-label';
-    lbl.textContent = `${anim.letter}(t) =`;
-
-    const inp = document.createElement('input');
-    inp.className = 'anim-input' + (anim.error ? ' error' : '');
-    inp.type  = 'text';
-    inp.value = anim.expr;
-    inp.addEventListener('input', () => {
-      anim.expr = inp.value;
-      compileAnim(anim);
-      inp.classList.toggle('error', anim.error && anim.expr.trim() !== '');
-      draw();
+    // ── Header ──
+    const header = document.createElement('div');
+    header.className = 'anim-header';
+    const swatch = document.createElement('div');
+    swatch.className = 'anim-swatch';
+    if (anim.visible) {
+      swatch.style.background = anim.color;
+    } else {
+      swatch.style.background = 'transparent';
+      swatch.style.border = '2px solid #585b70';
+    }
+    const exprSpan = document.createElement('span');
+    exprSpan.className = 'anim-expr';
+    exprSpan.textContent = `${anim.letter}[t] = ${buildExprDisplay(anim)}`;
+    const visSection = document.createElement('button');
+    visSection.className = 'anim-vis-section';
+    if (anim.visible) {
+      visSection.style.background = 'transparent';
+      visSection.style.border = `1px solid ${anim.color}`;
+      visSection.style.outline = `1px solid ${anim.color}`;
+      visSection.style.outlineOffset = '2px';
+    } else {
+      visSection.style.background = anim.color;
+      visSection.style.border = `1px solid ${anim.color}`;
+      visSection.style.outline = 'none';
+    }
+    visSection.addEventListener('click', e => {
+      e.stopPropagation();
+      anim.visible = !anim.visible;
+      renderAnimList(); draw();
     });
-
-    const toggle = document.createElement('button');
-    toggle.className = 'anim-toggle';
-    toggle.textContent = anim.expanded ? '▾' : '▸';
-    toggle.title = 'Options';
+    header.append(swatch, exprSpan, visSection);
 
     // ── Accordion ──
     const accordion = document.createElement('div');
     accordion.className = 'anim-accordion' + (anim.expanded ? ' open' : '');
-
     const inner = document.createElement('div');
     inner.className = 'anim-accordion-inner';
 
-    inner.appendChild(makeIntSliderRow('Dot', anim.dotIntensity, v => {
-      anim.dotIntensity = v;
-      row.classList.toggle('active', animIsActive(anim));
+    // Row 1: Linear / Spiral
+    const modeRow = document.createElement('div');
+    modeRow.className = 'anim-mode-row';
+    for (const m of ['linear', 'spiral']) {
+      const btn = document.createElement('button');
+      btn.className = 'anim-mode-btn' + (anim.mode === m ? ' active' : '');
+      btn.textContent = m === 'linear' ? 'Linear' : 'Spiral';
+      btn.addEventListener('click', () => {
+        if (anim.mode === m) return;
+        anim.mode = m;
+        anim.fromStr = m === 'spiral' ? '1' : '0'; anim.toStr = '1';
+        anim.fromCx = parseCx(anim.fromStr); anim.toCx = parseCx(anim.toStr);
+        anim.compiled = buildCompiledFn(anim.mode, anim.fromStr, anim.toStr, anim.submode);
+        renderAnimList(); draw();
+      });
+      modeRow.appendChild(btn);
+    }
+    inner.appendChild(modeRow);
+
+    // Row 2: Object / Animation (independent toggles)
+    const typeRow = document.createElement('div');
+    typeRow.className = 'anim-mode-row';
+    for (const [key, label] of [['hasAnimation','Animation'],['hasObject','Object']]) {
+      const btn = document.createElement('button');
+      btn.className = 'anim-mode-btn' + (anim[key] ? ' active' : '');
+      btn.textContent = label;
+      btn.addEventListener('click', () => {
+        anim[key] = !anim[key];
+        anim.compiled = buildCompiledFn(anim.mode, anim.fromStr, anim.toStr, anim.submode);
+        renderAnimList(); draw();
+      });
+      typeRow.appendChild(btn);
+    }
+    inner.appendChild(typeRow);
+
+    // Row 3: Connector / Average
+    const submodeRow = document.createElement('div');
+    submodeRow.className = 'anim-mode-row';
+    for (const sm of ['connector', 'average']) {
+      const btn = document.createElement('button');
+      btn.className = 'anim-mode-btn' + (anim.submode === sm ? ' active' : '');
+      btn.textContent = sm === 'connector' ? 'Connector' : 'Average';
+      btn.addEventListener('click', () => {
+        if (anim.submode === sm) return;
+        anim.submode = sm;
+        anim.compiled = buildCompiledFn(anim.mode, anim.fromStr, anim.toStr, anim.submode);
+        renderAnimList(); draw();
+      });
+      submodeRow.appendChild(btn);
+    }
+    inner.appendChild(submodeRow);
+
+    // Row 4: From / To
+    const ftRow = document.createElement('div');
+    ftRow.className = 'anim-from-to';
+    const fromLbl = document.createElement('span'); fromLbl.textContent = 'From';
+    const fromInp = document.createElement('input'); fromInp.type = 'text'; fromInp.value = anim.fromStr;
+    const toLbl   = document.createElement('span'); toLbl.textContent = 'to';
+    const toInp   = document.createElement('input'); toInp.type = 'text'; toInp.value = anim.toStr;
+    function updateFromTo() {
+      const fv = fromInp.value.trim(), tv = toInp.value.trim();
+      const fc = parseCx(fv), tc = parseCx(tv);
+      // Valid if it parses as a number OR as a reference expression
+      function isValid(str) {
+        try { compileAnimExpr(str || '0'); return true; } catch(e) { return false; }
+      }
+      const fok = !!fc || isValid(fv), tok = !!tc || isValid(tv);
+      fromInp.classList.toggle('error', !fok); toInp.classList.toggle('error', !tok);
+      if (fok) { anim.fromStr = fv; anim.fromCx = fc || null; }
+      if (tok) { anim.toStr   = tv; anim.toCx   = tc || null; }
+      if (fok && tok) {
+        anim.compiled = buildCompiledFn(anim.mode, anim.fromStr, anim.toStr, anim.submode);
+        const el = row.querySelector('.anim-expr');
+        if (el) el.textContent = `${anim.letter}[t] = ${buildExprDisplay(anim)}`;
+      }
       draw();
-    }));
-    inner.appendChild(makeIntSliderRow('Trail', anim.trailIntensity, v => {
-      anim.trailIntensity = v;
-      row.classList.toggle('active', animIsActive(anim));
-      draw();
+    }
+    fromInp.addEventListener('input', updateFromTo);
+    toInp.addEventListener('input',   updateFromTo);
+    function isValidExpr(str) { try { compileAnimExpr(str || '0'); return true; } catch(e) { return false; } }
+    fromInp.addEventListener('focus',   () => { pickTarget = { input: fromInp, anim, partner: toInp }; pickHover = null; updateCursor(); draw(); });
+    fromInp.addEventListener('blur',    () => { if (pickTarget && pickTarget.input === fromInp) { pickTarget = null; pickHover = null; updateCursor(); draw(); } });
+    fromInp.addEventListener('keydown', e => { if (e.key === 'Enter' && isValidExpr(fromInp.value.trim())) toInp.focus(); });
+    toInp.addEventListener('focus',     () => { pickTarget = { input: toInp, anim, partner: null }; pickHover = null; updateCursor(); draw(); });
+    toInp.addEventListener('blur',      () => { if (pickTarget && pickTarget.input === toInp) { pickTarget = null; pickHover = null; updateCursor(); draw(); } });
+    toInp.addEventListener('keydown',   e => { if (e.key === 'Enter' && isValidExpr(toInp.value.trim())) toInp.blur(); });
+    ftRow.append(fromLbl, fromInp, toLbl, toInp);
+    inner.appendChild(ftRow);
+
+    // Row 5: Intensity
+    inner.appendChild(makeIntSliderRow(anim.intensity, v => {
+      anim.intensity = v; row.classList.toggle('active', v > 0); draw();
     }));
 
-    const rmRow = document.createElement('div');
-    rmRow.className = 'anim-remove-row';
+    // Row 6: Trail (if animation) + Remove
+    const bottomRow = document.createElement('div');
+    bottomRow.className = 'anim-bottom-row';
+    if (anim.hasAnimation) {
+      const chkRow = document.createElement('label');
+      chkRow.className = 'anim-check-row';
+      const chk = document.createElement('input'); chk.type = 'checkbox'; chk.checked = anim.trailOn;
+      chk.addEventListener('change', () => { anim.trailOn = chk.checked; draw(); });
+      chkRow.append(chk, document.createTextNode('Trail'));
+      bottomRow.appendChild(chkRow);
+    } else {
+      bottomRow.appendChild(document.createElement('span'));
+    }
     const rm = document.createElement('button');
-    rm.className = 'anim-remove';
-    rm.textContent = 'Remove';
-    rm.addEventListener('click', () => {
-      animations = animations.filter(a => a.id !== anim.id);
-      renderAnimList();
-      draw();
-    });
-    rmRow.appendChild(rm);
-    inner.appendChild(rmRow);
+    rm.className = 'anim-remove'; rm.textContent = 'Remove';
+    rm.addEventListener('click', () => { animations = animations.filter(a => a.id !== anim.id); renderAnimList(); draw(); });
+    bottomRow.appendChild(rm);
+    inner.appendChild(bottomRow);
+
     accordion.appendChild(inner);
 
-    toggle.addEventListener('click', () => {
-      anim.expanded = !anim.expanded;
-      toggle.textContent = anim.expanded ? '▾' : '▸';
-      accordion.classList.toggle('open', anim.expanded);
+    row.addEventListener('click', e => {
+      e.stopPropagation();
+      let changed = false;
+      if (e.target.closest('.anim-header')) {
+        selectedId = selectedId === anim.id ? null : anim.id;
+        changed = true;
+      }
+      if (!anim.expanded) {
+        animations.forEach(a => { a.expanded = false; });
+        anim.expanded = true;
+        changed = true;
+      }
+      if (changed) { renderAnimList(); draw(); }
     });
 
-    main.append(lbl, inp, toggle);
-    row.append(main, accordion);
+    row.append(header, accordion);
     list.appendChild(row);
   }
+  list.appendChild(addAnimBtn);
 }
 
-function makeIntSliderRow(label, value, onChange) {
+function makeIntSliderRow(value, onChange) {
   const row = document.createElement('div');
   row.className = 'anim-slider-row';
-
-  const lbl = document.createElement('span');
-  lbl.className = 'asr-label';
-  lbl.textContent = label;
-
   const slider = document.createElement('input');
-  slider.type = 'range';
-  slider.min = 0; slider.max = 10; slider.step = 1;
+  slider.type = 'range'; slider.min = 0; slider.max = 10; slider.step = 1;
   slider.value = value;
-  slider.addEventListener('input', () => {
-    const v = parseInt(slider.value);
-    valSpan.textContent = v;
-    onChange(v);
-  });
-
+  slider.addEventListener('input', () => { const v = parseInt(slider.value); valSpan.textContent = v; onChange(v); });
   const valSpan = document.createElement('span');
-  valSpan.className = 'asr-val';
-  valSpan.textContent = value;
-
-  row.append(lbl, slider, valSpan);
+  valSpan.className = 'asr-val'; valSpan.textContent = value;
+  row.append(slider, valSpan);
   return row;
+}
+
+// ── Hit testing ──
+function hitTestCanvas(cx, cy) {
+  const threshold = 10 * devicePixelRatio;
+  const active = animations.filter(a => a.intensity > 0 && a.compiled);
+  const HIT_STEPS = 200;
+  let bestId = null, bestDist = Infinity;
+
+  for (const a of active) {
+    let minDist = Infinity;
+    const nowCtx = evalAt(currentT);
+    if (a.hasAnimation) {
+      try {
+        const v = a.compiled(currentT, nowCtx);
+        if (v && v.ok()) { const [px,py] = toCanvas(v.re,v.im); minDist = Math.min(minDist, Math.hypot(cx-px, cy-py)); }
+      } catch(e) {}
+      if (a.trailOn && currentT > 0) {
+        for (let i = 0; i <= HIT_STEPS; i++) {
+          try {
+            const sc = evalAt(currentT * i / HIT_STEPS);
+            const v = a.compiled(currentT * i / HIT_STEPS, sc);
+            if (v && v.ok()) { const [px,py] = toCanvas(v.re,v.im); minDist = Math.min(minDist, Math.hypot(cx-px, cy-py)); }
+          } catch(e) {}
+        }
+      }
+    }
+    if (a.hasObject) {
+      for (let i = 0; i <= HIT_STEPS; i++) {
+        try {
+          const v = a.compiled(i / HIT_STEPS, nowCtx);
+          if (v && v.ok()) { const [px,py] = toCanvas(v.re,v.im); minDist = Math.min(minDist, Math.hypot(cx-px, cy-py)); }
+        } catch(e) {}
+      }
+    }
+    if (minDist <= bestDist) { bestDist = minDist; bestId = a.id; }
+  }
+  return bestDist <= threshold ? bestId : null;
+}
+
+// ── Pick-mode query (from/to input canvas selection) ──
+function queryPickHover(cx, cy) {
+  if (!pickTarget) return null;
+  const animIdx = animations.indexOf(pickTarget.anim);
+  const eligible = animations.slice(0, animIdx).filter(a => a.intensity > 0 && a.compiled);
+  const threshold = 10 * devicePixelRatio;
+  const nowCtx = evalAt(currentT);
+  const HIT_STEPS = 200;
+
+  const [mathX, mathY] = toMath(cx, cy);
+  const nearX = Math.round(mathX), nearY = Math.round(mathY);
+  const [lpx, lpy] = toCanvas(nearX, nearY);
+
+  let bestClickAnim = null, bestClickDist = Infinity;
+  let curveAtLattice = false;
+
+  for (const a of eligible) {
+    const checkPt = (px, py) => {
+      const d = Math.hypot(cx-px, cy-py);
+      if (d < bestClickDist) { bestClickDist = d; bestClickAnim = a; }
+      if (!curveAtLattice && Math.hypot(px-lpx, py-lpy) <= threshold) curveAtLattice = true;
+    };
+    if (a.hasAnimation) {
+      for (let i = 0; i <= HIT_STEPS; i++) {
+        const s = i / HIT_STEPS;
+        try { const v = a.compiled(s, evalAt(s)); if (v && v.ok()) { const [px,py] = toCanvas(v.re,v.im); checkPt(px,py); } } catch(e) {}
+      }
+    }
+    if (a.hasObject && !a.hasAnimation) {
+      for (let i = 0; i <= HIT_STEPS; i++) {
+        try { const v = a.compiled(i/HIT_STEPS, nowCtx); if (v && v.ok()) { const [px,py] = toCanvas(v.re,v.im); checkPt(px,py); } } catch(e) {}
+      }
+    }
+  }
+
+  const latticeRadius = curveAtLattice ? 1/10 : 1/4;
+  if (Math.abs(mathX - nearX) <= latticeRadius && Math.abs(mathY - nearY) <= latticeRadius)
+    return { type: 'lattice', re: nearX, im: nearY };
+  if (bestClickDist <= threshold) return { type: 'anim', anim: bestClickAnim };
+  return null;
+}
+
+function pickHoverValue(h) {
+  if (!h) return null;
+  if (h.type === 'anim') return h.anim.letter;
+  return formatCx(new Cx(h.re, h.im));
+}
+
+function pickHoverCx(h) {
+  if (!h) return null;
+  if (h.type === 'anim') { const v = evalAt(currentT)[h.anim.letter]; return (v && v.ok()) ? v : null; }
+  return new Cx(h.re, h.im);
 }
 
 // ── Playback ──
@@ -1026,35 +1473,21 @@ const tDisplay   = document.getElementById('anim-t-display');
 
 function setT(t) {
   currentT = Math.max(0, Math.min(1, t));
-  scrubber.value       = currentT;
-  tDisplay.textContent = currentT.toFixed(3);
-  draw();
+  scrubber.value = currentT; tDisplay.textContent = currentT.toFixed(3); draw();
 }
-
 function playAnim() {
   if (isPlaying) return;
   if (currentT >= 1) setT(0);
-  animElapsed   = currentT * animDuration;
-  animLastFrame = null;
-  isPlaying = true;
-  btnPlay.textContent = '⏸';
-  btnPlay.classList.add('active');
+  animElapsed = currentT * animDuration; animLastFrame = null;
+  isPlaying = true; btnPlay.textContent = '⏸'; btnPlay.classList.add('active');
   animRafId = requestAnimationFrame(animFrame);
 }
-
 function pauseAnim() {
   if (!isPlaying) return;
-  isPlaying = false;
-  btnPlay.textContent = '▶';
-  btnPlay.classList.remove('active');
+  isPlaying = false; btnPlay.textContent = '▶'; btnPlay.classList.remove('active');
   if (animRafId) { cancelAnimationFrame(animRafId); animRafId = null; }
 }
-
-function resetAnim() {
-  pauseAnim();
-  setT(0);
-}
-
+function resetAnim() { pauseAnim(); setT(0); }
 function animFrame(now) {
   if (animLastFrame !== null) animElapsed += (now - animLastFrame) / 1000;
   animLastFrame = now;
@@ -1063,8 +1496,7 @@ function animFrame(now) {
     if (animLoop) { animElapsed = 0; animLastFrame = now; t = 0; }
     else { setT(1); pauseAnim(); return; }
   }
-  setT(t);
-  animRafId = requestAnimationFrame(animFrame);
+  setT(t); animRafId = requestAnimationFrame(animFrame);
 }
 
 btnPlay.addEventListener('click',  () => { isPlaying ? pauseAnim() : playAnim(); });
@@ -1076,35 +1508,39 @@ animDurEl.addEventListener('change', () => {
   animDuration = v;
   if (isPlaying) { animElapsed = currentT * animDuration; animLastFrame = null; }
 });
-scrubber.addEventListener('input', () => {
-  pauseAnim();
-  setT(parseFloat(scrubber.value));
+scrubber.addEventListener('input', () => { pauseAnim(); setT(parseFloat(scrubber.value)); });
+const addAnimBtn = document.getElementById('add-anim');
+addAnimBtn.addEventListener('click', e => { e.stopPropagation(); addAnimation('linear'); });
+
+document.addEventListener('click', () => {
+  if (pickTarget) return;
+  if (animations.some(a => a.expanded)) {
+    animations.forEach(a => { a.expanded = false; });
+    renderAnimList(); draw();
+  }
 });
 
-document.getElementById('add-anim').addEventListener('click', () => addAnimation());
-
 
 // ════════════════════════════════════════════════════════
-// MODE SWITCHING
+// MODE SWITCHING — corner fold
 // ════════════════════════════════════════════════════════
+
+const fold        = document.getElementById('corner-fold');
+const foldTooltip = document.getElementById('fold-tooltip');
 
 function setMode(mode) {
   currentMode = mode;
-  const isGraphs = mode === 'graphs';
-  document.getElementById('tab-graphs').classList.toggle('active',      isGraphs);
-  document.getElementById('tab-animations').classList.toggle('active', !isGraphs);
-  document.getElementById('graphs-panel').style.display     = isGraphs ? 'flex' : 'none';
-  document.getElementById('animations-panel').style.display = isGraphs ? 'none' : 'flex';
+  const toGraphs = mode === 'graphs';
+  document.getElementById('animations-panel').style.display = toGraphs ? 'none' : 'flex';
+  document.getElementById('graphs-panel').style.display     = toGraphs ? 'flex' : 'none';
+  fold.classList.toggle('graphs-mode', toGraphs);
+  foldTooltip.textContent = toGraphs ? 'Switch to Animations' : 'Switch to Graphs';
   draw();
 }
 
-document.getElementById('tab-graphs').addEventListener('click',     () => setMode('graphs'));
-document.getElementById('tab-animations').addEventListener('click', () => setMode('animations'));
-
-
-// ════════════════════════════════════════════════════════
-// UNIFIED DRAW
-// ════════════════════════════════════════════════════════
+fold.addEventListener('click', () => setMode(currentMode === 'animations' ? 'graphs' : 'animations'));
+fold.addEventListener('mouseenter', () => { foldTooltip.style.display = 'block'; });
+fold.addEventListener('mouseleave', () => { foldTooltip.style.display = 'none'; });
 
 function draw() {
   if (currentMode === 'graphs') drawGraphs(); else drawAnimations();
@@ -1120,7 +1556,7 @@ addFunction('cos(theta)', 'polar');
 functions.forEach(compileFunction);
 renderFunctionList();
 
-addAnimation('t');   // pre-populate A(t) = t
+addAnimation('linear', false);
 
 resize();
 </script>
