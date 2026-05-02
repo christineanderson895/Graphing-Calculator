@@ -244,19 +244,67 @@
       line-height: 1;
     }
     .anim-delete-btn:hover { color: #f38ba8; background: #2a1e2e; }
-    .color-menu {
-      position: absolute;
-      top: 40px;
-      right: 42px;
-      z-index: 30;
-      display: grid;
-      grid-template-columns: repeat(4, 22px);
-      gap: 7px;
-      padding: 8px;
-      border: 1px solid #585b70;
-      border-radius: 8px;
+    .color-expansion {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 6px;
+    }
+    .color-section {
+      border: 1px solid #313244;
+      border-radius: 6px;
       background: #181825;
-      box-shadow: 0 10px 24px rgba(0,0,0,0.45);
+      padding: 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .color-section.disabled {
+      opacity: 0.48;
+    }
+    .color-section-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      min-height: 24px;
+      color: #cdd6f4;
+      font-size: 0.72rem;
+      font-weight: 600;
+    }
+    .color-target-swatch {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      border: 2px solid #585b70;
+      background: #11111b;
+      cursor: pointer;
+      padding: 0;
+      flex-shrink: 0;
+      box-shadow: 0 0 0 1px rgba(0,0,0,0.45);
+    }
+    .color-target-swatch.active {
+      border-color: #cdd6f4;
+      box-shadow: 0 0 0 2px rgba(205,214,244,0.18);
+    }
+    .color-target-swatch:disabled {
+      cursor: default;
+    }
+    .color-controls-dim {
+      opacity: 0.5;
+    }
+    .color-menu-section {
+      display: grid;
+      grid-template-columns: repeat(7, 22px);
+      gap: 7px;
+    }
+    .color-menu-label {
+      grid-column: 1 / -1;
+      font-size: 0.66rem;
+      line-height: 1;
+      color: #a6adc8;
+      padding: 0 1px 1px;
+      letter-spacing: 0;
     }
     .color-swatch-option {
       width: 22px;
@@ -266,9 +314,51 @@
       cursor: pointer;
       padding: 0;
       box-shadow: 0 0 0 1px rgba(0,0,0,0.45);
+      position: relative;
     }
     .color-swatch-option.active {
       border-color: #cdd6f4;
+    }
+    .color-swatch-option.no-fill {
+      background: #11111b;
+      border-color: #45475a;
+    }
+    .color-swatch-option.no-fill.active {
+      border-color: #cdd6f4;
+    }
+    .fill-style-row {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 4px;
+    }
+    .fill-style-btn {
+      height: 24px;
+      border: 1px solid #45475a;
+      border-radius: 4px;
+      background: #11111b;
+      color: #a6adc8;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      padding: 0;
+    }
+    .fill-style-btn.active {
+      border-color: #cdd6f4;
+      color: #cdd6f4;
+      background: #313244;
+    }
+    .fill-style-btn:disabled {
+      cursor: default;
+    }
+    .fill-style-btn svg {
+      width: 18px;
+      height: 18px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
     }
 
     /* ── Accordion ── */
@@ -277,7 +367,7 @@
       transition: max-height 0.25s ease;
     }
     .anim-accordion.open {
-      max-height: 800px;
+      max-height: 1100px;
     }
     .anim-accordion-inner {
       padding: 5px 6px 6px;
@@ -546,6 +636,85 @@
     }
     .ctrl-row input[type=range] { flex: 1; accent-color: #cba6f7; }
 
+    /* Global settings */
+    #global-settings {
+      position: relative;
+      flex-shrink: 0;
+      margin: 0 8px 8px;
+      min-height: 38px;
+      display: flex;
+      align-items: center;
+    }
+    #global-settings-btn {
+      width: 38px;
+      height: 38px;
+      border: 1px solid #45475a;
+      border-radius: 7px;
+      background: #1e1e2e;
+      color: #cdd6f4;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+    }
+    #global-settings-btn:hover,
+    #global-settings.open #global-settings-btn {
+      background: #313244;
+      border-color: #89b4fa;
+      color: #f5f7ff;
+    }
+    #global-settings-btn svg {
+      width: 22px;
+      height: 22px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    #global-settings-menu {
+      position: absolute;
+      left: 0;
+      bottom: 44px;
+      width: 264px;
+      padding: 10px;
+      display: none;
+      flex-direction: column;
+      gap: 8px;
+      background: #181825;
+      border: 1px solid #585b70;
+      border-radius: 8px;
+      box-shadow: 0 12px 26px rgba(0,0,0,0.38), inset 0 1px 0 rgba(205,214,244,0.05);
+      z-index: 250;
+    }
+    #global-settings.open #global-settings-menu { display: flex; }
+    .settings-title {
+      font-size: 0.76rem;
+      color: #cdd6f4;
+      font-weight: 600;
+      padding: 0 2px 2px;
+    }
+    .settings-row {
+      display: grid;
+      grid-template-columns: 104px 1fr 36px;
+      align-items: center;
+      gap: 8px;
+      color: #a6adc8;
+      font-size: 0.7rem;
+    }
+    .settings-row label { white-space: nowrap; }
+    .settings-row input[type=range] {
+      min-width: 0;
+      accent-color: #cba6f7;
+      cursor: pointer;
+    }
+    .settings-value {
+      color: #cdd6f4;
+      font-variant-numeric: tabular-nums;
+      text-align: right;
+    }
     /* ── Canvas ── */
     #canvas-wrap { flex: 1; position: relative; overflow: hidden; }
     canvas { display: block; width: 100%; height: 100%; cursor: grab; }
@@ -585,6 +754,37 @@
       </button>
     </div>
     <div id="anim-list"></div>
+    <div id="global-settings">
+      <button id="global-settings-btn" title="Global Settings" aria-label="Global Settings" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12.2 2h-.4a2 2 0 0 0-2 2v.2a2 2 0 0 1-1 1.7l-.4.2a2 2 0 0 1-2 0l-.2-.1a2 2 0 0 0-2.7.7l-.2.4A2 2 0 0 0 4 9.8l.2.1a2 2 0 0 1 1 1.7v.8a2 2 0 0 1-1 1.7l-.2.1a2 2 0 0 0-.7 2.7l.2.4a2 2 0 0 0 2.7.7l.2-.1a2 2 0 0 1 2 0l.4.2a2 2 0 0 1 1 1.7v.2a2 2 0 0 0 2 2h.4a2 2 0 0 0 2-2v-.2a2 2 0 0 1 1-1.7l.4-.2a2 2 0 0 1 2 0l.2.1a2 2 0 0 0 2.7-.7l.2-.4a2 2 0 0 0-.7-2.7l-.2-.1a2 2 0 0 1-1-1.7v-.8a2 2 0 0 1 1-1.7l.2-.1a2 2 0 0 0 .7-2.7l-.2-.4a2 2 0 0 0-2.7-.7l-.2.1a2 2 0 0 1-2 0l-.4-.2a2 2 0 0 1-1-1.7V4a2 2 0 0 0-2-2Z"></path>
+          <circle cx="12" cy="12" r="3"></circle>
+        </svg>
+      </button>
+      <div id="global-settings-menu" aria-label="Global Settings">
+        <div class="settings-title">Global Settings</div>
+        <div class="settings-row">
+          <label for="default-thickness">Default Thickness</label>
+          <input id="default-thickness" type="range" min="1" max="10" step="1" />
+          <span class="settings-value" id="default-thickness-val"></span>
+        </div>
+        <div class="settings-row">
+          <label for="grid-strength">Grid Strength</label>
+          <input id="grid-strength" type="range" min="0" max="100" step="5" />
+          <span class="settings-value" id="grid-strength-val"></span>
+        </div>
+        <div class="settings-row">
+          <label for="axis-strength">Axis Strength</label>
+          <input id="axis-strength" type="range" min="0" max="100" step="5" />
+          <span class="settings-value" id="axis-strength-val"></span>
+        </div>
+        <div class="settings-row" id="snap-strength-row">
+          <label for="snap-strength">Snap Strength</label>
+          <input id="snap-strength" type="range" min="0" max="7" step="1" />
+          <span class="settings-value" id="snap-strength-val"></span>
+        </div>
+      </div>
+    </div>
     <!--
     Future playback controls, disabled for now.
 
@@ -640,7 +840,91 @@ let dragging = false, dragStartX, dragStartY, dragOriginX, dragOriginY;
 let currentMode = 'animations';
 let mouseDownClientX = 0, mouseDownClientY = 0;
 
+const CANVAS_TOOL_COLOR = '#cdd6f4';
+const CANVAS_CONTROL_IDLE_COLOR = '#e1e4ec';
+
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+const GLOBAL_SETTINGS_KEY = 'animatorGlobalSettings.v1';
+const SNAP_STRENGTH_VALUES = [0, 1, 2, 5, 10, 20, 50, 100];
+const DEFAULT_GLOBAL_SETTINGS = {
+  defaultThickness: 4,
+  gridStrength: 50,
+  axisStrength: 50,
+  snapStrength: 10,
+};
+
+function nearestSnapStrength(v) {
+  return SNAP_STRENGTH_VALUES.reduce((best, cand) =>
+    Math.abs(cand - v) < Math.abs(best - v) ? cand : best,
+    SNAP_STRENGTH_VALUES[0]
+  );
+}
+
+function snapStrengthIndex(v) {
+  return Math.max(0, SNAP_STRENGTH_VALUES.indexOf(nearestSnapStrength(v)));
+}
+
+function normalizeGlobalSettings(raw = {}) {
+  const rawSnapStrength = raw.snapToGrid === false
+    ? 0
+    : raw.snapStrength ?? DEFAULT_GLOBAL_SETTINGS.snapStrength;
+  return {
+    defaultThickness: Math.round(clamp(Number(raw.defaultThickness ?? DEFAULT_GLOBAL_SETTINGS.defaultThickness), 1, 10)),
+    gridStrength: Math.round(clamp(Number(raw.gridStrength ?? DEFAULT_GLOBAL_SETTINGS.gridStrength), 0, 100) / 5) * 5,
+    axisStrength: Math.round(clamp(Number(raw.axisStrength ?? DEFAULT_GLOBAL_SETTINGS.axisStrength), 0, 100) / 5) * 5,
+    snapStrength: nearestSnapStrength(Number(rawSnapStrength)),
+  };
+}
+
+function loadGlobalSettings() {
+  try {
+    const saved = localStorage.getItem(GLOBAL_SETTINGS_KEY);
+    return normalizeGlobalSettings(saved ? JSON.parse(saved) : DEFAULT_GLOBAL_SETTINGS);
+  } catch {
+    return normalizeGlobalSettings(DEFAULT_GLOBAL_SETTINGS);
+  }
+}
+
+function saveGlobalSettings() {
+  try { localStorage.setItem(GLOBAL_SETTINGS_KEY, JSON.stringify(globalSettings)); } catch {}
+}
+
+let globalSettings = loadGlobalSettings();
+
+function colorFromStrength(strength, base, max) {
+  const pct = clamp(strength, 0, 100);
+  if (pct <= 0) return 'rgba(0,0,0,0)';
+  if (pct <= 50) {
+    const a = pct / 50;
+    return `rgba(${base[0]},${base[1]},${base[2]},${a.toFixed(3)})`;
+  }
+  const t = (pct - 50) / 50;
+  const r = Math.round(base[0] + (max[0] - base[0]) * t);
+  const g = Math.round(base[1] + (max[1] - base[1]) * t);
+  const b = Math.round(base[2] + (max[2] - base[2]) * t);
+  return `rgb(${r},${g},${b})`;
+}
+
+function gridStrokeColor() {
+  return colorFromStrength(globalSettings.gridStrength, [49, 50, 68], [69, 71, 90]);
+}
+
+function axisStrokeColor() {
+  return colorFromStrength(globalSettings.axisStrength, [88, 91, 112], [127, 132, 156]);
+}
+
+function axisTextColor() {
+  return colorFromStrength(globalSettings.axisStrength, [108, 112, 134], [147, 153, 178]);
+}
+
+function currentSnapStrength() {
+  return globalSettings.snapStrength;
+}
+
+function snapThreshold() {
+  return currentSnapStrength() / 200;
+}
 
 function resize() {
   const wrap = canvas.parentElement;
@@ -672,14 +956,14 @@ function drawGrid() {
   const startX = Math.floor(-originX / step) * step + originX;
   const startY = Math.floor(-originY / step) * step + originY;
   ctx.lineWidth = 1;
-  ctx.strokeStyle = '#313244';
+  ctx.strokeStyle = gridStrokeColor();
   for (let x = startX; x < W; x += step) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
   for (let y = startY; y < H; y += step) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
-  ctx.strokeStyle = '#585b70';
+  ctx.strokeStyle = axisStrokeColor();
   ctx.lineWidth = 1.5;
   ctx.beginPath(); ctx.moveTo(originX, 0); ctx.lineTo(originX, H); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(0, originY); ctx.lineTo(W, originY); ctx.stroke();
-  ctx.fillStyle = '#6c7086';
+  ctx.fillStyle = axisTextColor();
   ctx.font = `${11 * devicePixelRatio}px sans-serif`;
   ctx.textAlign = 'center'; ctx.textBaseline = 'top';
   const mathLeft  = Math.ceil(toMath(0,0)[0]);
@@ -1748,6 +2032,15 @@ function _commitPendingArc(anim, nextPoint) {
 
 const ANIM_COLORS = ['#f38ba8','#89b4fa','#a6e3a1','#fab387','#cba6f7','#f9e2af','#89dceb','#94e2d5'];
 const PRIMITIVE_KINDS = new Set(['line', 'rectangle', 'circle', 'ellipse']);
+const FILL_STYLES = [
+  { key: 'solid', title: 'Solid' },
+  { key: 'horizontal', title: 'Horizontal lines' },
+  { key: 'vertical', title: 'Vertical lines' },
+  { key: 'diagDown', title: 'Diagonal lines' },
+  { key: 'diagUp', title: 'Diagonal lines' },
+  { key: 'cross', title: 'Horizontal and vertical crosshatch' },
+  { key: 'diagCross', title: 'Diagonal crosshatch' },
+];
 let animations   = [];
 let animColorIdx = 0;
 // Future playback state, disabled for now.
@@ -1757,6 +2050,7 @@ let animColorIdx = 0;
 let selectedId      = null;
 let editModeAnimId  = null;
 let openColorMenuAnimId = null;
+let colorEditTarget = 'outline';
 let eccentricitySliderActiveKey  = null; // {animId, segIdx} | null — whose ecc slider is focused
 
 // Canvas drag state
@@ -1765,10 +2059,13 @@ let anchorDrag = null;  // {anim, anchorIdx, startMath, origAnchor, origH0, orig
 let handleDrag = null;  // {anim, segIdx, side, anchorIdx}
 let curveDrag  = null;  // {anim, startMath, origAnchors, origSegs}
 let resizeDrag = null;  // {anim, handle, startMath, origBounds, origAnchors, origSegs}
+let rotateDrag = null;  // {anim, center, startAngle, origRotation, origAnchors, origSegs}
 let segmentHover = null; // {anim, segIdx} | null
 let anchorHover  = null; // {anim, anchorIdx} | null
 let handleHover  = null; // {anim, segIdx, side} | null
 let resizeHover  = null; // {anim, handle} | null
+let rotateHover  = null; // {anim} | null
+let sideActionHover = null; // {anim, kind:'duplicate'|'reflect'} | null
 let plusHover    = null; // {anim, end:'A0'|'A2'} | null
 let lockHover    = null; // {anim, anchorIdx} | null — interior anchor lock toggle
 let rubberBand   = null; // {startX,startY,curX,curY,ctrl} | null — drag-region selection
@@ -1789,7 +2086,11 @@ const MAX_UNDO = 50;
 function snapshotAnimations() {
   return animations.map(a => ({
     id: a.id, letter: a.letter, color: a.color, kind: animKind(a),
-    visible: a.visible, thickness: a.thickness,
+    fillColor: a.fillColor ?? null,
+    outlineOpacity: a.outlineOpacity ?? 1,
+    fillOpacity: a.fillOpacity ?? 0.5,
+    fillStyle: a.fillStyle || 'solid',
+    visible: a.visible, thickness: a.thickness, rotation: a.rotation ?? 0,
     anchors: a.anchors.map(p => new Cx(p.re, p.im)),
     segments: a.segments.map(s => s ? ({
       h0: new Cx(s.h0.re, s.h0.im),
@@ -1820,10 +2121,16 @@ function restoreSnapshot(snap) {
   selectedId = null; editModeAnimId = null;
   eccentricitySliderActiveKey = null;
   openColorMenuAnimId = null;
+  colorEditTarget = 'outline';
+  sideActionHover = null;
   animations = snap.map(s => {
     const anim = {
       id: s.id, letter: s.letter, color: s.color, kind: s.kind || 'freeform',
-      visible: s.visible, thickness: s.thickness,
+      fillColor: s.fillColor ?? null,
+      outlineOpacity: s.outlineOpacity ?? 1,
+      fillOpacity: s.fillOpacity ?? 0.5,
+      fillStyle: s.fillStyle || 'solid',
+      visible: s.visible, thickness: s.thickness, rotation: s.rotation ?? 0,
       anchors: s.anchors.map(p => new Cx(p.re, p.im)),
       segments: s.segments.map(sg => sg ? ({
         h0: new Cx(sg.h0.re, sg.h0.im),
@@ -1863,6 +2170,30 @@ function animKind(anim) {
 
 function isPrimitiveAnim(anim) {
   return PRIMITIVE_KINDS.has(animKind(anim));
+}
+
+function animRotation(anim) {
+  return isFinite(anim?.rotation) ? anim.rotation : 0;
+}
+
+function animFillColor(anim) {
+  return anim?.fillColor || null;
+}
+
+function animOutlineOpacity(anim) {
+  return isFinite(anim?.outlineOpacity) ? clamp(anim.outlineOpacity, 0, 1) : 1;
+}
+
+function animFillOpacity(anim) {
+  return isFinite(anim?.fillOpacity) ? clamp(anim.fillOpacity, 0, 1) : 0.5;
+}
+
+function animFillStyle(anim) {
+  return anim?.fillStyle || 'solid';
+}
+
+function canFillAnim(anim) {
+  return !!anim && isPrimitiveAnim(anim) && animKind(anim) !== 'line';
 }
 
 function isDotAnim(anim) {
@@ -1915,12 +2246,16 @@ function clearAnimationInteractionState(id) {
   if (handleDrag?.anim?.id === id) handleDrag = null;
   if (curveDrag?.anim?.id === id) curveDrag = null;
   if (resizeDrag?.anim?.id === id) resizeDrag = null;
+  if (rotateDrag?.anim?.id === id) rotateDrag = null;
   if (segmentHover?.anim?.id === id) segmentHover = null;
   if (anchorHover?.anim?.id === id) anchorHover = null;
   if (handleHover?.anim?.id === id) handleHover = null;
   if (resizeHover?.anim?.id === id) resizeHover = null;
+  if (rotateHover?.anim?.id === id) rotateHover = null;
+  if (sideActionHover?.anim?.id === id) sideActionHover = null;
   if (plusHover?.anim?.id === id) plusHover = null;
   if (lockHover?.anim?.id === id) lockHover = null;
+  if (openColorMenuAnimId === id) openColorMenuAnimId = null;
   if (eccentricitySliderActiveKey?.animId === id) eccentricitySliderActiveKey = null;
 }
 
@@ -2041,6 +2376,7 @@ function swingOppositeHandle(anim, anchorIdx, movedWasOutgoing) {
 }
 
 function enterEditMode(anim, activeSegs) {
+  openColorMenuAnimId = null;
   editModeAnimId = anim.id;
   selectedId = anim.id;
   animations.forEach(a => { a.expanded = a.id === anim.id; });
@@ -2057,9 +2393,13 @@ function enterEditMode(anim, activeSegs) {
 
 function exitEditMode() {
   editModeAnimId = null;
+  openColorMenuAnimId = null;
   eccentricitySliderActiveKey = null;
   resizeHover = null;
   resizeDrag = null;
+  rotateHover = null;
+  rotateDrag = null;
+  sideActionHover = null;
   plusHover = null;
   lockHover = null;
   rubberBand = null;
@@ -2163,7 +2503,12 @@ function addAnimation(kind = 'freeform') {
   const anim = {
     id: Date.now() + Math.random(),
     letter, color, kind,
-    visible: true, thickness: 4,
+    fillColor: null,
+    outlineOpacity: 1,
+    fillOpacity: 0.5,
+    fillStyle: 'solid',
+    visible: true, thickness: globalSettings.defaultThickness,
+    rotation: 0,
     anchors: [],
     segments: [],
     anchorLocked: [],
@@ -2218,8 +2563,13 @@ function duplicateAnimation() {
     letter: nextLetter(),
     color: src.color,
     kind: animKind(src),
+    fillColor: animFillColor(src),
+    outlineOpacity: animOutlineOpacity(src),
+    fillOpacity: animFillOpacity(src),
+    fillStyle: animFillStyle(src),
     visible: src.visible,
     thickness: src.thickness,
+    rotation: animRotation(src),
     anchors: src.anchors.map(a => new Cx(a.re + 1, a.im - 1)),
     segments: src.segments.map(s => s ? ({
       h0: new Cx(s.h0.re + 1, s.h0.im - 1),
@@ -2245,13 +2595,157 @@ function duplicateAnimation() {
 // ANIMATIONS MODE — canvas interaction
 // ════════════════════════════════════════════════════════
 
-function softSnap(v) { const n = Math.round(v); return Math.abs(v - n) <= 0.1 ? n : v; }
+function makeTransformedAnimation(src, transformPoint, rotation) {
+  return {
+    id: Date.now() + Math.random(),
+    letter: nextLetter(),
+    color: src.color,
+    kind: animKind(src),
+    fillColor: animFillColor(src),
+    outlineOpacity: animOutlineOpacity(src),
+    fillOpacity: animFillOpacity(src),
+    fillStyle: animFillStyle(src),
+    visible: src.visible,
+    thickness: src.thickness,
+    rotation,
+    anchors: src.anchors.map(transformPoint),
+    segments: src.segments.map(s => s ? ({
+      h0: transformPoint(s.h0),
+      h1: transformPoint(s.h1),
+      eccentricity: s.eccentricity,
+      compiled: null,
+      compiledRef: null,
+    }) : null),
+    anchorLocked: src.anchorLocked ? [...src.anchorLocked] : [],
+    activeSegments: new Set(),
+    inPlacementMode: false,
+    reversePlacement: false,
+    extensionAnchorIdx: null,
+    extensionForward: true,
+    extensionInsertAt: 0,
+    tContinuation: null,
+    expanded: false,
+    expandedAnchors: new Set(),
+    expandedArcs: new Set(),
+  };
+}
 
-function snapPointToLattice(pt, threshold) {
+function sideActionTargetLeftMath(src, kind) {
+  const bounds = objectMathBounds(src);
+  const btn = selectionSideActionButtons(src).find(b => b.kind === kind);
+  if (!bounds || !btn) return null;
+  const gap = 6 * devicePixelRatio;
+  const [targetLeft] = toMath(btn.x + btn.w + gap, 0);
+  return { bounds, targetLeft };
+}
+
+function createSideActionCopy(src, kind) {
+  if (!src || src.inPlacementMode) return;
+  const placement = sideActionTargetLeftMath(src, kind);
+  if (!placement) return;
+  const { bounds, targetLeft } = placement;
+  pushUndo();
+
+  let transformPoint;
+  let rotation = animRotation(src);
+  if (kind === 'reflect') {
+    const mirrorX = (bounds.right + targetLeft) * 0.5;
+    transformPoint = pt => new Cx(2 * mirrorX - pt.re, pt.im);
+    rotation = -rotation;
+  } else {
+    const dx = targetLeft - bounds.left;
+    transformPoint = pt => new Cx(pt.re + dx, pt.im);
+  }
+
+  const anim = makeTransformedAnimation(src, transformPoint, rotation);
+  animations.push(anim);
+  recompileAnim(anim);
+
+  selectedId = src.id;
+  src.expanded = true;
+  anim.expanded = false;
+  anim.activeSegments = new Set();
+  anim.expandedAnchors = new Set();
+  anim.expandedArcs = new Set();
+  sideActionHover = null;
+  resizeHover = null;
+  rotateHover = null;
+  segmentHover = null;
+  anchorHover = null;
+  handleHover = null;
+  plusHover = null;
+  lockHover = null;
+  renderAnimList(); draw(); updateCursor();
+}
+
+function softSnap(v) {
+  const threshold = snapThreshold();
+  if (threshold <= 0) return v;
+  const n = Math.round(v);
+  return Math.abs(v - n) <= threshold ? n : v;
+}
+
+function snapPointToLattice(pt, threshold = snapThreshold()) {
+  if (threshold <= 0) return pt;
   const nearX = Math.round(pt.re), nearY = Math.round(pt.im);
-  return Math.hypot(pt.re - nearX, pt.im - nearY) <= threshold
-    ? new Cx(nearX, nearY)
-    : pt;
+  return new Cx(
+    Math.abs(pt.re - nearX) <= threshold ? nearX : pt.re,
+    Math.abs(pt.im - nearY) <= threshold ? nearY : pt.im
+  );
+}
+
+function rotateMathPoint(pt, center, angle) {
+  const c = Math.cos(angle), s = Math.sin(angle);
+  const dx = pt.re - center.re, dy = pt.im - center.im;
+  return new Cx(center.re + dx * c - dy * s, center.im + dx * s + dy * c);
+}
+
+function primitiveCenter(anim) {
+  const p0 = anim.anchors[0], p1 = anim.anchors[1];
+  if (!p0) return null;
+  const kind = animKind(anim);
+  if (kind === 'circle' || kind === 'ellipse') return p0;
+  if (!p1) return p0;
+  return new Cx((p0.re + p1.re) * 0.5, (p0.im + p1.im) * 0.5);
+}
+
+function primitiveRectangleCorners(anim) {
+  const p0 = anim.anchors[0], p1 = anim.anchors[1];
+  if (!p0 || !p1) return [];
+  const center = primitiveCenter(anim);
+  const corners = [
+    new Cx(p0.re, p0.im),
+    new Cx(p1.re, p0.im),
+    new Cx(p1.re, p1.im),
+    new Cx(p0.re, p1.im),
+  ];
+  const rot = animRotation(anim);
+  return rot ? corners.map(pt => rotateMathPoint(pt, center, rot)) : corners;
+}
+
+function samplePrimitiveBoundaryMath(anim, count = 96) {
+  const p0 = anim.anchors[0], p1 = anim.anchors[1];
+  if (!p0 || !p1) return [];
+  const kind = animKind(anim);
+  if (kind === 'line') return [p0, p1];
+  if (kind === 'rectangle') return primitiveRectangleCorners(anim);
+  const rot = animRotation(anim);
+  if (kind === 'circle') {
+    const radius = Math.hypot(p1.re - p0.re, p1.im - p0.im);
+    return Array.from({ length: count }, (_, i) => {
+      const a = Math.PI * 2 * i / count;
+      return new Cx(p0.re + radius * Math.cos(a), p0.im + radius * Math.sin(a));
+    });
+  }
+  if (kind === 'ellipse') {
+    const rx = Math.abs(p1.re - p0.re), ry = Math.abs(p1.im - p0.im);
+    return Array.from({ length: count }, (_, i) => {
+      const a = Math.PI * 2 * i / count;
+      const local = new Cx(p0.re + rx * Math.cos(a), p0.im + ry * Math.sin(a));
+      return rot ? rotateMathPoint(local, p0, rot) : local;
+    });
+  }
+  return [];
 }
 
 function updateCursor() {
@@ -2262,6 +2756,12 @@ function updateCursor() {
     canvas.style.cursor = resizeCursorForHandle(resizeDrag.handle);
   } else if (resizeHover) {
     canvas.style.cursor = resizeCursorForHandle(resizeHover.handle);
+  } else if (rotateDrag) {
+    canvas.style.cursor = 'grabbing';
+  } else if (rotateHover) {
+    canvas.style.cursor = 'grab';
+  } else if (sideActionHover) {
+    canvas.style.cursor = 'pointer';
   } else if (anchorHover || handleHover || plusHover) {
     canvas.style.cursor = 'crosshair';
   } else if (anchorDrag || handleDrag || curveDrag || dragging) {
@@ -2338,13 +2838,14 @@ function primitiveHitDistance(anim, cx, cy) {
     return distPointToSegmentPx(cx, cy, x0, y0, x1, y1);
   }
   if (anim.kind === 'rectangle') {
-    const left = Math.min(x0, x1), right = Math.max(x0, x1);
-    const top = Math.min(y0, y1), bottom = Math.max(y0, y1);
-    const dTop = distPointToSegmentPx(cx, cy, left, top, right, top);
-    const dRight = distPointToSegmentPx(cx, cy, right, top, right, bottom);
-    const dBottom = distPointToSegmentPx(cx, cy, left, bottom, right, bottom);
-    const dLeft = distPointToSegmentPx(cx, cy, left, top, left, bottom);
-    return Math.min(dTop, dRight, dBottom, dLeft);
+    const pts = primitiveRectangleCorners(anim).map(pt => toCanvas(pt.re, pt.im));
+    if (pts.length < 4) return Infinity;
+    let best = Infinity;
+    for (let i = 0; i < pts.length; i++) {
+      const a = pts[i], b = pts[(i + 1) % pts.length];
+      best = Math.min(best, distPointToSegmentPx(cx, cy, a[0], a[1], b[0], b[1]));
+    }
+    return best;
   }
   if (anim.kind === 'circle') {
     const radius = Math.hypot(x1 - x0, y1 - y0);
@@ -2353,11 +2854,25 @@ function primitiveHitDistance(anim, cx, cy) {
   if (anim.kind === 'ellipse') {
     const rx = Math.abs(x1 - x0), ry = Math.abs(y1 - y0);
     if (rx < 1e-6 && ry < 1e-6) return Math.hypot(cx - x0, cy - y0);
-    if (rx < 1e-6) return distPointToSegmentPx(cx, cy, x0, y0 - ry, x0, y0 + ry);
-    if (ry < 1e-6) return distPointToSegmentPx(cx, cy, x0 - rx, y0, x0 + rx, y0);
-    const angle = Math.atan2((cy - y0) / ry, (cx - x0) / rx);
-    const ex = x0 + rx * Math.cos(angle);
-    const ey = y0 + ry * Math.sin(angle);
+    const [mx, my] = toMath(cx, cy);
+    const center = p0;
+    const local = rotateMathPoint(new Cx(mx, my), center, -animRotation(anim));
+    if (rx < 1e-6) {
+      const a = rotateMathPoint(new Cx(center.re, center.im - Math.abs(p1.im - p0.im)), center, animRotation(anim));
+      const b = rotateMathPoint(new Cx(center.re, center.im + Math.abs(p1.im - p0.im)), center, animRotation(anim));
+      const [ax, ay] = toCanvas(a.re, a.im), [bx, by] = toCanvas(b.re, b.im);
+      return distPointToSegmentPx(cx, cy, ax, ay, bx, by);
+    }
+    if (ry < 1e-6) {
+      const a = rotateMathPoint(new Cx(center.re - Math.abs(p1.re - p0.re), center.im), center, animRotation(anim));
+      const b = rotateMathPoint(new Cx(center.re + Math.abs(p1.re - p0.re), center.im), center, animRotation(anim));
+      const [ax, ay] = toCanvas(a.re, a.im), [bx, by] = toCanvas(b.re, b.im);
+      return distPointToSegmentPx(cx, cy, ax, ay, bx, by);
+    }
+    const angle = Math.atan2((local.im - center.im) / Math.abs(p1.im - p0.im), (local.re - center.re) / Math.abs(p1.re - p0.re));
+    const boundaryLocal = new Cx(center.re + Math.abs(p1.re - p0.re) * Math.cos(angle), center.im + Math.abs(p1.im - p0.im) * Math.sin(angle));
+    const boundary = rotateMathPoint(boundaryLocal, center, animRotation(anim));
+    const [ex, ey] = toCanvas(boundary.re, boundary.im);
     return Math.hypot(cx - ex, cy - ey);
   }
   return Infinity;
@@ -2395,6 +2910,7 @@ function drawDot(anim) {
   const r = dotRadius(anim);
   const [x, y] = toCanvas(anim.anchors[0].re, anim.anchors[0].im);
   ctx.save();
+  ctx.globalAlpha = animOutlineOpacity(anim);
   ctx.fillStyle = anim.color;
   ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
@@ -2706,7 +3222,14 @@ canvas.addEventListener('mousedown', e => {
     return;
   }
 
-  // ── Selection-frame resize handle ──
+  // Canvas side buttons: duplicate / reflect
+  const sideAction = querySideActionButtonHover(cx, cy);
+  if (sideAction) {
+    e.preventDefault();
+    createSideActionCopy(sideAction.anim, sideAction.kind);
+    return;
+  }
+
   const rh = queryResizeHandleHover(cx, cy);
   if (rh) {
     e.preventDefault();
@@ -2719,6 +3242,7 @@ canvas.addEventListener('mousedown', e => {
       startMathX: mathX,
       startMathY: mathY,
       origKind: animKind(rh.anim),
+      origRotation: animRotation(rh.anim),
       origBounds: { ...bounds },
       origAnchors: rh.anim.anchors.map(cloneCx),
       origSegs: rh.anim.segments.map(cloneResizeSeg),
@@ -2735,7 +3259,33 @@ canvas.addEventListener('mousedown', e => {
     updateCursor(); draw(); return;
   }
 
-  // ── "+" sign click (extend from endpoint) ──
+  // ── Rotation wheel drag ──
+  const rw = queryRotationWheelHover(cx, cy);
+  if (rw) {
+    e.preventDefault();
+    const center = rotationCenterForAnim(rw.anim);
+    if (!center) return;
+    pushUndo();
+    rotateDrag = {
+      anim: rw.anim,
+      center,
+      startAngle: Math.atan2(mathY - center.im, mathX - center.re),
+      origRotation: animRotation(rw.anim),
+      origAnchors: rw.anim.anchors.map(cloneCx),
+      origSegs: rw.anim.segments.map(cloneResizeSeg),
+    };
+    selectedId = rw.anim.id;
+    rw.anim.expanded = true;
+    animations.forEach(a => {
+      if (a.id !== rw.anim.id) {
+        a.expanded = false;
+        a.expandedArcs = new Set();
+        a.expandedAnchors = new Set();
+      }
+    });
+    updateCursor(); draw(); return;
+  }
+
   const ph = queryPlusHover(cx, cy);
   if (ph) {
     e.preventDefault();
@@ -2829,6 +3379,7 @@ canvas.addEventListener('mousedown', e => {
     e.preventDefault(); return;
   }
   selectedId = null;
+  sideActionHover = null;
   animations.forEach(a => {
     a.expanded = false;
     a.expandedArcs = new Set();
@@ -2861,9 +3412,19 @@ window.addEventListener('mousemove', e => {
     draw(); return;
   }
 
+  if (rotateDrag) {
+    const angle = Math.atan2(mathY - rotateDrag.center.im, mathX - rotateDrag.center.re);
+    applyRotationDelta(rotateDrag, angle - rotateDrag.startAngle);
+    const list = document.getElementById('anim-list');
+    const scrollTop = list.scrollTop;
+    renderAnimList();
+    list.scrollTop = scrollTop;
+    draw(); return;
+  }
+
   if (handleDrag) {
     const { anim, segIdx, side, anchorIdx } = handleDrag;
-    const snapped = snapPointToLattice(new Cx(mathX, mathY), 0.1);
+    const snapped = snapPointToLattice(new Cx(mathX, mathY));
     anim.segments[segIdx][side] = snapped;
     swingOppositeHandle(anim, anchorIdx, side === 'h0');
     recompileAnim(anim);
@@ -2914,19 +3475,25 @@ window.addEventListener('mousemove', e => {
 
   // Hover detection
   if (currentMode === 'animations') {
-    const newResizeHover  = queryResizeHandleHover(cx, cy);
-    const newLockHover    = newResizeHover ? null : queryLockHover(cx, cy);
-    const newPlusHover    = (newResizeHover || newLockHover) ? null : queryPlusHover(cx, cy);
-    const newAnchorHover  = (newResizeHover || newPlusHover || newLockHover) ? null : queryAnchorHover(mathX, mathY);
-    const newHandleHover  = (newResizeHover || newPlusHover || newAnchorHover || newLockHover) ? null : queryHandleHover(mathX, mathY);
-    const newSegmentHover = (newResizeHover || newPlusHover || newAnchorHover || newHandleHover || newLockHover) ? null : querySegmentHover(cx, cy);
+    const newSideActionHover = querySideActionButtonHover(cx, cy);
+    const newResizeHover  = newSideActionHover ? null : queryResizeHandleHover(cx, cy);
+    const newRotationHover = (newSideActionHover || newResizeHover) ? null : queryRotationWheelHover(cx, cy);
+    const newLockHover    = (newSideActionHover || newResizeHover || newRotationHover) ? null : queryLockHover(cx, cy);
+    const newPlusHover    = (newSideActionHover || newResizeHover || newRotationHover || newLockHover) ? null : queryPlusHover(cx, cy);
+    const newAnchorHover  = (newSideActionHover || newResizeHover || newRotationHover || newPlusHover || newLockHover) ? null : queryAnchorHover(mathX, mathY);
+    const newHandleHover  = (newSideActionHover || newResizeHover || newRotationHover || newPlusHover || newAnchorHover || newLockHover) ? null : queryHandleHover(mathX, mathY);
+    const newSegmentHover = (newSideActionHover || newResizeHover || newRotationHover || newPlusHover || newAnchorHover || newHandleHover || newLockHover) ? null : querySegmentHover(cx, cy);
+    const sideActionChanged = (newSideActionHover?.anim !== sideActionHover?.anim) || (newSideActionHover?.kind !== sideActionHover?.kind);
     const resizeChanged = (newResizeHover?.anim !== resizeHover?.anim) || (newResizeHover?.handle !== resizeHover?.handle);
+    const rotationChanged = newRotationHover?.anim !== rotateHover?.anim;
     const plusChanged = (newPlusHover?.anim !== plusHover?.anim) || (newPlusHover?.end !== plusHover?.end);
     const lockChanged = (newLockHover?.anim !== lockHover?.anim) || (newLockHover?.anchorIdx !== lockHover?.anchorIdx);
-    const changed = resizeChanged || plusChanged || lockChanged || (newAnchorHover !== anchorHover) || (newHandleHover !== handleHover) ||
+    const changed = sideActionChanged || resizeChanged || rotationChanged || plusChanged || lockChanged || (newAnchorHover !== anchorHover) || (newHandleHover !== handleHover) ||
       (newSegmentHover !== segmentHover &&
         !(newSegmentHover && segmentHover && newSegmentHover.anim === segmentHover.anim && newSegmentHover.segIdx === segmentHover.segIdx));
+    sideActionHover = newSideActionHover;
     resizeHover  = newResizeHover;
+    rotateHover  = newRotationHover;
     lockHover    = newLockHover;
     plusHover    = newPlusHover;
     anchorHover  = newAnchorHover;
@@ -2939,6 +3506,10 @@ window.addEventListener('mousemove', e => {
 window.addEventListener('mouseup', e => {
   if (resizeDrag) {
     resizeDrag = null;
+    renderAnimList(); draw(); updateCursor(); return;
+  }
+  if (rotateDrag) {
+    rotateDrag = null;
     renderAnimList(); draw(); updateCursor(); return;
   }
   if (handleDrag) {
@@ -2956,6 +3527,7 @@ window.addEventListener('mouseup', e => {
       rubberBand = null;
       exitEditMode();
       selectedId = null;
+      sideActionHover = null;
       animations.forEach(a => {
         a.expanded = false;
         a.expandedArcs = new Set();
@@ -3037,8 +3609,8 @@ canvas.addEventListener('auxclick', e => {
 canvas.addEventListener('mouseleave', () => {
   placementPreviewPos = null;
   rubberBand = null;
-  if (anchorHover || handleHover || segmentHover || resizeHover || plusHover || lockHover) {
-    anchorHover = null; handleHover = null; segmentHover = null; resizeHover = null; plusHover = null; lockHover = null;
+  if (anchorHover || handleHover || segmentHover || resizeHover || rotateHover || sideActionHover || plusHover || lockHover) {
+    anchorHover = null; handleHover = null; segmentHover = null; resizeHover = null; rotateHover = null; sideActionHover = null; plusHover = null; lockHover = null;
     updateCursor(); draw();
   }
 });
@@ -3055,12 +3627,16 @@ canvas.addEventListener('wheel', e => {
 }, { passive: false });
 
 document.addEventListener('click', e => {
+  if (globalSettingsOpen && !(e.target.closest && e.target.closest('#global-settings'))) {
+    setGlobalSettingsOpen(false);
+  }
   if (e.target.closest && (e.target.closest('#canvas-wrap') || e.target.closest('#sidebar'))) return;
   if (openColorMenuAnimId !== null) { openColorMenuAnimId = null; renderAnimList(); }
   const placing = animations.find(a => a.inPlacementMode);
   if (placing && isPrimitiveAnim(placing)) cancelPlacement(placing);
   if (editModeAnimId !== null) exitEditMode();
   selectedId = null;
+  sideActionHover = null;
   animations.forEach(a => {
     a.expanded = false;
     a.expandedArcs = new Set();
@@ -3108,7 +3684,7 @@ function drawHandles(anim) {
     // "+" signs (works for both dots and multi-arc with nothing selected)
     for (const pp of getPlusPositions(anim)) {
       const isHov = plusHover?.anim === anim && plusHover?.end === pp.end;
-      drawPlusSign(pp.cx, pp.cy, anim.color, dpr, isHov);
+      drawPlusSign(pp.cx, pp.cy, CANVAS_TOOL_COLOR, dpr, isHov);
     }
     return;
   }
@@ -3138,12 +3714,12 @@ function drawHandles(anim) {
     const [ax, ay] = toCanvas(anim.anchors[i].re, anim.anchors[i].im);
     const locked = isAnchorLocked(anim, i);
     const isHov  = lockHover?.anim === anim && lockHover?.anchorIdx === i;
-    drawLockToggle(ax, ay, locked, isHov, anim.color, dpr);
+    drawLockToggle(ax, ay, locked, isHov, CANVAS_TOOL_COLOR, dpr);
   }
   // "+" signs beyond each endpoint
   for (const pp of getPlusPositions(anim)) {
     const isHov = plusHover?.anim === anim && plusHover?.end === pp.end;
-    drawPlusSign(pp.cx, pp.cy, anim.color, dpr, isHov);
+    drawPlusSign(pp.cx, pp.cy, CANVAS_TOOL_COLOR, dpr, isHov);
   }
 }
 
@@ -3168,22 +3744,23 @@ function drawSegment(anim, segIdx) {
   if (!seg || !seg.compiled) return;
   const dpr = devicePixelRatio;
   const cw = (1 + 5 * (anim.thickness / 10)) * dpr;
+  const opacity = animOutlineOpacity(anim);
   if (isEccGhostActive(anim, segIdx) && seg.compiledRef) {
     seg.compiledRef.forEach(entry => {
       if (Math.abs(entry.eccentricity - seg.eccentricity) >= 1e-9)
-        drawCompiledCurve(entry.fn, anim.color, cw * 0.18, 0.3);
+        drawCompiledCurve(entry.fn, anim.color, cw * 0.18, 0.3 * opacity);
     });
     const sliderActive = eccentricitySliderActiveKey?.animId === anim.id
                       && eccentricitySliderActiveKey?.segIdx === segIdx;
     if (sliderActive) {
       ctx.save(); ctx.shadowBlur = 15 * dpr; ctx.shadowColor = anim.color;
-      drawCompiledCurve(seg.compiled, anim.color, cw * 0.55, 1);
+      drawCompiledCurve(seg.compiled, anim.color, cw * 0.55, opacity);
       ctx.restore();
     } else {
-      drawCompiledCurve(seg.compiled, anim.color, cw, 1);
+      drawCompiledCurve(seg.compiled, anim.color, cw, opacity);
     }
   } else {
-    drawCompiledCurve(seg.compiled, anim.color, cw, 1);
+    drawCompiledCurve(seg.compiled, anim.color, cw, opacity);
   }
 }
 
@@ -3191,43 +3768,116 @@ function primitiveStrokeWidth(anim, extra = 0) {
   return (1 + 5 * (anim.thickness / 10)) * devicePixelRatio + extra;
 }
 
-function drawPrimitiveShape(kind, p0, p1, color, lineWidth, alpha = 1, dashed = false) {
+function fillStyleValue(color, style) {
+  if (!color || style === 'solid') return color;
+  const dpr = devicePixelRatio;
+  const size = Math.max(8, Math.round(8 * dpr));
+  const tile = document.createElement('canvas');
+  tile.width = size;
+  tile.height = size;
+  const pctx = tile.getContext('2d');
+  pctx.strokeStyle = color;
+  pctx.lineWidth = Math.max(1, dpr);
+  pctx.lineCap = 'square';
+
+  const line = (x1, y1, x2, y2) => {
+    pctx.beginPath();
+    pctx.moveTo(x1, y1);
+    pctx.lineTo(x2, y2);
+    pctx.stroke();
+  };
+  const drawHorizontal = () => line(0, size * 0.5, size, size * 0.5);
+  const drawVertical = () => line(size * 0.5, 0, size * 0.5, size);
+  const drawDiagDown = () => {
+    line(-size * 0.25, -size * 0.25, size * 1.25, size * 1.25);
+    line(-size * 0.25, size * 0.75, size * 0.25, size * 1.25);
+    line(size * 0.75, -size * 0.25, size * 1.25, size * 0.25);
+  };
+  const drawDiagUp = () => {
+    line(-size * 0.25, size * 1.25, size * 1.25, -size * 0.25);
+    line(-size * 0.25, size * 0.25, size * 0.25, -size * 0.25);
+    line(size * 0.75, size * 1.25, size * 1.25, size * 0.75);
+  };
+
+  if (style === 'horizontal') drawHorizontal();
+  else if (style === 'vertical') drawVertical();
+  else if (style === 'diagDown') drawDiagDown();
+  else if (style === 'diagUp') drawDiagUp();
+  else if (style === 'cross') { drawHorizontal(); drawVertical(); }
+  else if (style === 'diagCross') { drawDiagDown(); drawDiagUp(); }
+  return ctx.createPattern(tile, 'repeat') || color;
+}
+
+function drawPrimitiveShape(kind, p0, p1, color, lineWidth, alpha = 1, dashed = false, rotation = 0, fillColor = null, outlineOpacity = 1, fillOpacity = 0.5, fillStyle = 'solid') {
   if (!p0 || !p1) return;
   const [x0, y0] = toCanvas(p0.re, p0.im);
   const [x1, y1] = toCanvas(p1.re, p1.im);
   ctx.save();
-  ctx.globalAlpha = alpha;
   ctx.strokeStyle = color;
+  ctx.fillStyle = fillStyleValue(fillColor, fillStyle) || color;
   ctx.lineWidth = lineWidth;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
   if (dashed) ctx.setLineDash([4 * devicePixelRatio, 4 * devicePixelRatio]);
+  const paint = () => {
+    if (fillColor) {
+      ctx.globalAlpha = alpha * fillOpacity;
+      ctx.fill();
+    }
+    ctx.globalAlpha = alpha * outlineOpacity;
+    ctx.stroke();
+  };
   if (kind === 'line') {
+    ctx.globalAlpha = alpha * outlineOpacity;
     ctx.beginPath();
     ctx.moveTo(x0, y0);
     ctx.lineTo(x1, y1);
     ctx.stroke();
   } else if (kind === 'rectangle') {
-    const left = Math.min(x0, x1), top = Math.min(y0, y1);
-    const width = Math.abs(x1 - x0), height = Math.abs(y1 - y0);
-    ctx.strokeRect(left, top, width, height);
+    const center = new Cx((p0.re + p1.re) * 0.5, (p0.im + p1.im) * 0.5);
+    const corners = [
+      new Cx(p0.re, p0.im),
+      new Cx(p1.re, p0.im),
+      new Cx(p1.re, p1.im),
+      new Cx(p0.re, p1.im),
+    ].map(pt => rotation ? rotateMathPoint(pt, center, rotation) : pt);
+    const pts = corners.map(pt => toCanvas(pt.re, pt.im));
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+    ctx.closePath();
+    paint();
   } else if (kind === 'circle') {
     const radius = Math.hypot(x1 - x0, y1 - y0);
     ctx.beginPath();
     ctx.arc(x0, y0, radius, 0, Math.PI * 2);
-    ctx.stroke();
+    paint();
   } else if (kind === 'ellipse') {
     const rx = Math.abs(x1 - x0), ry = Math.abs(y1 - y0);
     ctx.beginPath();
-    ctx.ellipse(x0, y0, rx, ry, 0, 0, Math.PI * 2);
-    ctx.stroke();
+    ctx.ellipse(x0, y0, rx, ry, -rotation, 0, Math.PI * 2);
+    paint();
   }
   ctx.restore();
 }
 
 function drawPrimitive(anim, extraWidth = 0, alpha = 1) {
   if (!isPrimitiveAnim(anim) || anim.anchors.length < 2) return;
-  drawPrimitiveShape(anim.kind, anim.anchors[0], anim.anchors[1], anim.color, primitiveStrokeWidth(anim, extraWidth), alpha);
+  const fillColor = extraWidth === 0 && alpha >= 1 ? animFillColor(anim) : null;
+  drawPrimitiveShape(
+    anim.kind,
+    anim.anchors[0],
+    anim.anchors[1],
+    anim.color,
+    primitiveStrokeWidth(anim, extraWidth),
+    alpha,
+    false,
+    animRotation(anim),
+    fillColor,
+    animOutlineOpacity(anim),
+    animFillOpacity(anim),
+    animFillStyle(anim)
+  );
 }
 
 function drawPrimitivePlacement(anim, previewPoint) {
@@ -3249,7 +3899,7 @@ function drawPrimitivePlacement(anim, previewPoint) {
     ctx.restore();
     return;
   }
-  drawPrimitiveShape(anim.kind, anim.anchors[0], previewPoint, anim.color, cw, 0.7, false);
+  drawPrimitiveShape(anim.kind, anim.anchors[0], previewPoint, anim.color, cw, 0.7, false, 0);
   if (anim.kind === 'circle') {
     const center = anim.anchors[0];
     const [cx, cy] = toCanvas(center.re, center.im);
@@ -3347,22 +3997,11 @@ function selectedObjectCanvasBounds(anim) {
 
   if (isPrimitiveAnim(anim)) {
     if (anim.anchors.length < 2) return null;
-    const [x0, y0] = toCanvas(anim.anchors[0].re, anim.anchors[0].im);
-    const [x1, y1] = toCanvas(anim.anchors[1].re, anim.anchors[1].im);
-    if (anim.kind === 'circle') {
-      const radius = Math.hypot(x1 - x0, y1 - y0);
-      return { left: x0 - radius, right: x0 + radius, top: y0 - radius, bottom: y0 + radius };
+    let bounds = null;
+    for (const pt of samplePrimitiveBoundaryMath(anim)) {
+      bounds = includeCanvasPoint(bounds, toCanvas(pt.re, pt.im));
     }
-    if (anim.kind === 'ellipse') {
-      const rx = Math.abs(x1 - x0), ry = Math.abs(y1 - y0);
-      return { left: x0 - rx, right: x0 + rx, top: y0 - ry, bottom: y0 + ry };
-    }
-    return {
-      left: Math.min(x0, x1),
-      right: Math.max(x0, x1),
-      top: Math.min(y0, y1),
-      bottom: Math.max(y0, y1),
-    };
+    return bounds;
   }
 
   if (anim.anchors.length === 1 && anim.segments.length === 0) {
@@ -3398,18 +4037,8 @@ function objectMathBounds(anim) {
   if (!anim || !anim.visible || anim.inPlacementMode) return null;
 
   if (isPrimitiveAnim(anim)) {
-    const p0 = anim.anchors[0], p1 = anim.anchors[1];
-    if (!p0 || !p1) return null;
-    if (anim.kind === 'circle') {
-      const radius = Math.hypot(p1.re - p0.re, p1.im - p0.im);
-      return { left: p0.re - radius, right: p0.re + radius, bottom: p0.im - radius, top: p0.im + radius };
-    }
-    if (anim.kind === 'ellipse') {
-      const rx = Math.abs(p1.re - p0.re), ry = Math.abs(p1.im - p0.im);
-      return { left: p0.re - rx, right: p0.re + rx, bottom: p0.im - ry, top: p0.im + ry };
-    }
     let bounds = null;
-    for (const anchor of anim.anchors) bounds = includeMathPoint(bounds, anchor);
+    for (const pt of samplePrimitiveBoundaryMath(anim)) bounds = includeMathPoint(bounds, pt);
     return bounds;
   }
 
@@ -3455,6 +4084,45 @@ function selectionFrameMetrics(anim) {
   };
 }
 
+function selectionRotationWheel(anim) {
+  const f = selectionFrameMetrics(anim);
+  if (!f) return null;
+  const cx = f.x + f.w * 0.5;
+  const cy = f.y + f.h * 0.5;
+  const r = Math.max(0, Math.min(f.w, f.h) * 0.25);
+  return { cx, cy, r, frame: f };
+}
+
+function selectionSideActionButtons(anim) {
+  const f = selectionFrameMetrics(anim);
+  if (!f) return [];
+  const dpr = devicePixelRatio;
+  const w = 38 * dpr;
+  const h = 22 * dpr;
+  const gap = 5 * dpr;
+  const rightEdge = f.outerX + f.outerW + f.extend;
+  const topEdge = f.outerY - f.extend;
+  const x = rightEdge + 7 * dpr;
+  const y = topEdge + 12 * dpr;
+  return [
+    { kind: 'duplicate', x, y, w, h },
+    { kind: 'reflect', x, y: y + h + gap, w, h },
+  ];
+}
+
+function pointInRect(px, py, rect) {
+  return px >= rect.x && px <= rect.x + rect.w && py >= rect.y && py <= rect.y + rect.h;
+}
+
+function querySideActionButtonHover(cx, cy) {
+  const anim = animations.find(a => a.id === selectedId);
+  if (!anim || !anim.visible || anim.inPlacementMode) return null;
+  for (const btn of selectionSideActionButtons(anim)) {
+    if (pointInRect(cx, cy, btn)) return { anim, kind: btn.kind };
+  }
+  return null;
+}
+
 function selectionResizeSegments(anim) {
   const f = selectionFrameMetrics(anim);
   if (!f) return [];
@@ -3492,6 +4160,16 @@ function queryResizeHandleHover(cx, cy) {
     }
   }
   return best;
+}
+
+function queryRotationWheelHover(cx, cy) {
+  const anim = animations.find(a => a.id === selectedId);
+  if (!anim || !anim.visible || anim.inPlacementMode || isDotAnim(anim)) return null;
+  const wheel = selectionRotationWheel(anim);
+  if (!wheel || wheel.r < 4 * devicePixelRatio) return null;
+  const threshold = 8 * devicePixelRatio;
+  const d = Math.hypot(cx - wheel.cx, cy - wheel.cy);
+  return Math.abs(d - wheel.r) <= threshold ? { anim } : null;
 }
 
 function cloneResizeSeg(seg) {
@@ -3577,12 +4255,14 @@ function applyResizeBounds(drag, nextBounds) {
     const ry = Math.max(0, (nextBounds.top - nextBounds.bottom) * 0.5);
     const isCircle = Math.abs(rx - ry) <= 1e-7;
     anim.kind = isCircle ? 'circle' : 'ellipse';
+    anim.rotation = drag.origRotation ?? animRotation(anim);
     anim.anchors[0] = new Cx(cx, cy);
     anim.anchors[1] = isCircle ? new Cx(cx + rx, cy) : new Cx(cx + rx, cy + ry);
     return;
   }
 
   anim.kind = origKind;
+  anim.rotation = drag.origRotation ?? animRotation(anim);
   anim.anchors = origAnchors.map(pt => transformPointInBounds(pt, origBounds, nextBounds));
   anim.segments = origSegs.map(seg => seg ? ({
     h0: transformPointInBounds(seg.h0, origBounds, nextBounds),
@@ -3594,38 +4274,145 @@ function applyResizeBounds(drag, nextBounds) {
   if (!isPrimitiveAnim(anim)) recompileAnim(anim);
 }
 
+function rotationCenterForAnim(anim) {
+  const bounds = selectedObjectCanvasBounds(anim);
+  if (!bounds) return null;
+  const [mx, my] = toMath((bounds.left + bounds.right) * 0.5, (bounds.top + bounds.bottom) * 0.5);
+  return new Cx(mx, my);
+}
+
+function applyRotationDelta(drag, delta) {
+  const { anim, center, origRotation, origAnchors, origSegs } = drag;
+  const kind = animKind(anim);
+  if (isPrimitiveAnim(anim) && (kind === 'rectangle' || kind === 'circle' || kind === 'ellipse')) {
+    anim.rotation = origRotation + delta;
+    return;
+  }
+
+  anim.rotation = origRotation;
+  anim.anchors = origAnchors.map(pt => rotateMathPoint(pt, center, delta));
+  if (!isPrimitiveAnim(anim)) {
+    anim.segments = origSegs.map(seg => seg ? ({
+      h0: rotateMathPoint(seg.h0, center, delta),
+      h1: rotateMathPoint(seg.h1, center, delta),
+      eccentricity: seg.eccentricity,
+      compiled: null,
+      compiledRef: null,
+    }) : null);
+    recompileAnim(anim);
+  }
+}
+
+function drawSelectionSideActionButton(btn, active) {
+  const dpr = devicePixelRatio;
+  const midX = btn.x + btn.w * 0.5;
+  const midY = btn.y + btn.h * 0.5;
+  const cellL = btn.x + btn.w * 0.25;
+  const cellR = btn.x + btn.w * 0.75;
+
+  ctx.save();
+  ctx.fillStyle = '#11111b';
+  ctx.globalAlpha = active ? 0.92 : 0.78;
+  ctx.fillRect(btn.x, btn.y, btn.w, btn.h);
+
+  ctx.globalAlpha = active ? 0.78 : 0.56;
+  ctx.strokeStyle = active ? CANVAS_TOOL_COLOR : CANVAS_CONTROL_IDLE_COLOR;
+  ctx.lineWidth = (active ? 1.4 : 1) * dpr;
+  ctx.strokeRect(btn.x, btn.y, btn.w, btn.h);
+
+  ctx.globalAlpha = active ? 0.62 : 0.4;
+  ctx.beginPath();
+  ctx.moveTo(midX, btn.y + 3 * dpr);
+  ctx.lineTo(midX, btn.y + btn.h - 3 * dpr);
+  ctx.stroke();
+
+  ctx.globalAlpha = active ? 0.9 : 0.7;
+  ctx.fillStyle = active ? CANVAS_TOOL_COLOR : CANVAS_CONTROL_IDLE_COLOR;
+  ctx.font = `700 ${12 * dpr}px sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('R', cellL, midY + 0.5 * dpr);
+  if (btn.kind === 'reflect') {
+    ctx.translate(cellR, midY + 0.5 * dpr);
+    ctx.scale(-1, 1);
+    ctx.fillText('R', 0, 0);
+  } else {
+    ctx.fillText('R', cellR, midY + 0.5 * dpr);
+  }
+  ctx.restore();
+}
+
+function drawSelectionSideActionButtons(anim) {
+  for (const btn of selectionSideActionButtons(anim)) {
+    const active = sideActionHover?.anim === anim && sideActionHover?.kind === btn.kind;
+    drawSelectionSideActionButton(btn, active);
+  }
+}
+
 function drawSelectedObjectBounds(anim) {
   if (selectedId !== anim.id && editModeAnimId !== anim.id) return;
   const frame = selectionFrameMetrics(anim);
   if (!frame) return;
 
   const dpr = devicePixelRatio;
-  const { x, y, w, h, outerX, outerY, outerW, outerH } = frame;
+  const { x, y, w, h, outerX, outerY, outerW, outerH, extend } = frame;
 
   ctx.save();
-  ctx.fillStyle = anim.color;
+  ctx.fillStyle = CANVAS_TOOL_COLOR;
   ctx.globalAlpha = 0.05;
   ctx.fillRect(x, y, w, h);
 
-  ctx.strokeStyle = anim.color;
+  ctx.strokeStyle = CANVAS_TOOL_COLOR;
   ctx.lineWidth = 1.25 * dpr;
   ctx.globalAlpha = 0.48;
   ctx.shadowBlur = 8 * dpr;
-  ctx.shadowColor = anim.color;
+  ctx.shadowColor = CANVAS_TOOL_COLOR;
   ctx.strokeRect(x, y, w, h);
 
   ctx.lineWidth = 0.9 * dpr;
   ctx.globalAlpha = 0.26;
   ctx.strokeRect(outerX, outerY, outerW, outerH);
 
+  ctx.lineWidth = 2 * dpr;
+  ctx.globalAlpha = 0.3;
+  ctx.strokeRect(outerX - extend, outerY - extend, outerW + extend * 2, outerH + extend * 2);
+
+  const midX = x + w * 0.5;
+  const midY = y + h * 0.5;
+  ctx.shadowBlur = 0;
+  ctx.lineWidth = 2 * dpr;
+  ctx.globalAlpha = 0.32;
+  ctx.beginPath();
+  ctx.moveTo(x, midY);
+  ctx.lineTo(x + w, midY);
+  ctx.moveTo(midX, y);
+  ctx.lineTo(midX, y + h);
+  ctx.stroke();
+
+  const wheel = selectionRotationWheel(anim);
+  const wheelActive = rotateDrag?.anim === anim || rotateHover?.anim === anim;
+  if (wheel && wheel.r > 0) {
+    ctx.strokeStyle = wheelActive ? CANVAS_TOOL_COLOR : CANVAS_CONTROL_IDLE_COLOR;
+    ctx.lineWidth = (wheelActive ? 2.4 : 1.4) * dpr;
+    ctx.globalAlpha = wheelActive ? 0.62 : 0.48;
+    ctx.shadowBlur = wheelActive ? 6 * dpr : 0;
+    ctx.shadowColor = CANVAS_TOOL_COLOR;
+    ctx.beginPath();
+    ctx.arc(wheel.cx, wheel.cy, wheel.r, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = (resizeDrag?.anim === anim || resizeHover?.anim === anim) ? CANVAS_TOOL_COLOR : CANVAS_CONTROL_IDLE_COLOR;
   ctx.beginPath();
   for (const seg of selectionResizeSegments(anim)) {
     ctx.moveTo(seg.from[0], seg.from[1]);
     ctx.lineTo(seg.to[0], seg.to[1]);
   }
   ctx.lineWidth = 1.8 * dpr;
-  ctx.globalAlpha = 0.46;
+  ctx.globalAlpha = (resizeDrag?.anim === anim || resizeHover?.anim === anim) ? 0.62 : 0.52;
   ctx.stroke();
+  drawSelectionSideActionButtons(anim);
   ctx.restore();
 }
 
@@ -3924,6 +4711,200 @@ function appendReadOnlyRow(parent, lbl, val) {
   parent.appendChild(r);
 }
 
+function sameColor(a, b) {
+  return (a || '').toLowerCase() === (b || '').toLowerCase();
+}
+
+function appendColorMenuLabel(parent, text) {
+  const label = document.createElement('div');
+  label.className = 'color-menu-label';
+  label.textContent = text;
+  parent.appendChild(label);
+}
+
+function appendPaletteSwatches(section, activeColor, onSelect) {
+  ANIM_COLORS.forEach(color => {
+    const opt = document.createElement('button');
+    opt.className = 'color-swatch-option' + (sameColor(activeColor, color) ? ' active' : '');
+    opt.title = color;
+    opt.style.background = color;
+    opt.addEventListener('click', e => {
+      e.stopPropagation();
+      onSelect(color);
+    });
+    section.appendChild(opt);
+  });
+}
+
+function makeFillStyleIcon(style) {
+  const svg = makeSvgEl('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' });
+  const rect = makeSvgEl('rect', { x: 4, y: 4, width: 16, height: 16, rx: 0 });
+  if (style === 'solid') {
+    rect.setAttribute('style', 'fill:currentColor;stroke:currentColor;');
+    svg.appendChild(rect);
+    return svg;
+  }
+  svg.appendChild(rect);
+  const addLine = (x1, y1, x2, y2) => svg.appendChild(makeSvgEl('line', { x1, y1, x2, y2 }));
+  if (style === 'horizontal' || style === 'cross') {
+    addLine(5, 8, 19, 8); addLine(5, 12, 19, 12); addLine(5, 16, 19, 16);
+  }
+  if (style === 'vertical' || style === 'cross') {
+    addLine(8, 5, 8, 19); addLine(12, 5, 12, 19); addLine(16, 5, 16, 19);
+  }
+  if (style === 'diagDown' || style === 'diagCross') {
+    addLine(4, 7, 17, 20); addLine(4, 13, 11, 20); addLine(10, 4, 20, 14);
+  }
+  if (style === 'diagUp' || style === 'diagCross') {
+    addLine(4, 17, 17, 4); addLine(4, 11, 11, 4); addLine(10, 20, 20, 10);
+  }
+  return svg;
+}
+
+function appendSliderRow(parent, labelText, min, max, step, value, formatValue, onInput, disabled = false) {
+  const row = document.createElement('div');
+  row.className = 'tree-slider-row';
+  row.style.padding = '2px 0';
+  const label = document.createElement('label');
+  label.textContent = labelText;
+  const slider = document.createElement('input');
+  slider.type = 'range';
+  slider.min = min;
+  slider.max = max;
+  slider.step = step;
+  slider.value = value;
+  slider.disabled = disabled;
+  const valSpan = document.createElement('span');
+  valSpan.className = 'tree-slider-val';
+  valSpan.textContent = formatValue(value);
+  slider.addEventListener('mousedown', () => { if (!slider.disabled) pushUndo(); });
+  slider.addEventListener('touchstart', () => { if (!slider.disabled) pushUndo(); }, { passive: true });
+  slider.addEventListener('input', () => {
+    onInput(slider.value);
+    valSpan.textContent = formatValue(slider.value);
+    draw();
+  });
+  row.append(label, slider, valSpan);
+  parent.appendChild(row);
+}
+
+function appendColorExpansion(parent, anim) {
+  if (colorEditTarget === 'fill' && !canFillAnim(anim)) colorEditTarget = 'outline';
+  const fillEnabled = canFillAnim(anim);
+  const fillActive = fillEnabled && !!animFillColor(anim);
+  const root = document.createElement('div');
+  root.className = 'color-expansion';
+
+  const outlineSection = document.createElement('div');
+  outlineSection.className = 'color-section';
+  const outlineHeader = document.createElement('div');
+  outlineHeader.className = 'color-section-title';
+  const outlineLabel = document.createElement('span');
+  outlineLabel.textContent = 'Outline';
+  const outlineSwatch = document.createElement('button');
+  outlineSwatch.className = 'color-target-swatch' + (colorEditTarget === 'outline' ? ' active' : '');
+  outlineSwatch.title = 'Edit outline color';
+  outlineSwatch.style.background = anim.color;
+  outlineSwatch.addEventListener('click', e => {
+    e.stopPropagation();
+    colorEditTarget = 'outline';
+    renderAnimList();
+  });
+  outlineHeader.append(outlineLabel, outlineSwatch);
+  outlineSection.appendChild(outlineHeader);
+  appendSliderRow(outlineSection, 'Thickness', 1, 10, 1, anim.thickness, v => `${Math.round(v)}`, v => {
+    anim.thickness = parseInt(v, 10);
+  });
+  appendSliderRow(outlineSection, 'Opacity', 0, 100, 1, Math.round(animOutlineOpacity(anim) * 100), v => `${Math.round(v)}%`, v => {
+    anim.outlineOpacity = clamp(parseFloat(v) / 100, 0, 1);
+  });
+  root.appendChild(outlineSection);
+
+  const fillSection = document.createElement('div');
+  fillSection.className = 'color-section' + (fillEnabled ? '' : ' disabled');
+  const fillHeader = document.createElement('div');
+  fillHeader.className = 'color-section-title';
+  const fillLabel = document.createElement('span');
+  fillLabel.textContent = 'Fill';
+  const fillSwatch = document.createElement('button');
+  fillSwatch.className = 'color-target-swatch' + (colorEditTarget === 'fill' ? ' active' : '') + (!animFillColor(anim) ? ' no-fill' : '');
+  fillSwatch.title = fillEnabled ? 'Edit fill color' : 'Fill unavailable';
+  fillSwatch.style.background = animFillColor(anim) || '#11111b';
+  fillSwatch.disabled = !fillEnabled;
+  fillSwatch.addEventListener('click', e => {
+    e.stopPropagation();
+    if (!fillEnabled) return;
+    colorEditTarget = 'fill';
+    renderAnimList();
+  });
+  fillHeader.append(fillLabel, fillSwatch);
+  fillSection.appendChild(fillHeader);
+
+  const fillControls = document.createElement('div');
+  fillControls.className = fillActive ? '' : 'color-controls-dim';
+  const styleRow = document.createElement('div');
+  styleRow.className = 'fill-style-row';
+  FILL_STYLES.forEach(({ key, title }) => {
+    const btn = document.createElement('button');
+    btn.className = 'fill-style-btn' + (animFillStyle(anim) === key ? ' active' : '');
+    btn.title = title;
+    btn.disabled = !fillActive;
+    btn.appendChild(makeFillStyleIcon(key));
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      if (!fillActive) return;
+      if (animFillStyle(anim) !== key) {
+        pushUndo();
+        anim.fillStyle = key;
+        renderAnimList(); draw();
+      }
+    });
+    styleRow.appendChild(btn);
+  });
+  fillControls.appendChild(styleRow);
+  appendSliderRow(fillControls, 'Opacity', 0, 100, 1, Math.round(animFillOpacity(anim) * 100), v => `${Math.round(v)}%`, v => {
+    anim.fillOpacity = clamp(parseFloat(v) / 100, 0, 1);
+  }, !fillActive);
+  fillSection.appendChild(fillControls);
+  root.appendChild(fillSection);
+
+  const colorsSection = document.createElement('div');
+  colorsSection.className = 'color-section';
+  const swatches = document.createElement('div');
+  swatches.className = 'color-menu-section';
+  appendColorMenuLabel(swatches, 'Colors');
+  if (colorEditTarget === 'fill' && fillEnabled) {
+    const noneOpt = document.createElement('button');
+    noneOpt.className = 'color-swatch-option no-fill' + (!animFillColor(anim) ? ' active' : '');
+    noneOpt.title = 'No fill';
+    noneOpt.addEventListener('click', e => {
+      e.stopPropagation();
+      if (animFillColor(anim)) {
+        pushUndo();
+        anim.fillColor = null;
+      }
+      renderAnimList(); draw();
+    });
+    swatches.appendChild(noneOpt);
+  }
+  appendPaletteSwatches(swatches, colorEditTarget === 'fill' ? animFillColor(anim) : anim.color, color => {
+    if (colorEditTarget === 'fill' && fillEnabled) {
+      if (!sameColor(animFillColor(anim), color)) {
+        pushUndo();
+        anim.fillColor = color;
+        if (!anim.fillStyle) anim.fillStyle = 'solid';
+      }
+    } else if (!sameColor(anim.color, color)) {
+      pushUndo();
+      anim.color = color;
+    }
+    renderAnimList(); draw();
+  });
+  colorsSection.appendChild(swatches);
+  root.appendChild(colorsSection);
+  parent.appendChild(root);
+}
+
 function renderAnimList() {
   const list = document.getElementById('anim-list');
   list.innerHTML = '';
@@ -3958,12 +4939,22 @@ function renderAnimList() {
 
     const colorBtn = document.createElement('button');
     colorBtn.className = 'anim-color-btn';
-    colorBtn.title = 'Change color';
+    colorBtn.title = 'Change colors';
     colorBtn.style.background = anim.color;
     colorBtn.addEventListener('click', e => {
       e.stopPropagation();
-      openColorMenuAnimId = openColorMenuAnimId === anim.id ? null : anim.id;
-      renderAnimList();
+      const opening = openColorMenuAnimId !== anim.id;
+      selectedId = anim.id;
+      editModeAnimId = anim.id;
+      animations.forEach(a => {
+        a.expanded = false;
+        a.expandedArcs = new Set();
+        a.expandedAnchors = new Set();
+      });
+      anim.activeSegments = new Set();
+      openColorMenuAnimId = opening ? anim.id : null;
+      colorEditTarget = 'outline';
+      renderAnimList(); draw();
     });
 
     const visBtn = document.createElement('button');
@@ -3986,28 +4977,6 @@ function renderAnimList() {
     actions.append(colorBtn, visBtn, delBtn);
     header.append(label, actions);
     row.appendChild(header);
-
-    if (openColorMenuAnimId === anim.id) {
-      const colorMenu = document.createElement('div');
-      colorMenu.className = 'color-menu';
-      ANIM_COLORS.forEach(color => {
-        const opt = document.createElement('button');
-        opt.className = 'color-swatch-option' + (color.toLowerCase() === anim.color.toLowerCase() ? ' active' : '');
-        opt.title = color;
-        opt.style.background = color;
-        opt.addEventListener('click', e => {
-          e.stopPropagation();
-          if (anim.color.toLowerCase() !== color.toLowerCase()) {
-            pushUndo();
-            anim.color = color;
-          }
-          openColorMenuAnimId = null;
-          renderAnimList(); draw();
-        });
-        colorMenu.appendChild(opt);
-      });
-      row.appendChild(colorMenu);
-    }
 
     header.addEventListener('click', e => {
       e.stopPropagation();
@@ -4037,10 +5006,12 @@ function renderAnimList() {
     });
 
     // ── Accordion ──
+    const colorExpanded = openColorMenuAnimId === anim.id;
+    const accordionOpen = anim.expanded || colorExpanded;
     const accordion = document.createElement('div');
-    accordion.className = 'anim-accordion' + (anim.expanded ? ' open' : '');
+    accordion.className = 'anim-accordion' + (accordionOpen ? ' open' : '');
     const curveColor = !anim.visible ? '#585b70' : anim.color;
-    if (anim.expanded) {
+    if (accordionOpen) {
       accordion.style.border = `1px solid ${curveColor}`;
       accordion.style.borderTop = 'none';
     }
@@ -4048,21 +5019,16 @@ function renderAnimList() {
     inner.className = 'anim-accordion-inner';
     inner.style.borderTopColor = curveColor;
 
+    if (colorExpanded) {
+      appendColorExpansion(inner, anim);
+      accordion.appendChild(inner);
+      row.appendChild(accordion);
+      list.appendChild(row);
+      continue;
+    }
+
     if (isPrimitiveAnim(anim)) {
       primitiveDetails(anim).forEach(([lbl, val]) => appendReadOnlyRow(inner, lbl, val));
-      const sliderRow = document.createElement('div'); sliderRow.className = 'tree-slider-row';
-      sliderRow.style.padding = '4px 6px';
-      const lbl = document.createElement('label'); lbl.textContent = 'Thickness';
-      const slider = document.createElement('input');
-      slider.type = 'range'; slider.min = 1; slider.max = 10; slider.step = 1; slider.value = anim.thickness;
-      const valSpan = document.createElement('span'); valSpan.className = 'tree-slider-val'; valSpan.textContent = anim.thickness;
-      slider.addEventListener('input', () => {
-        anim.thickness = parseInt(slider.value);
-        valSpan.textContent = anim.thickness;
-        draw();
-      });
-      sliderRow.append(lbl, slider, valSpan);
-      inner.appendChild(sliderRow);
       accordion.appendChild(inner);
       row.appendChild(accordion);
       list.appendChild(row);
@@ -4294,12 +5260,83 @@ scrubber.addEventListener('input', () => { pauseAnim(); setT(parseFloat(scrubber
 
 const fold        = document.getElementById('corner-fold');
 const foldTooltip = document.getElementById('fold-tooltip');
+const globalSettingsPanel = document.getElementById('global-settings');
+const globalSettingsBtn = document.getElementById('global-settings-btn');
+const globalSettingsMenu = document.getElementById('global-settings-menu');
+const defaultThicknessInput = document.getElementById('default-thickness');
+const defaultThicknessVal = document.getElementById('default-thickness-val');
+const gridStrengthInput = document.getElementById('grid-strength');
+const gridStrengthVal = document.getElementById('grid-strength-val');
+const axisStrengthInput = document.getElementById('axis-strength');
+const axisStrengthVal = document.getElementById('axis-strength-val');
+const snapStrengthInput = document.getElementById('snap-strength');
+const snapStrengthVal = document.getElementById('snap-strength-val');
+
+let globalSettingsOpen = false;
+
+function setGlobalSettingsOpen(open) {
+  globalSettingsOpen = !!open;
+  globalSettingsPanel.classList.toggle('open', globalSettingsOpen);
+  globalSettingsBtn.setAttribute('aria-expanded', globalSettingsOpen ? 'true' : 'false');
+}
+
+document.addEventListener('click', e => {
+  if (globalSettingsOpen && !(e.target.closest && e.target.closest('#global-settings'))) {
+    setGlobalSettingsOpen(false);
+  }
+}, true);
+
+function renderGlobalSettingsControls() {
+  defaultThicknessInput.value = globalSettings.defaultThickness;
+  defaultThicknessVal.textContent = globalSettings.defaultThickness;
+  gridStrengthInput.value = globalSettings.gridStrength;
+  gridStrengthVal.textContent = `${globalSettings.gridStrength}%`;
+  axisStrengthInput.value = globalSettings.axisStrength;
+  axisStrengthVal.textContent = `${globalSettings.axisStrength}%`;
+
+  snapStrengthInput.value = snapStrengthIndex(globalSettings.snapStrength);
+  snapStrengthVal.textContent = `${currentSnapStrength()}%`;
+}
+
+globalSettingsBtn.addEventListener('click', e => {
+  e.stopPropagation();
+  setGlobalSettingsOpen(!globalSettingsOpen);
+});
+
+globalSettingsMenu.addEventListener('click', e => e.stopPropagation());
+
+defaultThicknessInput.addEventListener('input', () => {
+  globalSettings.defaultThickness = parseInt(defaultThicknessInput.value, 10);
+  saveGlobalSettings();
+  renderGlobalSettingsControls();
+});
+
+gridStrengthInput.addEventListener('input', () => {
+  globalSettings.gridStrength = parseInt(gridStrengthInput.value, 10);
+  saveGlobalSettings();
+  renderGlobalSettingsControls();
+  draw();
+});
+
+axisStrengthInput.addEventListener('input', () => {
+  globalSettings.axisStrength = parseInt(axisStrengthInput.value, 10);
+  saveGlobalSettings();
+  renderGlobalSettingsControls();
+  draw();
+});
+
+snapStrengthInput.addEventListener('input', () => {
+  globalSettings.snapStrength = SNAP_STRENGTH_VALUES[parseInt(snapStrengthInput.value, 10)] ?? DEFAULT_GLOBAL_SETTINGS.snapStrength;
+  saveGlobalSettings();
+  renderGlobalSettingsControls();
+});
 
 function setMode(mode) {
   currentMode = mode;
   const toGraphs = mode === 'graphs';
   document.getElementById('animations-panel').style.display = toGraphs ? 'none' : 'flex';
   document.getElementById('graphs-panel').style.display     = toGraphs ? 'flex' : 'none';
+  if (toGraphs) setGlobalSettingsOpen(false);
   fold.classList.toggle('graphs-mode', toGraphs);
   foldTooltip.textContent = toGraphs ? 'Switch to Animations' : 'Switch to Graphs';
   draw();
@@ -4335,6 +5372,7 @@ document.getElementById('anim-list').addEventListener('click', e => {
   }
   if (editModeAnimId !== null) exitEditMode();
   selectedId = null;
+  sideActionHover = null;
   animations.forEach(a => {
     a.expanded = false;
     a.expandedArcs = new Set();
@@ -4348,6 +5386,7 @@ addFunction('cos(theta)', 'polar');
 functions.forEach(compileFunction);
 renderFunctionList();
 renderAnimList();
+renderGlobalSettingsControls();
 
 resize();
 </script>
