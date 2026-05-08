@@ -79,6 +79,255 @@
       gap: 5px; min-height: 0;
     }
 
+    /* ── Object tiles ── */
+    /* Sidebar scrollbars */
+    #anim-list,
+    #object-detail,
+    #function-list {
+      scrollbar-width: thin;
+      scrollbar-color: #585b70 #181825;
+    }
+    #anim-list::-webkit-scrollbar,
+    #object-detail::-webkit-scrollbar,
+    #function-list::-webkit-scrollbar {
+      width: 10px;
+    }
+    #anim-list::-webkit-scrollbar-track,
+    #object-detail::-webkit-scrollbar-track,
+    #function-list::-webkit-scrollbar-track {
+      background: #181825;
+      border-left: 1px solid #313244;
+    }
+    #anim-list::-webkit-scrollbar-thumb,
+    #object-detail::-webkit-scrollbar-thumb,
+    #function-list::-webkit-scrollbar-thumb {
+      background: #45475a;
+      border: 2px solid #181825;
+      border-radius: 6px;
+    }
+    #anim-list::-webkit-scrollbar-thumb:hover,
+    #object-detail::-webkit-scrollbar-thumb:hover,
+    #function-list::-webkit-scrollbar-thumb:hover {
+      background: #6c7086;
+    }
+    #anim-list::-webkit-scrollbar-thumb:active,
+    #object-detail::-webkit-scrollbar-thumb:active,
+    #function-list::-webkit-scrollbar-thumb:active {
+      background: #89b4fa;
+    }
+
+    /* Object tiles */
+    #object-tiles-wrapper {
+      flex-shrink: 0;
+      margin: 6px 8px 0;
+      border: 2px solid #6c7086;
+      border-radius: 6px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      transition: opacity 0.15s ease;
+    }
+    #object-tiles {
+      flex-shrink: 0;
+      padding: 5px 0;
+      display: grid;
+      grid-template-columns: repeat(5, 48px);
+      justify-content: center;
+      gap: 5px;
+      overflow-y: scroll;
+      scrollbar-width: none;
+    }
+    #object-tiles::-webkit-scrollbar { display: none; }
+    #group-objects-btn {
+      margin: 0 8px 7px;
+      min-height: 30px;
+      border: 1px solid #45475a;
+      border-radius: 6px;
+      background: #313244;
+      color: #cdd6f4;
+      cursor: pointer;
+      font-size: 0.74rem;
+      line-height: 1.2;
+      padding: 6px 9px;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+    }
+    #group-objects-btn:hover:not(:disabled) {
+      background: #45475a;
+      border-color: #89b4fa;
+    }
+    #group-objects-btn.is-ready {
+      border-color: #89b4fa;
+      color: #f5f7ff;
+    }
+    #group-objects-btn.is-ungroup {
+      border-color: #f38ba8;
+    }
+    #group-objects-btn:disabled {
+      cursor: default;
+      opacity: 0.72;
+    }
+    #tiles-more-above {
+      flex-shrink: 0;
+      text-align: center;
+      font-size: 0.75rem;
+      color: #585b70;
+      padding: 3px 0;
+      display: none;
+      user-select: none;
+      border-bottom: 1px solid #313244;
+    }
+    #tiles-more {
+      flex-shrink: 0;
+      text-align: center;
+      font-size: 0.75rem;
+      color: #585b70;
+      padding: 3px 0;
+      display: none;
+      user-select: none;
+      border-top: 1px solid #313244;
+    }
+    .obj-tile-wrap {
+      display: flex; flex-direction: column; align-items: center; gap: 3px;
+      position: relative;
+      border-radius: 7px;
+      user-select: none;
+    }
+    .obj-tile-wrap[draggable="true"] .obj-tile { cursor: grab; }
+    .obj-tile-wrap.dragging {
+      opacity: 0.45;
+    }
+    .obj-tile-wrap.dragging .obj-tile { cursor: grabbing; }
+    .obj-tile-wrap.drop-before::before,
+    .obj-tile-wrap.drop-after::after {
+      content: '';
+      position: absolute;
+      top: 15px;
+      bottom: 0;
+      width: 3px;
+      border-radius: 999px;
+      background: #89b4fa;
+      box-shadow: 0 0 8px rgba(137, 180, 250, 0.75);
+      pointer-events: none;
+    }
+    .obj-tile-wrap.drop-before::before { left: -4px; }
+    .obj-tile-wrap.drop-after::after { right: -4px; }
+    .obj-tile-wrap.grouped .obj-tile {
+      border-color: #89b4fa;
+      box-shadow: 0 0 0 1px rgba(137, 180, 250, 0.28);
+    }
+    .obj-tile-wrap.group-candidate .obj-tile {
+      border-color: #cba6f7;
+      box-shadow: 0 0 0 2px rgba(203, 166, 247, 0.6);
+    }
+    .obj-tile-wrap.group-selected .obj-tile {
+      border-color: #f5f7ff;
+      box-shadow: 0 0 0 2px rgba(137, 180, 250, 0.72);
+    }
+    .obj-tile-label {
+      font-family: monospace; font-size: 1.0rem; font-weight: 600;
+      color: #cdd6f4; line-height: 1;
+    }
+    .obj-tile {
+      width: 48px; height: 48px;
+      box-sizing: border-box;
+      border-radius: 6px;
+      border: 1.5px solid #45475a;
+      background: #1e1e2e;
+      cursor: pointer;
+      padding: 0; overflow: hidden; display: block;
+      transition: border-color 0.12s, background 0.12s;
+    }
+    .obj-tile:hover { border-color: #6c7086; }
+    .obj-tile.obj-tile-hidden { opacity: 0.45; }
+    .obj-tile canvas { display: block; width: 100%; height: 100%; }
+
+    /* ── Object detail panel ── */
+    #object-detail {
+      flex: 0 1 auto; overflow-y: auto; min-height: 0;
+      margin: 6px 8px;
+      border: 2px solid #6c7086;
+      border-radius: 6px;
+      transition: opacity 0.15s ease;
+    }
+    .detail-header {
+      display: flex; align-items: center;
+      justify-content: space-between;
+      gap: 5px; padding: 7px 7px 7px 10px;
+      border-bottom: 1px solid #313244;
+      flex-shrink: 0;
+    }
+    .detail-header-left { display: flex; align-items: center; gap: 6px; }
+    .detail-header-right { display: flex; align-items: center; gap: 5px; }
+    .detail-header-right .anim-color-btn { margin-right: 3px; }
+    .detail-thumb {
+      width: 30px; height: 30px;
+      padding: 0; overflow: hidden; display: block; flex-shrink: 0;
+    }
+    .detail-thumb canvas { display: block; width: 100%; height: 100%; }
+    .detail-num {
+      font-family: monospace; font-size: 1.1rem; font-weight: 600;
+      color: #cdd6f4; min-width: 18px; flex-shrink: 0;
+    }
+    .detail-thickness {
+      flex: 1; min-width: 0; display: flex; align-items: center;
+    }
+    .detail-thickness input[type="range"] { width: 100%; }
+
+    /* ── Arc list ── */
+    .arc-list {
+      padding: 5px 6px;
+      display: flex; flex-direction: column; gap: 3px;
+    }
+    .arc-list-item {
+      border-radius: 5px;
+      border: 1px solid #313244;
+      overflow: hidden;
+    }
+    .arc-list-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 5px 8px; cursor: pointer;
+      font-size: 0.75rem; color: #9399b2; user-select: none;
+      transition: background 0.1s;
+    }
+    .arc-list-header:hover { background: #252537; }
+    .arc-list-header.arc-expanded { color: #cdd6f4; }
+    .arc-detail-body {
+      padding: 5px 8px 8px;
+      border-top: 1px solid #313244;
+      display: flex; flex-direction: column; gap: 3px;
+    }
+    .arc-coord-row {
+      display: flex; align-items: baseline; gap: 6px;
+      font-size: 0.72rem;
+    }
+    .arc-coord-label { color: #6c7086; min-width: 130px; flex-shrink: 0; }
+    .arc-coord-val { color: #cdd6f4; font-family: monospace; font-size: 0.7rem; }
+
+    /* ── Anchor rows (interleaved list) ── */
+    .anchor-list-item {
+      border-radius: 4px;
+      border: 1px solid #252537;
+      overflow: hidden;
+    }
+    .anchor-list-header {
+      display: flex; align-items: center;
+      padding: 3px 8px; cursor: default;
+      font-size: 0.72rem; color: #6c7086; user-select: none;
+      gap: 6px;
+    }
+    .anchor-list-header:hover { background: #1e1e2e; }
+    .anchor-list-header.anchor-active { color: #cdd6f4; }
+    .anchor-label { flex: 0 0 auto; font-family: monospace; min-width: 32px; }
+    .anchor-coords { flex: 1; font-size: 0.68rem; color: #585b70; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .anchor-split-btn, .arc-split-btn {
+      flex-shrink: 0; background: none; border: 1px solid #45475a;
+      color: #6c7086; border-radius: 3px; padding: 1px 5px;
+      font-size: 0.65rem; cursor: pointer; line-height: 1.4;
+      transition: color 0.1s, border-color 0.1s, background 0.1s;
+    }
+    .anchor-split-btn:hover, .arc-split-btn:hover { color: #cdd6f4; border-color: #89b4fa; background: #252537; }
+    .arc-split-btn.split-active { color: #cba6f7; border-color: #cba6f7; background: #252537; }
+
     #anim-tool-panel {
       margin: 0 8px 6px;
       padding: 8px;
@@ -86,7 +335,7 @@
       grid-template-columns: repeat(5, 40px);
       justify-content: center;
       gap: 8px;
-      border: 2px solid #585b70;
+      border: 2px solid #6c7086;
       border-radius: 8px;
       background: #1e1e2e;
       box-shadow: inset 0 1px 0 rgba(205,214,244,0.06), 0 0 0 1px rgba(0,0,0,0.28);
@@ -253,64 +502,53 @@
     .color-expansion {
       display: flex;
       flex-direction: column;
-      gap: 8px;
       padding: 6px;
     }
-    .color-section {
-      border: 1px solid #313244;
-      border-radius: 6px;
+    .color-tab-bar {
+      display: flex;
+      gap: 2px;
+    }
+    .color-tab {
+      padding: 4px 14px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: #a6adc8;
+      background: #13131e;
+      border: 1px solid #45475a;
+      border-bottom: none;
+      border-radius: 6px 6px 0 0;
+      cursor: pointer;
+      position: relative;
+      top: 1px;
+    }
+    .color-tab.active {
       background: #181825;
-      padding: 6px;
+      color: #cdd6f4;
+      border-bottom: 1px solid #181825;
+      z-index: 1;
+    }
+    .color-tab:disabled {
+      opacity: 0.4;
+      cursor: default;
+    }
+    .color-tab-content {
+      position: relative;
+      background: #181825;
+      border: 1px solid #45475a;
+      border-radius: 0 6px 6px 6px;
+      padding: 8px;
       display: flex;
       flex-direction: column;
       gap: 6px;
     }
-    .color-section.disabled {
-      opacity: 0.48;
-    }
-    .color-section-title {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-      min-height: 24px;
-      color: #cdd6f4;
-      font-size: 0.72rem;
-      font-weight: 600;
-    }
-    .color-target-swatch {
-      width: 24px;
-      height: 24px;
-      border-radius: 50%;
-      border: 2px solid #585b70;
-      background: #11111b;
-      cursor: pointer;
-      padding: 0;
-      flex-shrink: 0;
-      box-shadow: 0 0 0 1px rgba(0,0,0,0.45);
-    }
-    .color-target-swatch.active {
-      border-color: #cdd6f4;
-      box-shadow: 0 0 0 2px rgba(205,214,244,0.18);
-    }
-    .color-target-swatch:disabled {
-      cursor: default;
-    }
-    .color-controls-dim {
-      opacity: 0.5;
+    .color-tab-content.fill-active {
+      border-radius: 6px 0 6px 6px;
     }
     .color-menu-section {
       display: grid;
-      grid-template-columns: repeat(7, 22px);
+      grid-template-columns: repeat(8, 22px);
       gap: 7px;
-    }
-    .color-menu-label {
-      grid-column: 1 / -1;
-      font-size: 0.66rem;
-      line-height: 1;
-      color: #a6adc8;
-      padding: 0 1px 1px;
-      letter-spacing: 0;
+      justify-content: center;
     }
     .color-swatch-option {
       width: 22px;
@@ -324,13 +562,7 @@
     }
     .color-swatch-option.active {
       border-color: #cdd6f4;
-    }
-    .color-swatch-option.no-fill {
-      background: #11111b;
-      border-color: #45475a;
-    }
-    .color-swatch-option.no-fill.active {
-      border-color: #cdd6f4;
+      box-shadow: 0 0 0 1px #11111b, 0 0 0 3px #cdd6f4;
     }
     .fill-style-row {
       display: grid;
@@ -407,8 +639,21 @@
       border-radius: 4px 4px 0 0;
       padding-bottom: 4px;
       color: #9399b2;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
     }
     .tree-item-header.arc-row:hover { background: transparent; }
+    .arc-vis-btn {
+      flex-shrink: 0;
+      width: 18px; height: 18px;
+      background: none; border: none; padding: 0; margin: 0;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      opacity: 0.55;
+      color: inherit;
+    }
+    .arc-vis-btn:hover { opacity: 1; }
+    .arc-vis-btn svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
     .tree-item.arc-item.is-selected .tree-item-header.arc-row,
     .tree-item.arc-item.is-selected .arc-control-row label,
     .tree-item.arc-item.is-selected .arc-slider-row label {
@@ -663,7 +908,7 @@
     #global-settings {
       position: relative;
       flex-shrink: 0;
-      margin: 0 8px 8px;
+      margin: auto 8px 8px;
       min-height: 38px;
       display: flex;
       align-items: center;
@@ -839,7 +1084,13 @@
         <span class="tool-text-icon" aria-hidden="true">T</span>
       </button>
     </div>
-    <div id="anim-list"></div>
+    <div id="object-tiles-wrapper">
+      <div id="tiles-more-above"></div>
+      <div id="object-tiles"></div>
+      <div id="tiles-more"></div>
+    </div>
+    <button id="group-objects-btn" type="button">Group Objects</button>
+    <div id="object-detail"></div>
     <div id="global-settings">
       <button id="undo-btn" title="Undo (Ctrl+Z)" aria-label="Undo" disabled>
         <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -939,12 +1190,15 @@ let dragging = false, dragStartX, dragStartY, dragOriginX, dragOriginY;
 let currentMode = 'animations';
 let mouseDownClientX = 0, mouseDownClientY = 0;
 
-const CANVAS_TOOL_COLOR = '#cdd6f4';
-const CANVAS_CONTROL_IDLE_COLOR = '#e1e4ec';
+const CANVAS_TOOL_COLOR = '#e1e8ff';
+const CANVAS_CONTROL_IDLE_COLOR = '#f2f4fb';
+const CANVAS_BUTTON_COLOR = '#f8faff';
+const CANVAS_BUTTON_IDLE_COLOR = '#fcfdff';
 
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 
 const GLOBAL_SETTINGS_KEY = 'animatorGlobalSettings.v1';
+const PROJECT_KEY = 'animatorProject.v1';
 const SNAP_STRENGTH_VALUES = [0, 1, 2, 5, 10, 20, 50, 100];
 const DEFAULT_GLOBAL_SETTINGS = {
   defaultThickness: 4,
@@ -987,6 +1241,80 @@ function loadGlobalSettings() {
 
 function saveGlobalSettings() {
   try { localStorage.setItem(GLOBAL_SETTINGS_KEY, JSON.stringify(globalSettings)); } catch {}
+}
+
+function saveProject() {
+  try {
+    localStorage.setItem(PROJECT_KEY, JSON.stringify({
+      animations: snapshotAnimations(),
+      viewport: { originX, originY, scale },
+      animColorIdx,
+    }));
+  } catch {}
+}
+
+function loadProject() {
+  try {
+    const saved = localStorage.getItem(PROJECT_KEY);
+    if (!saved) return false;
+    const { animations: snap, viewport, animColorIdx: ci } = JSON.parse(saved);
+    if (viewport) {
+      if (typeof viewport.originX === 'number') originX = viewport.originX;
+      if (typeof viewport.originY === 'number') originY = viewport.originY;
+      if (typeof viewport.scale === 'number') scale = viewport.scale;
+    }
+    if (typeof ci === 'number') animColorIdx = ci;
+    if (snap) restoreSnapshot(snap);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function anchorLabel(anim, idx) {
+  return (anim.anchorLabels && anim.anchorLabels[idx]) ? anim.anchorLabels[idx] : 'P' + idx;
+}
+
+function splitSegmentAtT(anim, segIdx, t) {
+  const seg = anim.segments[segIdx];
+  if (!seg) return;
+  const A0 = anim.anchors[segIdx], A1 = anim.anchors[segIdx + 1];
+  const H0 = seg.h0, H1 = seg.h1;
+  const lerp = (a, b, u) => new Cx(a.re + (b.re - a.re) * u, a.im + (b.im - a.im) * u);
+  const P  = lerp(A0, H0, t), Q  = lerp(H0, H1, t), R  = lerp(H1, A1, t);
+  const S  = lerp(P,  Q,  t), T_ = lerp(Q,  R,  t);
+  const U  = lerp(S,  T_, t);
+  anim.anchors.splice(segIdx + 1, 0, U);
+  const leftSeg  = { h0: P,  h1: S,  eccentricity: seg.eccentricity, visible: seg.visible ?? true, compiled: null, compiledRef: null };
+  const rightSeg = { h0: T_, h1: R,  eccentricity: seg.eccentricity, visible: seg.visible ?? true, compiled: null, compiledRef: null };
+  anim.segments.splice(segIdx, 1, leftSeg, rightSeg);
+  if (!anim.anchorLocked) anim.anchorLocked = [];
+  anim.anchorLocked.splice(segIdx + 1, 0, true);
+  if (!anim.anchorLabels) anim.anchorLabels = [];
+  anim.anchorLabels.splice(segIdx + 1, 0, null);
+  anim.activeSegments = new Set();
+  anim.expandedArcs = new Set();
+  anim.expandedAnchors = new Set([segIdx + 1]);
+  recompileAnim(anim);
+}
+
+function splitAnchorPoint(anim, anchorIdx) {
+  const prevSeg = anchorIdx > 0 ? anim.segments[anchorIdx - 1] : null;
+  const nextSeg = anchorIdx < anim.segments.length ? anim.segments[anchorIdx] : null;
+  if (!prevSeg && !nextSeg) return;
+  const label = anchorLabel(anim, anchorIdx);
+  const pos = anim.anchors[anchorIdx];
+  anim.anchors.splice(anchorIdx + 1, 0, new Cx(pos.re, pos.im));
+  anim.segments.splice(anchorIdx, 0, null);
+  if (!anim.anchorLocked) anim.anchorLocked = [];
+  anim.anchorLocked.splice(anchorIdx + 1, 0, true);
+  if (!anim.anchorLabels) anim.anchorLabels = [];
+  anim.anchorLabels[anchorIdx] = label + '⁻';
+  anim.anchorLabels.splice(anchorIdx + 1, 0, label + '⁺');
+  anim.activeSegments = new Set();
+  anim.expandedArcs = new Set();
+  anim.expandedAnchors = new Set([anchorIdx]);
+  recompileAnim(anim);
 }
 
 let globalSettings = loadGlobalSettings();
@@ -1903,7 +2231,7 @@ function turnHandleFactor(p0, p1, t) {
   const L = Math.hypot(dx, dy);
   if (L < 1e-9) return 0;
   const dot = Math.min(1, Math.max(-1, (dx/L)*t.re + (dy/L)*t.im));
-  return Math.max(1/3, Math.acos(dot) / (Math.PI / 2));
+  return Math.min(2/3, Math.max(1/3, Math.acos(dot) / (Math.PI / 2)));
 }
 
 // Unit direction vector from p0 to p1.
@@ -2168,7 +2496,19 @@ function _commitPendingArc(anim, nextPoint) {
 // ANIMATIONS MODE — state & undo
 // ════════════════════════════════════════════════════════
 
-const ANIM_COLORS = ['#f38ba8','#89b4fa','#a6e3a1','#fab387','#cba6f7','#f9e2af','#89dceb','#94e2d5'];
+const ANIM_COLORS = [
+  '#7f1d1d','#7c2d12','#713f12','#14532d','#134e4a','#1e3a8a','#3b0764','#500724',
+  '#991b1b','#9a3412','#854d0e','#166534','#115e59','#1e40af','#4c1d95','#831843',
+  '#b91c1c','#c2410c','#a16207','#15803d','#0f766e','#1d4ed8','#5b21b6','#9d174d',
+  '#dc2626','#ea580c','#ca8a04','#16a34a','#0d9488','#2563eb','#7c3aed','#be185d',
+  '#ef4444','#f97316','#eab308','#22c55e','#14b8a6','#3b82f6','#8b5cf6','#ec4899',
+  '#f87171','#fb923c','#facc15','#4ade80','#2dd4bf','#60a5fa','#a78bfa','#f472b6',
+  '#fca5a5','#fdba74','#fde047','#86efac','#5eead4','#93c5fd','#c4b5fd','#f9a8d4',
+  '#fecaca','#fed7aa','#fef08a','#bbf7d0','#99f6e4','#bfdbfe','#ddd6fe','#fce7f3',
+  '#ffe5e6','#ffedd9','#fef8cc','#e0fbe9','#d6fbf3','#e1eeff','#f1ecff','#fdf0fb',
+  '#ffffff','#dbdbdb','#b6b6b6','#929292','#6d6d6d','#494949','#242424','#000000',
+];
+const DEFAULT_COLORS = ['#ef4444','#f97316','#eab308','#22c55e','#14b8a6','#3b82f6','#8b5cf6','#ec4899'];
 const PRIMITIVE_KINDS = new Set(['line', 'rectangle', 'circle', 'ellipse']);
 const POLYLINE_KIND = 'polyline';
 const FILL_STYLES = [
@@ -2188,6 +2528,12 @@ let animColorIdx = 0;
 // Interaction state
 let selectedId      = null;
 let editModeAnimId  = null;
+let selectedGroupId = null;
+let groupSelectionMode = false;
+let groupCandidateIds = new Set();
+let groupSelectionGuideShear = null;
+let objectTileDrag = null; // {animId, fromIndex, insertionIndex} | null
+let suppressTileClickUntil = 0;
 let openColorMenuAnimId = null;
 let colorEditTarget = 'outline';
 let canvasTextEditAnimId = null;
@@ -2214,6 +2560,7 @@ let sideActionHover = null; // {anim, kind:'duplicate'|'reflect'} | null
 let plusHover    = null; // {anim, end:'A0'|'A2'} | null
 let lockHover    = null; // {anim, anchorIdx} | null — interior anchor lock toggle
 let rubberBand   = null; // {startX,startY,curX,curY,ctrl} | null — drag-region selection
+let splitArcMode = null; // {anim, segIdx} | null — pending arc split waiting for canvas click
 // curvePicker removed — arc type is now auto-selected during placement
 
 // Future playback state, disabled for now.
@@ -2231,6 +2578,7 @@ const MAX_UNDO = 50;
 function snapshotAnimations() {
   return animations.map(a => ({
     id: a.id, letter: a.letter, color: a.color, kind: animKind(a),
+    groupId: a.groupId ?? null,
     fillColor: a.fillColor ?? null,
     outlineOpacity: a.outlineOpacity ?? 1,
     fillOpacity: a.fillOpacity ?? 0.5,
@@ -2248,8 +2596,10 @@ function snapshotAnimations() {
       h0: new Cx(s.h0.re, s.h0.im),
       h1: new Cx(s.h1.re, s.h1.im),
       eccentricity: s.eccentricity,
+      visible: s.visible ?? true,
     }) : null),
     anchorLocked: [...(a.anchorLocked ?? [])],
+    anchorLabels: [...(a.anchorLabels ?? [])],
     activeSegments: [...(a.activeSegments ?? [])],
     inPlacementMode: a.inPlacementMode,
     reversePlacement: a.reversePlacement ?? false,
@@ -2275,10 +2625,14 @@ function pushUndo(preSnapshot) {
   if (undoStack.length > MAX_UNDO) undoStack.shift();
   redoStack = [];
   updateUndoRedoButtons();
+  setTimeout(saveProject, 0);
 }
 
 function restoreSnapshot(snap) {
-  selectedId = null; editModeAnimId = null;
+  selectedId = null; editModeAnimId = null; selectedGroupId = null;
+  groupSelectionMode = false;
+  groupCandidateIds = new Set();
+  groupSelectionGuideShear = null;
   eccentricitySliderActiveKey = null;
   openColorMenuAnimId = null;
   colorEditTarget = 'outline';
@@ -2291,6 +2645,7 @@ function restoreSnapshot(snap) {
   animations = snap.map(s => {
     const anim = {
       id: s.id, letter: s.letter, color: s.color, kind: s.kind || 'freeform',
+      groupId: s.groupId ?? null,
       fillColor: s.fillColor ?? null,
       outlineOpacity: s.outlineOpacity ?? 1,
       fillOpacity: s.fillOpacity ?? 0.5,
@@ -2308,9 +2663,11 @@ function restoreSnapshot(snap) {
         h0: new Cx(sg.h0.re, sg.h0.im),
         h1: new Cx(sg.h1.re, sg.h1.im),
         eccentricity: sg.eccentricity ?? 1,
+        visible: sg.visible ?? true,
         compiled: null, compiledRef: null,
       }) : null),
       anchorLocked: s.anchorLocked ? [...s.anchorLocked] : [],
+      anchorLabels: s.anchorLabels ? [...s.anchorLabels] : [],
       activeSegments: new Set(s.activeSegments ?? []),
       inPlacementMode: s.inPlacementMode,
       reversePlacement: s.reversePlacement ?? false,
@@ -2325,11 +2682,12 @@ function restoreSnapshot(snap) {
     if (!anim.inPlacementMode) recompileAnim(anim);
     return anim;
   });
+  cleanupSingletonGroups();
   renderAnimList(); draw();
 }
 
-function undo() { if (!undoStack.length) return; redoStack.push(snapshotAnimations()); restoreSnapshot(undoStack.pop()); updateUndoRedoButtons(); }
-function redo() { if (!redoStack.length) return; undoStack.push(snapshotAnimations()); restoreSnapshot(redoStack.pop()); updateUndoRedoButtons(); }
+function undo() { if (!undoStack.length) return; redoStack.push(snapshotAnimations()); restoreSnapshot(undoStack.pop()); updateUndoRedoButtons(); saveProject(); }
+function redo() { if (!redoStack.length) return; undoStack.push(snapshotAnimations()); restoreSnapshot(redoStack.pop()); updateUndoRedoButtons(); saveProject(); }
 
 function isTypingTarget(el) {
   if (!el) return false;
@@ -2352,12 +2710,185 @@ function isPolylineAnim(anim) {
   return animKind(anim) === POLYLINE_KIND;
 }
 
+function groupMembers(groupId) {
+  if (groupId == null) return [];
+  return animations.filter(a => a.groupId === groupId);
+}
+
+function groupMemberIds(groupId) {
+  return new Set(groupMembers(groupId).map(a => a.id));
+}
+
+function cleanupSingletonGroups() {
+  const counts = new Map();
+  animations.forEach(a => {
+    if (a.groupId != null) counts.set(a.groupId, (counts.get(a.groupId) || 0) + 1);
+  });
+  animations.forEach(a => {
+    if (a.groupId == null) return;
+    if ((counts.get(a.groupId) || 0) < 2) {
+      if (selectedGroupId === a.groupId) selectedGroupId = null;
+      a.groupId = null;
+    }
+  });
+  if (selectedGroupId != null && !groupMembers(selectedGroupId).length) selectedGroupId = null;
+  groupCandidateIds = new Set([...groupCandidateIds].filter(id => animations.some(a => a.id === id)));
+}
+
+function objectGroupId(anim) {
+  return anim?.groupId ?? null;
+}
+
+function isGroupSelectionActive() {
+  return selectedGroupId != null && groupMembers(selectedGroupId).length > 0;
+}
+
+function clearGroupMode() {
+  groupSelectionMode = false;
+  groupCandidateIds = new Set();
+  groupSelectionGuideShear = null;
+}
+
+function selectGroup(groupId) {
+  if (groupId == null) return;
+  finishCanvasTextEdit(false);
+  clearGroupMode();
+  selectedGroupId = groupId;
+  selectedId = null;
+  editModeAnimId = null;
+  openColorMenuAnimId = null;
+  colorEditTarget = 'outline';
+  animations.forEach(a => {
+    a.expanded = false;
+    a.activeSegments = new Set();
+    a.expandedArcs = new Set();
+    a.expandedAnchors = new Set();
+  });
+}
+
+function drillSelectObject(anim) {
+  if (!anim) return;
+  selectedGroupId = null;
+  clearGroupMode();
+  enterEditMode(anim, new Set());
+  selectedId = anim.id;
+  anim.expanded = true;
+  animations.forEach(a => {
+    if (a.id !== anim.id) {
+      a.expanded = false;
+      a.expandedArcs = new Set();
+      a.expandedAnchors = new Set();
+    }
+  });
+}
+
+function selectObjectOrGroup(anim) {
+  if (!anim) return;
+  const gid = objectGroupId(anim);
+  if (gid != null) {
+    if (selectedGroupId === gid) drillSelectObject(anim);
+    else selectGroup(gid);
+    return;
+  }
+  selectedGroupId = null;
+  clearGroupMode();
+  clearSelectionShearGuides(anim);
+  enterEditMode(anim, new Set());
+  selectedId = anim.id;
+  anim.expanded = true;
+  animations.forEach(a => { if (a.id !== anim.id) a.expanded = false; });
+}
+
+function toggleGroupCandidate(anim) {
+  if (!anim || anim.inPlacementMode) return;
+  const gid = objectGroupId(anim);
+  const ids = gid == null ? [anim.id] : groupMembers(gid).map(a => a.id);
+  const allSelected = ids.every(id => groupCandidateIds.has(id));
+  ids.forEach(id => {
+    if (allSelected) groupCandidateIds.delete(id);
+    else groupCandidateIds.add(id);
+  });
+  selectedId = null;
+  editModeAnimId = null;
+  selectedGroupId = null;
+}
+
+function createGroupFromCandidates() {
+  let ids = [...groupCandidateIds];
+  if (ids.length < 2) return false;
+  const selectedSet = new Set(ids);
+  animations.forEach(a => {
+    if (a.groupId != null && selectedSet.has(a.id)) {
+      groupMembers(a.groupId).forEach(member => selectedSet.add(member.id));
+    }
+  });
+  ids = [...selectedSet];
+  const ordered = animations.filter(a => selectedSet.has(a.id));
+  if (ordered.length < 2) return false;
+  pushUndo();
+  const firstIndex = animations.findIndex(a => selectedSet.has(a.id));
+  const remaining = animations.filter(a => !selectedSet.has(a.id));
+  const insertAt = Math.max(0, firstIndex);
+  const groupId = Date.now() + Math.random();
+  ordered.forEach(a => { a.groupId = groupId; });
+  animations = remaining.slice(0, insertAt).concat(ordered, remaining.slice(insertAt));
+  cleanupSingletonGroups();
+  renumberAnimationsByStackOrder();
+  clearGroupMode();
+  selectGroup(groupId);
+  saveProject();
+  renderAnimList(); draw(); updateCursor();
+  return true;
+}
+
+function ungroup(groupId) {
+  const members = groupMembers(groupId);
+  if (!members.length) return false;
+  pushUndo();
+  members.forEach(a => { a.groupId = null; });
+  selectedGroupId = null;
+  clearGroupMode();
+  renderAnimList(); draw(); updateCursor();
+  saveProject();
+  return true;
+}
+
+function deleteGroup(groupId) {
+  const ids = groupMemberIds(groupId);
+  if (!ids.size) return;
+  pushUndo();
+  animations = animations.filter(a => !ids.has(a.id));
+  selectedGroupId = null;
+  selectedId = null;
+  editModeAnimId = null;
+  clearGroupMode();
+  renumberAnimationsByStackOrder();
+  renderAnimList(); draw(); updateCursor();
+  saveProject();
+}
+
+function findLoopRange(anim) {
+  if (!anim || isPrimitiveAnim(anim) || isTextAnim(anim)) return null;
+  const anchors = anim.anchors, segs = anim.segments;
+  const n = anchors.length;
+  for (let i = 0; i < n - 2; i++) {
+    for (let j = i + 2; j < n; j++) {
+      const a = anchors[i], b = anchors[j];
+      if (!a || !b || Math.abs(a.re - b.re) >= 1e-9 || Math.abs(a.im - b.im) >= 1e-9) continue;
+      let valid = true;
+      for (let k = i; k < j; k++) { if (!segs[k]) { valid = false; break; } }
+      if (valid) return { loopStart: i, loopEnd: j };
+    }
+  }
+  return null;
+}
+
 function isClosedPolyline(anim) {
-  return isPolylineAnim(anim) && !!anim.closed && anim.anchors.length >= 4 && anim.segments.length >= 3;
+  return isPolylineAnim(anim) && findLoopRange(anim) !== null;
 }
 
 function isClosedPathAnim(anim) {
-  return !!anim && !isPrimitiveAnim(anim) && !isTextAnim(anim) && !!anim.closed && anim.anchors.length >= 4 && anim.segments.length >= 3;
+  return !!anim && !isPrimitiveAnim(anim) && !isTextAnim(anim) && findLoopRange(anim) !== null;
 }
 
 function activeArcIndex(anim) {
@@ -2459,6 +2990,8 @@ function clearAnimationInteractionState(id) {
   if (resizeHover?.anim?.id === id) resizeHover = null;
   if (rotateHover?.anim?.id === id) rotateHover = null;
   if (sideActionHover?.anim?.id === id) sideActionHover = null;
+  if (groupCandidateIds.has(id)) groupCandidateIds.delete(id);
+  if (selectedGroupId != null && groupMembers(selectedGroupId).some(a => a.id === id)) selectedGroupId = null;
   if (eccDrag?.anim?.id === id) eccDrag = null;
   if (frameDrag?.anim?.id === id) frameDrag = null;
   if (frameHover?.id === id) frameHover = null;
@@ -2477,7 +3010,10 @@ function deleteAnimation(id) {
   clearAnimationInteractionState(id);
   editModeAnimId = null;
   selectedId = null;
+  if (splitArcMode && splitArcMode.anim.id === id) splitArcMode = null;
   animations = animations.filter(a => a.id !== id);
+  cleanupSingletonGroups();
+  renumberAnimationsByStackOrder();
   animations.forEach(a => {
     a.expanded = false;
     a.inPlacementMode = false;
@@ -2501,6 +3037,17 @@ document.addEventListener('keydown', e => {
       }
       return;
     }
+    if (splitArcMode !== null) {
+      splitArcMode = null;
+      renderAnimList(); draw();
+      return;
+    }
+    if (groupSelectionMode || selectedGroupId != null) {
+      selectedGroupId = null;
+      clearGroupMode();
+      renderAnimList(); draw();
+      return;
+    }
     if (editModeAnimId !== null) {
       exitEditMode();
       selectedId = null;
@@ -2513,6 +3060,10 @@ document.addEventListener('keydown', e => {
       return;
     }
     return;
+  }
+  if ((e.key === 'Delete' || e.key === 'Backspace') && selectedGroupId != null) {
+    e.preventDefault();
+    deleteGroup(selectedGroupId);
   }
   if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId != null) {
     e.preventDefault();
@@ -2588,6 +3139,8 @@ function swingOppositeHandle(anim, anchorIdx, movedWasOutgoing) {
 
 function enterEditMode(anim, activeSegs) {
   openColorMenuAnimId = null;
+  selectedGroupId = null;
+  clearGroupMode();
   const keepGuide = selectedId === anim.id || editModeAnimId === anim.id;
   clearSelectionShearGuides(keepGuide ? anim : null);
   editModeAnimId = anim.id;
@@ -2621,22 +3174,24 @@ function exitEditMode() {
   plusHover = null;
   lockHover = null;
   rubberBand = null;
+  splitArcMode = null;
   renderAnimList();
   draw();
 }
 
 function compactAnim(anim) {
+  if (!anim.anchorLabels) anim.anchorLabels = [];
   while (anim.segments.length > 0 && !anim.segments[0]) {
-    anim.segments.shift(); anim.anchors.shift(); anim.anchorLocked.shift();
+    anim.segments.shift(); anim.anchors.shift(); anim.anchorLocked.shift(); anim.anchorLabels.shift();
   }
   while (anim.segments.length > 0 && !anim.segments[anim.segments.length - 1]) {
-    anim.segments.pop(); anim.anchors.pop(); anim.anchorLocked.pop();
+    anim.segments.pop(); anim.anchors.pop(); anim.anchorLocked.pop(); anim.anchorLabels.pop();
   }
 }
 
 function deleteArc(anim, segIdx) {
   pushUndo();
-  if (isPolylineAnim(anim)) anim.closed = false;
+  if (anim.closed) anim.closed = false;
   anim.segments[segIdx] = null;
   anim.activeSegments.delete(segIdx);
   compactAnim(anim);
@@ -2683,6 +3238,7 @@ function finalizePrimitivePlacement(anim) {
   placementPreviewPos = null;
   enterEditMode(anim);
   renderAnimList(); updateCursor();
+  saveProject();
 }
 
 function finalizePolylinePlacement(anim) {
@@ -2704,6 +3260,7 @@ function finalizePolylinePlacement(anim) {
   placementPreviewPos = null;
   enterEditMode(anim);
   renderAnimList(); updateCursor();
+  saveProject();
 }
 
 function finalizePlacement(anim) {
@@ -2721,15 +3278,30 @@ function finalizePlacement(anim) {
   placementPreviewPos = null;
   enterEditMode(anim);
   renderAnimList(); updateCursor();
+  saveProject();
+}
+
+function objectLetterForIndex(idx) {
+  let n = Math.max(0, Math.floor(idx));
+  let label = '';
+  do {
+    label = String.fromCharCode(65 + (n % 26)) + label;
+    n = Math.floor(n / 26) - 1;
+  } while (n >= 0);
+  return label;
+}
+
+function renumberAnimationsByStackOrder() {
+  animations.forEach((anim, idx) => { anim.letter = objectLetterForIndex(idx); });
 }
 
 function nextLetter() {
   const used = new Set(animations.map(a => a.letter));
-  for (let c = 65; c <= 90; c++) {
-    const ch = String.fromCharCode(c);
+  for (let i = 0; i < animations.length + 26; i++) {
+    const ch = objectLetterForIndex(i);
     if (!used.has(ch)) return ch;
   }
-  return '?';
+  return objectLetterForIndex(animations.length);
 }
 
 function addAnimation(kind = 'freeform') {
@@ -2740,13 +3312,13 @@ function addAnimation(kind = 'freeform') {
     a.expandedAnchors = new Set();
   });
   const letter = nextLetter();
-  const color  = ANIM_COLORS[animColorIdx++ % ANIM_COLORS.length];
+  const color  = DEFAULT_COLORS[animColorIdx++ % DEFAULT_COLORS.length];
   const anim = {
     id: Date.now() + Math.random(),
     letter, color, kind,
     fillColor: null,
     outlineOpacity: 1,
-    fillOpacity: 0.5,
+    fillOpacity: 0.3,
     fillStyle: 'solid',
     closed: false,
     text: '',
@@ -2760,6 +3332,7 @@ function addAnimation(kind = 'freeform') {
     anchors: [],
     segments: [],
     anchorLocked: [],
+    anchorLabels: [],
     activeSegments: new Set(),
     inPlacementMode: true,
     reversePlacement: false,
@@ -2771,6 +3344,7 @@ function addAnimation(kind = 'freeform') {
     expandedAnchors: new Set(),
     expandedArcs: new Set(),
   };
+  if (canFillAnim(anim)) anim.fillColor = color;
   animations.push(anim);
   selectedId = anim.id;
   renderAnimList(); draw(); updateCursor();
@@ -2811,6 +3385,8 @@ function startPlacementFromTool(kind) {
   }
   if (placing) cancelPlacement(placing);
   exitEditMode();
+  selectedGroupId = null;
+  clearGroupMode();
   if (kind === 'line') addPolylineAnimation();
   else if (isPrimitiveAnim({ kind })) addPrimitiveAnimation(kind);
   else if (kind === 'text') addTextAnimation();
@@ -2820,6 +3396,10 @@ function startPlacementFromTool(kind) {
 
 
 function duplicateAnimation() {
+  if (selectedGroupId != null) {
+    createGroupSideActionCopy(selectedGroupId, 'duplicate');
+    return;
+  }
   if (!selectedId) return;
   const src = animations.find(a => a.id === selectedId);
   if (!src || src.inPlacementMode) return;
@@ -3011,6 +3591,50 @@ function createSideActionCopy(src, kind) {
   renderAnimList(); draw(); updateCursor();
 }
 
+function createGroupSideActionCopy(groupId, kind) {
+  const members = groupMembers(groupId);
+  if (members.length === 0) return;
+  const bounds = groupMathBounds(groupId);
+  const btn = groupSelectionSideActionButtons(groupId).find(b => b.kind === kind);
+  if (!bounds || !btn) return;
+  const gap = 6 * devicePixelRatio;
+  const [targetLeft] = toMath(btn.x + btn.w + gap, 0);
+  pushUndo();
+
+  let transformPoint;
+  if (kind === 'reflect') {
+    const mirrorX = (bounds.right + targetLeft) * 0.5;
+    transformPoint = pt => new Cx(2 * mirrorX - pt.re, pt.im);
+  } else {
+    const dx = targetLeft - bounds.left;
+    transformPoint = pt => new Cx(pt.re + dx, pt.im);
+  }
+
+  const newGroupId = Date.now() + Math.random();
+  const copies = members.map(src => {
+    const rotation = kind === 'reflect' ? -animRotation(src) : animRotation(src);
+    const copy = makeTransformedAnimation(src, transformPoint, rotation);
+    copy.groupId = newGroupId;
+    if (kind === 'reflect' && isTextAnim(copy)) copy.textScaleX = -(copy.textScaleX || 1);
+    recompileAnim(copy);
+    return copy;
+  });
+  animations.push(...copies);
+  selectedGroupId = groupId;
+  selectedId = null;
+  editModeAnimId = null;
+  clearGroupMode();
+  sideActionHover = null;
+  resizeHover = null;
+  rotateHover = null;
+  segmentHover = null;
+  anchorHover = null;
+  handleHover = null;
+  plusHover = null;
+  lockHover = null;
+  renderAnimList(); draw(); updateCursor();
+}
+
 function softSnap(v) {
   const threshold = snapThreshold();
   if (threshold <= 0) return v;
@@ -3081,12 +3705,21 @@ function samplePrimitiveBoundaryMath(anim, count = 96) {
   return [];
 }
 
+const SCISSORS_CURSOR = (() => {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3" fill="#fff" stroke="#000" stroke-width="2.5"/><circle cx="6" cy="18" r="3" fill="#fff" stroke="#000" stroke-width="2.5"/><line x1="20" y1="4" x2="8.12" y2="15.88" stroke="#000" stroke-width="3.5"/><line x1="20" y1="4" x2="8.12" y2="15.88" stroke="#fff" stroke-width="1.5"/><line x1="14.47" y1="14.48" x2="20" y2="20" stroke="#000" stroke-width="3.5"/><line x1="14.47" y1="14.48" x2="20" y2="20" stroke="#fff" stroke-width="1.5"/><line x1="8.12" y1="8.12" x2="12" y2="12" stroke="#000" stroke-width="3.5"/><line x1="8.12" y1="8.12" x2="12" y2="12" stroke="#fff" stroke-width="1.5"/></svg>`;
+  return `url("data:image/svg+xml;base64,${btoa(svg)}") 12 12, crosshair`;
+})();
+
 function updateCursor() {
   const placing = animations.some(a => a.inPlacementMode);
   if (placing) {
     canvas.style.cursor = 'none';
+  } else if (splitArcMode !== null) {
+    const onTarget = segmentHover?.anim === splitArcMode.anim && segmentHover?.segIdx === splitArcMode.segIdx;
+    canvas.style.cursor = onTarget ? SCISSORS_CURSOR : 'not-allowed';
   } else if (resizeDrag) {
-    canvas.style.cursor = resizeCursorForHandle(resizeDrag.handle);
+    const c = resizeCursorForHandle(resizeDrag.handle);
+    canvas.style.cursor = c === 'grab' ? 'grabbing' : c;
   } else if (resizeHover) {
     canvas.style.cursor = resizeCursorForHandle(resizeHover.handle);
   } else if (rotateDrag) {
@@ -3094,17 +3727,19 @@ function updateCursor() {
   } else if (rotateHover) {
     canvas.style.cursor = 'grab';
   } else if (sideActionHover) {
-    canvas.style.cursor = 'pointer';
-  } else if (anchorHover || handleHover || plusHover) {
-    canvas.style.cursor = 'crosshair';
+    canvas.style.cursor = 'grab';
+  } else if (anchorHover || handleHover || lockHover) {
+    canvas.style.cursor = 'grab';
+  } else if (plusHover) {
+    canvas.style.cursor = 'default';
   } else if (frameHover) {
     canvas.style.cursor = 'move';
   } else if (anchorDrag || handleDrag || curveDrag || eccDrag || frameDrag || dragging) {
     canvas.style.cursor = 'grabbing';
   } else if (segmentHover) {
-    canvas.style.cursor = 'crosshair';
-  } else {
     canvas.style.cursor = 'grab';
+  } else {
+    canvas.style.cursor = 'default';
   }
 }
 
@@ -3237,6 +3872,7 @@ function querySegmentHover(cx, cy) {
     for (let segIdx = 0; segIdx < anim.segments.length; segIdx++) {
       const seg = anim.segments[segIdx];
       if (!seg || !seg.compiled) continue;
+      if (seg.visible === false && editModeAnimId !== anim.id) continue;
       const samples = sampleCompiledAdaptive(seg.compiled);
       const hit = polylineHitInfo(samples, cx, cy);
       if (hit.dist < bestDist) {
@@ -3524,6 +4160,20 @@ function positionCanvasTextEditor() {
   canvasTextEditor.style.transform = `translate(-50%, -50%) rotate(${-animRotation(anim)}rad) skew(${Math.atan(textShearX(anim))}rad, ${Math.atan(textShearY(anim))}rad) scale(${textScaleX(anim)}, ${textScaleY(anim)})`;
 }
 
+// Returns how far along unit direction (dx,dy) from (px,py) until the ray exits rect (rx,ry,rw,rh).
+function rayExitRect(px, py, dx, dy, rx, ry, rw, rh) {
+  let t = Infinity;
+  if (Math.abs(dx) > 1e-9) {
+    const tx = ((dx > 0 ? rx + rw : rx) - px) / dx;
+    if (tx > 0) t = Math.min(t, tx);
+  }
+  if (Math.abs(dy) > 1e-9) {
+    const ty = ((dy > 0 ? ry + rh : ry) - py) / dy;
+    if (ty > 0) t = Math.min(t, ty);
+  }
+  return t === Infinity ? 0 : Math.max(0, t);
+}
+
 function getPlusPositions(anim) {
   if (isClosedPathAnim(anim)) return [];
   if (anim.anchors.length === 0) return [];
@@ -3533,14 +4183,13 @@ function getPlusPositions(anim) {
     return [{ end: 'A2', cx: ax, cy: ay - 22 * dpr, anchorIdx: 0, forward: true }];
   }
   const dpr = devicePixelRatio;
-  const PLUS_DIST = 22 * dpr;
+  const OFFSET = 17 * dpr;
   const result = [];
   const activeCount = anim.activeSegments?.size || 0;
   const showBackward = activeCount === 0 || anim.activeSegments.has(0);
-  const showForward = activeCount === 0 || anim.activeSegments.has(anim.segments.length - 1);
+  const showForward  = activeCount === 0 || anim.activeSegments.has(anim.segments.length - 1);
 
   if (showBackward && anim.segments[0]) {
-    // Backward end: only for the first anchor of the whole chain
     const A0cp = toCanvas(anim.anchors[0].re, anim.anchors[0].im);
     const h0cp = toCanvas(anim.segments[0].h0.re, anim.segments[0].h0.im);
     let dx0 = A0cp[0] - h0cp[0], dy0 = A0cp[1] - h0cp[1];
@@ -3549,10 +4198,10 @@ function getPlusPositions(anim) {
       dx0 = A0cp[0] - A1cp[0]; dy0 = A0cp[1] - A1cp[1];
     }
     const l0 = Math.hypot(dx0, dy0) || 1;
-    result.push({ end: 'A0', cx: A0cp[0] + (dx0/l0)*PLUS_DIST, cy: A0cp[1] + (dy0/l0)*PLUS_DIST, anchorIdx: 0, forward: false });
+    const ux = dx0 / l0, uy = dy0 / l0;
+    result.push({ end: 'A0', cx: A0cp[0] + OFFSET * ux, cy: A0cp[1] + OFFSET * uy, anchorIdx: 0, forward: false });
   }
   if (showForward && anim.segments[anim.segments.length - 1]) {
-    // Forward end: only for the last anchor of the whole chain
     const lastSegIdx = anim.segments.length - 1;
     const A2cp = toCanvas(anim.anchors[lastSegIdx + 1].re, anim.anchors[lastSegIdx + 1].im);
     const h1cp = toCanvas(anim.segments[lastSegIdx].h1.re, anim.segments[lastSegIdx].h1.im);
@@ -3562,7 +4211,8 @@ function getPlusPositions(anim) {
       dx1 = A2cp[0] - A0cp2[0]; dy1 = A2cp[1] - A0cp2[1];
     }
     const l1 = Math.hypot(dx1, dy1) || 1;
-    result.push({ end: 'A2', cx: A2cp[0] + (dx1/l1)*PLUS_DIST, cy: A2cp[1] + (dy1/l1)*PLUS_DIST, anchorIdx: lastSegIdx + 1, forward: true });
+    const ux = dx1 / l1, uy = dy1 / l1;
+    result.push({ end: 'A2', cx: A2cp[0] + OFFSET * ux, cy: A2cp[1] + OFFSET * uy, anchorIdx: lastSegIdx + 1, forward: true });
   }
   return result;
 }
@@ -3613,47 +4263,95 @@ function getActiveHandleInfo(anim) {
   return { anchorSet, handlePairs: [...handleMap.values()] };
 }
 
+function lockTogglePosition(anim, anchorIdx, activeArc) {
+  const dpr = devicePixelRatio;
+  const OFFSET = 17 * dpr;
+  const [ax, ay] = toCanvas(anim.anchors[anchorIdx].re, anim.anchors[anchorIdx].im);
+  if (activeArc !== null && activeArc + 1 < anim.anchors.length) {
+    const seg = anim.segments[activeArc];
+    if (!seg || !seg.compiled) return [ax, ay + OFFSET];
+    // Tangent at this anchor in canvas space, pointing along the arc
+    let tx, ty;
+    if (anchorIdx === activeArc) {
+      const [hx, hy] = toCanvas(seg.h0.re, seg.h0.im);
+      tx = hx - ax; ty = hy - ay;
+    } else {
+      const [hx, hy] = toCanvas(seg.h1.re, seg.h1.im);
+      tx = ax - hx; ty = ay - hy;
+    }
+    const tLen = Math.hypot(tx, ty);
+    if (tLen < 1e-6) return [ax, ay + OFFSET];
+    tx /= tLen; ty /= tLen;
+    // Two candidate perpendiculars; pick the one pointing away from the arc midpoint
+    const midMath = seg.compiled(0, 0.5, {});
+    const [mx, my] = toCanvas(midMath.re, midMath.im);
+    const toMidX = mx - ax, toMidY = my - ay;
+    // (-ty, tx) is 90° CCW; (ty, -tx) is 90° CW
+    const dot = (-ty) * toMidX + tx * toMidY;
+    const px = dot < 0 ? -ty : ty;
+    const py = dot < 0 ? tx : -tx;
+    return [ax + px * OFFSET, ay + py * OFFSET];
+  }
+  return [ax, ay + OFFSET];
+}
+
 function queryLockHover(cx, cy) {
   if (!editModeAnimId) return null;
   const anim = animations.find(a => a.id === editModeAnimId);
   if (isPrimitiveAnim(anim) || isTextAnim(anim) || isPolylineAnim(anim)) return null;
   if (!anim || anim.inPlacementMode || anim.anchors.length < 3) return null;
   const { anchorSet } = getActiveHandleInfo(anim);
+  const activeArc = activeArcIndex(anim);
   const threshold = 10 * devicePixelRatio;
   for (let i = 1; i < anim.anchors.length - 1; i++) {
     if (!anchorSet.has(i)) continue;
-    const [ax, ay] = toCanvas(anim.anchors[i].re, anim.anchors[i].im);
-    const ty = ay + 15 * devicePixelRatio;
-    if (Math.hypot(cx - ax, cy - ty) < threshold) return { anim, anchorIdx: i };
+    if (activeArc !== null && i !== activeArc && i !== activeArc + 1) continue;
+    const [lx, ly] = lockTogglePosition(anim, i, activeArc);
+    if (Math.hypot(cx - lx, cy - ly) < threshold) return { anim, anchorIdx: i };
   }
   return null;
 }
 
-function drawLockToggle(ax, ay, locked, isHovered, color, dpr) {
-  const ty = ay + 15 * dpr;
-  const r  = 5 * dpr;
+function drawLockToggle(lx, ly, locked, isHovered, color, dpr) {
   ctx.save();
   ctx.strokeStyle = color;
-  ctx.lineWidth   = (isHovered ? 1.8 : 1.2) * dpr;
-  ctx.globalAlpha = isHovered ? 0.9 : 0.5;
-  ctx.lineCap = 'round';
+  ctx.lineWidth   = (isHovered ? 1.8 : 1.3) * dpr;
+  ctx.globalAlpha = isHovered ? 0.9 : 0.55;
+  ctx.lineCap  = 'round';
+  ctx.lineJoin = 'round';
+
+  const bW = 10 * dpr, bH = 7 * dpr, bR = 1.5 * dpr;
+  const bTop = ly - bH / 2, bL = lx - bW / 2;
+
+  // Body: rounded rectangle centered at (lx, ly)
+  ctx.beginPath();
+  ctx.moveTo(bL + bR, bTop);
+  ctx.lineTo(bL + bW - bR, bTop);
+  ctx.arcTo(bL + bW, bTop,      bL + bW, bTop + bR,      bR);
+  ctx.lineTo(bL + bW, bTop + bH - bR);
+  ctx.arcTo(bL + bW, bTop + bH, bL + bW - bR, bTop + bH, bR);
+  ctx.lineTo(bL + bR, bTop + bH);
+  ctx.arcTo(bL, bTop + bH,      bL, bTop + bH - bR,      bR);
+  ctx.lineTo(bL, bTop + bR);
+  ctx.arcTo(bL, bTop,           bL + bR, bTop,            bR);
+  ctx.closePath();
+  ctx.stroke();
+
+  // Shackle: left arm up + semicircular arch + right arm
+  const shR = 3 * dpr;
+  const shArchCy = bTop - shR;
+
+  ctx.beginPath();
+  ctx.moveTo(lx - shR, bTop);
+  ctx.lineTo(lx - shR, shArchCy);
+  ctx.arc(lx, shArchCy, shR, Math.PI, 0, false);
   if (locked) {
-    // ∩ arch — smooth, continuous joint
-    ctx.beginPath();
-    ctx.arc(ax, ty, r, Math.PI, 0, false);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(ax - r, ty); ctx.lineTo(ax - r, ty + r * 0.5);
-    ctx.moveTo(ax + r, ty); ctx.lineTo(ax + r, ty + r * 0.5);
-    ctx.stroke();
+    ctx.lineTo(lx + shR, bTop);
   } else {
-    // Λ peak — corner / free joint
-    ctx.beginPath();
-    ctx.moveTo(ax - r, ty + r * 0.5);
-    ctx.lineTo(ax,     ty - r * 0.5);
-    ctx.lineTo(ax + r, ty + r * 0.5);
-    ctx.stroke();
+    ctx.lineTo(lx + shR, bTop - shR);
   }
+  ctx.stroke();
+
   ctx.restore();
 }
 
@@ -3755,6 +4453,7 @@ function textPlacementClickHandler(anim, snapped) {
   renderAnimList(); draw(); updateCursor();
   beginCanvasTextEdit(anim, true, false);
   scrollToShowExpanded(anim.id);
+  saveProject();
 }
 
 function nearestPlacementAnchorIndex(anim, mathX, mathY, threshold, snappedPoint = null) {
@@ -3809,11 +4508,11 @@ function polylinePlacementClickHandler(anim, snapped, mathX, mathY) {
       finalizePolylinePlacement(anim);
       return;
     }
-    const oppositeIdx = anim.extensionForward ? 0 : anch.length - 1;
-    if (nearIdx === oppositeIdx && anch.length >= 3) {
-      insertPolylineExtensionAnchor(anim, anch[oppositeIdx]);
-      anim.closed = true;
-      finalizePolylinePlacement(anim);
+    if (nearIdx >= 0 && anch.length >= 3) {
+      const oppositeIdx = anim.extensionForward ? 0 : anch.length - 1;
+      insertPolylineExtensionAnchor(anim, anch[nearIdx]);
+      if (nearIdx === oppositeIdx) anim.closed = true;
+      renderAnimList(); draw(); updateCursor();
       return;
     }
     insertPolylineExtensionAnchor(anim, snapped);
@@ -3832,16 +4531,16 @@ function polylinePlacementClickHandler(anim, snapped, mathX, mathY) {
   }
 
   const lastIdx = n - 1;
-  const secondLastIdx = n - 2;
-  if (nearIdx === lastIdx || nearIdx === secondLastIdx) {
-    finalizePolylinePlacement(anim);
-    return;
-  }
-  if (nearIdx === 0 && n >= 3) {
-    addPolylineSegment(anim, anch[0]);
-    anim.closed = true;
-    finalizePolylinePlacement(anim);
-    return;
+  if (nearIdx >= 0) {
+    const target = new Cx(anch[nearIdx].re, anch[nearIdx].im);
+    const last = anch[lastIdx];
+    if (last && Math.abs(target.re - last.re) < 1e-9 && Math.abs(target.im - last.im) < 1e-9) {
+      finalizePolylinePlacement(anim);
+      return;
+    }
+    addPolylineSegment(anim, target);
+    if (nearIdx === 0 && n >= 3) anim.closed = true;
+    renderAnimList(); draw(); updateCursor(); return;
   }
 
   addPolylineSegment(anim, snapped);
@@ -3877,33 +4576,24 @@ function placementClickHandler(anim, snapped, mathX, mathY) {
     if (anim.extensionForward) anim.extensionInsertAt++;
     anim.tContinuation = built.nextTangent;
     recompileAnim(anim);
-    if (looping) { finalizePlacement(anim); return; }
     renderAnimList(); draw(); return;
   }
 
   // Fresh placement: rebuild the initial spline from the anchor sequence.
   const endIdx = n - 1;
-  if (nearIdx === endIdx) {
-    rebuildFreshPlacementSegments(anim);
-    finalizePlacement(anim); return;
-  }
   const looping = nearIdx >= 0;
   const target = looping ? new Cx(anch[nearIdx].re, anch[nearIdx].im) : snapped;
 
-  if (n === 2) {
-    anch.push(target); anim.anchorLocked.push(true);
-    rebuildFreshPlacementSegments(anim);
-    if (looping) { finalizePlacement(anim); return; }
-    renderAnimList(); draw(); return;
+  // Clicking at the same position as the last placed anchor ends placement ("same anchor twice")
+  if (looping) {
+    const last = anch[endIdx];
+    if (last && Math.abs(target.re - last.re) < 1e-9 && Math.abs(target.im - last.im) < 1e-9) {
+      finalizePlacement(anim); return;
+    }
   }
 
-  // n >= 3
   anch.push(target); anim.anchorLocked.push(true);
   rebuildFreshPlacementSegments(anim);
-  if (looping) {
-    finalizePlacement(anim);
-    return;
-  }
   renderAnimList(); draw(); return;
 }
 
@@ -3946,11 +4636,30 @@ canvas.addEventListener('mousedown', e => {
     return;
   }
 
+  // ── Split arc mode ──
+  if (splitArcMode !== null) {
+    e.preventDefault();
+    const hover = segmentHover ?? querySegmentHover(cx, cy);
+    if (hover && hover.anim === splitArcMode.anim && hover.segIdx === splitArcMode.segIdx && typeof hover.u === 'number') {
+      pushUndo();
+      const { anim, segIdx } = splitArcMode;
+      splitArcMode = null;
+      splitSegmentAtT(anim, segIdx, hover.u);
+      saveProject();
+      renderAnimList(); draw();
+    } else {
+      splitArcMode = null;
+      renderAnimList(); draw();
+    }
+    return;
+  }
+
   // Canvas side buttons: duplicate / reflect
   const sideAction = querySideActionButtonHover(cx, cy);
   if (sideAction) {
     e.preventDefault();
-    createSideActionCopy(sideAction.anim, sideAction.kind);
+    if (sideAction.groupId != null) createGroupSideActionCopy(sideAction.groupId, sideAction.kind);
+    else createSideActionCopy(sideAction.anim, sideAction.kind);
     return;
   }
 
@@ -3958,19 +4667,46 @@ canvas.addEventListener('mousedown', e => {
   if (fb) {
     e.preventDefault();
     pushUndo();
-    frameDrag = {
-      anim: fb,
-      startMathX: mathX, startMathY: mathY,
-      origAnchors: fb.anchors.map(cloneCx),
-      origSegs: fb.segments.map(s => s ? ({ h0: cloneCx(s.h0), h1: cloneCx(s.h1) }) : null),
-    };
-    selectedId = fb.id;
+    if (fb.groupId != null) {
+      frameDrag = {
+        groupId: fb.groupId,
+        startMathX: mathX, startMathY: mathY,
+        origStates: groupMembers(fb.groupId).map(cloneTransformState),
+      };
+      selectedGroupId = fb.groupId;
+    } else {
+      frameDrag = {
+        anim: fb,
+        startMathX: mathX, startMathY: mathY,
+        origAnchors: fb.anchors.map(cloneCx),
+        origSegs: fb.segments.map(s => s ? ({ h0: cloneCx(s.h0), h1: cloneCx(s.h1) }) : null),
+      };
+      selectedId = fb.id;
+    }
     updateCursor(); draw(); return;
   }
 
   const rh = queryResizeHandleHover(cx, cy);
   if (rh) {
     e.preventDefault();
+    if (rh.groupId != null) {
+      const bounds = groupMathBounds(rh.groupId);
+      if (!bounds) return;
+      const frame = groupSelectionFrameMetrics(rh.groupId);
+      groupSelectionGuideShear = null;
+      pushUndo();
+      resizeDrag = {
+        groupId: rh.groupId,
+        handle: rh.handle,
+        startMathX: mathX,
+        startMathY: mathY,
+        origBounds: { ...bounds },
+        origFrameBounds: frame ? frameMathBounds(frame) : { ...bounds },
+        origStates: groupMembers(rh.groupId).map(cloneTransformState),
+      };
+      selectedGroupId = rh.groupId;
+      updateCursor(); draw(); return;
+    }
     const bounds = objectMathBounds(rh.anim);
     if (!bounds) return;
     const frame = selectionFrameMetrics(rh.anim);
@@ -4006,10 +4742,31 @@ canvas.addEventListener('mousedown', e => {
     updateCursor(); draw(); return;
   }
 
+  const ph = queryPlusHover(cx, cy);
+  if (ph) {
+    e.preventDefault();
+    startExtendedPlacement(ph.anim, ph.anchorIdx, ph.forward);
+    return;
+  }
+
   // ── Rotation wheel drag ──
   const rw = queryRotationWheelHover(cx, cy);
   if (rw) {
     e.preventDefault();
+    if (rw.groupId != null) {
+      const center = rotationCenterForGroup(rw.groupId);
+      if (!center) return;
+      groupSelectionGuideShear = null;
+      pushUndo();
+      rotateDrag = {
+        groupId: rw.groupId,
+        center,
+        startAngle: Math.atan2(mathY - center.im, mathX - center.re),
+        origStates: groupMembers(rw.groupId).map(cloneTransformState),
+      };
+      selectedGroupId = rw.groupId;
+      updateCursor(); draw(); return;
+    }
     const center = rotationCenterForAnim(rw.anim);
     if (!center) return;
     rw.anim.selectionGuideShear = null;
@@ -4034,13 +4791,6 @@ canvas.addEventListener('mousedown', e => {
     updateCursor(); draw(); return;
   }
 
-  const ph = queryPlusHover(cx, cy);
-  if (ph) {
-    e.preventDefault();
-    startExtendedPlacement(ph.anim, ph.anchorIdx, ph.forward);
-    return;
-  }
-
   // ── Lock toggle click ──
   const lh = queryLockHover(cx, cy);
   if (lh) {
@@ -4060,11 +4810,22 @@ canvas.addEventListener('mousedown', e => {
     const origH0 = idx < anim.segments.length ? cloneCx(anim.segments[idx].h0) : null;
     const origH1 = idx > 0 && idx - 1 < anim.segments.length ? cloneCx(anim.segments[idx - 1].h1) : null;
     anim.selectionGuideShear = null;
+    const _dragLoop = findLoopRange(anim);
+    let linkedIdx = null, linkedOrigH0 = null, linkedOrigH1 = null;
+    if (_dragLoop && anim.closed) {
+      if (idx === _dragLoop.loopStart) linkedIdx = _dragLoop.loopEnd;
+      else if (idx === _dragLoop.loopEnd) linkedIdx = _dragLoop.loopStart;
+    }
+    if (linkedIdx !== null) {
+      linkedOrigH0 = linkedIdx < anim.segments.length ? cloneCx(anim.segments[linkedIdx].h0) : null;
+      linkedOrigH1 = linkedIdx > 0 && linkedIdx - 1 < anim.segments.length ? cloneCx(anim.segments[linkedIdx - 1].h1) : null;
+    }
     anchorDrag = {
       anim, anchorIdx: idx,
       startMathX: mathX, startMathY: mathY,
       origAnchor: cloneCx(anim.anchors[idx]),
       origH0, origH1,
+      linkedIdx, linkedOrigH0, linkedOrigH1,
     };
     if (editModeAnimId !== anim.id) enterEditMode(anim);
     anim.activeSegments = new Set();
@@ -4086,11 +4847,22 @@ canvas.addEventListener('mousedown', e => {
   }
 
   // ── Segment hover ──
-  const effectiveSegHover = segmentHover ?? (editModeAnimId != null ? querySegmentHover(cx, cy) : null);
+  const effectiveSegHover = segmentHover ?? querySegmentHover(cx, cy);
   if (effectiveSegHover) {
     e.preventDefault();
     const hitAnim = effectiveSegHover.anim;
     const hitSegIdx = effectiveSegHover.segIdx;
+    if (groupSelectionMode) {
+      toggleGroupCandidate(hitAnim);
+      renderAnimList(); draw(); updateCursor();
+      return;
+    }
+    if (objectGroupId(hitAnim) != null && selectedId !== hitAnim.id) {
+      if (selectedGroupId === objectGroupId(hitAnim)) drillSelectObject(hitAnim);
+      else selectGroup(objectGroupId(hitAnim));
+      renderAnimList(); draw(); updateCursor();
+      return;
+    }
     if (editModeAnimId !== hitAnim.id) {
       // First click selects the whole curve, not a specific arc
       enterEditMode(hitAnim, new Set());
@@ -4137,9 +4909,7 @@ canvas.addEventListener('mousedown', e => {
       if (a.id !== hitAnim.id) { a.expanded = false; a.expandedArcs = new Set(); a.expandedAnchors = new Set(); }
     });
 
-    // Build perpendicular lookup table for eccentricity drag
-    const hitSeg = hitAnim.segments[hitSegIdx];
-    const t = effectiveSegHover?.u ?? 0.5;
+    // Compute perpendicular direction for eccentricity drag
     const a0 = hitAnim.anchors[hitSegIdx];
     const a1 = hitAnim.anchors[hitSegIdx + 1];
     let perpRe = 0, perpIm = 1;
@@ -4148,17 +4918,34 @@ canvas.addEventListener('mousedown', e => {
       const cLen = Math.hypot(cRe, cIm);
       if (cLen > 1e-9) { perpRe = -cIm / cLen; perpIm = cRe / cLen; }
     }
-    const perpSamples = (hitSeg?.compiledRef && a0) ? hitSeg.compiledRef.map((entry, i) => {
-      const pt = entry.fn(0, t, {});
-      return { pct: i * 5, d: (pt.re - a0.re) * perpRe + (pt.im - a0.im) * perpIm };
-    }) : [];
+    const hitSeg = hitAnim.segments[hitSegIdx];
+    const startEccPct = hitSeg ? eccentricityToPercent(hitSeg.eccentricity) : 50;
+
+    // Detect which side the curve bows so drag direction feels natural.
+    // Project curve midpoint (vs chord midpoint) onto perpendicular.
+    let perpSign = 1;
+    if (hitSeg?.compiled && a0 && a1) {
+      const chordMidRe = (a0.re + a1.re) / 2, chordMidIm = (a0.im + a1.im) / 2;
+      const mid = hitSeg.compiled(0, 0.5, {});
+      if (mid && mid.ok()) {
+        const proj = (mid.re - chordMidRe) * perpRe + (mid.im - chordMidIm) * perpIm;
+        if (Math.abs(proj) > 1e-6) {
+          perpSign = proj > 0 ? 1 : -1;
+        } else if (hitSeg.h0 && hitSeg.h1) {
+          // Flat curve (0% ecc): use handle midpoint to determine intended bowing side
+          const hProj = ((hitSeg.h0.re + hitSeg.h1.re) / 2 - chordMidRe) * perpRe +
+                        ((hitSeg.h0.im + hitSeg.h1.im) / 2 - chordMidIm) * perpIm;
+          perpSign = hProj < 0 ? -1 : 1;
+        }
+      }
+    }
 
     eccDrag = {
       anim: hitAnim,
       segIdx: hitSegIdx,
-      perpRe, perpIm,
-      anchor0re: a0?.re ?? 0, anchor0im: a0?.im ?? 0,
-      perpSamples,
+      perpRe, perpIm, perpSign,
+      startMathX: mathX, startMathY: mathY,
+      startEccPct,
       undoPushed: false,
     };
     renderAnimList(); scrollToShowExpanded(hitAnim.id);
@@ -4172,6 +4959,8 @@ canvas.addEventListener('mousedown', e => {
     e.preventDefault(); return;
   }
   selectedId = null;
+  selectedGroupId = null;
+  clearGroupMode();
   clearSelectionShearGuides();
   sideActionHover = null;
   animations.forEach(a => {
@@ -4199,10 +4988,10 @@ window.addEventListener('mousemove', e => {
   if (resizeDrag) {
     const changed = applyResizeOrShearForCursor(resizeDrag, mathX, mathY);
     if (changed) {
-      const list = document.getElementById('anim-list');
-      const scrollTop = list.scrollTop;
+      const detail = document.getElementById('object-detail');
+      const scrollTop = detail ? detail.scrollTop : 0;
       renderAnimList();
-      list.scrollTop = scrollTop;
+      if (detail) detail.scrollTop = scrollTop;
     }
     draw(); return;
   }
@@ -4210,10 +4999,10 @@ window.addEventListener('mousemove', e => {
   if (rotateDrag) {
     const angle = Math.atan2(mathY - rotateDrag.center.im, mathX - rotateDrag.center.re);
     applyRotationDelta(rotateDrag, angle - rotateDrag.startAngle);
-    const list = document.getElementById('anim-list');
-    const scrollTop = list.scrollTop;
+    const detail = document.getElementById('object-detail');
+    const scrollTop = detail ? detail.scrollTop : 0;
     renderAnimList();
-    list.scrollTop = scrollTop;
+    if (detail) detail.scrollTop = scrollTop;
     draw(); return;
   }
 
@@ -4228,20 +5017,23 @@ window.addEventListener('mousemove', e => {
   }
 
   if (anchorDrag) {
-    const { anim, anchorIdx, startMathX, startMathY, origAnchor, origH0, origH1 } = anchorDrag;
+    const { anim, anchorIdx, startMathX, startMathY, origAnchor, origH0, origH1, linkedIdx, linkedOrigH0, linkedOrigH1 } = anchorDrag;
     const snapX = softSnap(origAnchor.re + (mathX - startMathX));
     const snapY = softSnap(origAnchor.im + (mathY - startMathY));
     const sdx = snapX - origAnchor.re, sdy = snapY - origAnchor.im;
     anim.anchors[anchorIdx] = new Cx(snapX, snapY);
-    const isInterior = origH0 !== null && origH1 !== null;
-    if (isInterior) {
-      anim.segments[anchorIdx].h0 = new Cx(origH0.re + sdx, origH0.im + sdy);
-      anim.segments[anchorIdx - 1].h1 = new Cx(origH1.re + sdx, origH1.im + sdy);
-    }
-    if (isClosedPathAnim(anim)) {
-      const lastIdx = anim.anchors.length - 1;
-      if (anchorIdx === 0) anim.anchors[lastIdx] = cloneCx(anim.anchors[0]);
-      if (anchorIdx === lastIdx) anim.anchors[0] = cloneCx(anim.anchors[lastIdx]);
+    if (linkedIdx !== null) {
+      if (origH0 !== null) anim.segments[anchorIdx].h0 = new Cx(origH0.re + sdx, origH0.im + sdy);
+      if (origH1 !== null) anim.segments[anchorIdx - 1].h1 = new Cx(origH1.re + sdx, origH1.im + sdy);
+      anim.anchors[linkedIdx] = new Cx(snapX, snapY);
+      if (linkedOrigH0 !== null) anim.segments[linkedIdx].h0 = new Cx(linkedOrigH0.re + sdx, linkedOrigH0.im + sdy);
+      if (linkedOrigH1 !== null) anim.segments[linkedIdx - 1].h1 = new Cx(linkedOrigH1.re + sdx, linkedOrigH1.im + sdy);
+    } else {
+      const isInterior = origH0 !== null && origH1 !== null;
+      if (isInterior) {
+        anim.segments[anchorIdx].h0 = new Cx(origH0.re + sdx, origH0.im + sdy);
+        anim.segments[anchorIdx - 1].h1 = new Cx(origH1.re + sdx, origH1.im + sdy);
+      }
     }
     recompileAnim(anim);
     updateSidebarInputs(anim);
@@ -4263,6 +5055,11 @@ window.addEventListener('mousemove', e => {
   }
 
   if (frameDrag) {
+    if (frameDrag.groupId != null) {
+      const dx = softSnap(mathX - frameDrag.startMathX), dy = softSnap(mathY - frameDrag.startMathY);
+      applyGroupTranslation(frameDrag, dx, dy);
+      draw(); return;
+    }
     const { anim, startMathX, startMathY, origAnchors, origSegs } = frameDrag;
     const dx = softSnap(mathX - startMathX), dy = softSnap(mathY - startMathY);
     anim.anchors.forEach((_, i) => { anim.anchors[i] = new Cx(origAnchors[i].re + dx, origAnchors[i].im + dy); });
@@ -4277,30 +5074,19 @@ window.addEventListener('mousemove', e => {
   }
 
   if (eccDrag) {
-    const { anim, segIdx, perpRe, perpIm, anchor0re, anchor0im, perpSamples } = eccDrag;
+    // Dead zone: ignore tiny movements to prevent accidental eccentricity changes
+    if (Math.hypot(e.clientX - mouseDownClientX, e.clientY - mouseDownClientY) < 6) return;
+    const { anim, segIdx, perpRe, perpIm, perpSign, startMathX, startMathY, startEccPct } = eccDrag;
     const seg = anim.segments[segIdx];
-    if (!seg || perpSamples.length === 0) { draw(); return; }
+    if (!seg) { draw(); return; }
     if (!eccDrag.undoPushed) { pushUndo(); eccDrag.undoPushed = true; }
-    const cursorPerp = (mathX - anchor0re) * perpRe + (mathY - anchor0im) * perpIm;
-    // Find nearest 1% eccentricity via the precomputed perpendicular samples (5% increments)
-    let minIdx = 0;
-    for (let i = 1; i < perpSamples.length; i++) {
-      if (Math.abs(perpSamples[i].d - cursorPerp) < Math.abs(perpSamples[minIdx].d - cursorPerp))
-        minIdx = i;
-    }
-    let bestPct = perpSamples[minIdx].pct, bestDist = Math.abs(perpSamples[minIdx].d - cursorPerp);
-    // Interpolate at 1% within the bracketing 5% intervals for fine precision
-    for (let si = Math.max(0, minIdx - 1); si < Math.min(perpSamples.length - 1, minIdx + 1); si++) {
-      const p0 = perpSamples[si], p1 = perpSamples[si + 1];
-      for (let step = 0; step <= 5; step++) {
-        const frac = step / 5;
-        const d = p0.d + (p1.d - p0.d) * frac;
-        const dist = Math.abs(d - cursorPerp);
-        if (dist < bestDist) { bestDist = dist; bestPct = p0.pct + step; }
-      }
-    }
-    bestPct = Math.max(0, Math.min(100, Math.round(bestPct)));
-    seg.eccentricity = percentToEccentricity(bestPct);
+    // Relative-delta drag: perp component of mouse movement from click position.
+    // 200 CSS pixels perpendicular to chord = full 0-100% eccentricity range.
+    // perpSign ensures dragging toward the bowing side always increases eccentricity.
+    const deltaPerp = perpSign * ((mathX - startMathX) * perpRe + (mathY - startMathY) * perpIm);
+    const sensitivity = scale / (2 * devicePixelRatio);
+    const newPct = Math.max(0, Math.min(100, Math.round(startEccPct + deltaPerp * sensitivity)));
+    seg.eccentricity = percentToEccentricity(newPct);
     recompileSegment(anim, segIdx);
     updateSidebarInputs(anim);
     draw(); return;
@@ -4322,16 +5108,16 @@ window.addEventListener('mousemove', e => {
     const newSideActionHover = querySideActionButtonHover(cx, cy);
     const newResizeHover  = newSideActionHover ? null : queryResizeHandleHover(cx, cy);
     const newFrameHover   = (newSideActionHover || newResizeHover) ? null : queryFrameBorderHover(cx, cy);
-    const newRotationHover = (newSideActionHover || newResizeHover || newFrameHover) ? null : queryRotationWheelHover(cx, cy);
-    const newLockHover    = (newSideActionHover || newResizeHover || newFrameHover || newRotationHover) ? null : queryLockHover(cx, cy);
-    const newPlusHover    = (newSideActionHover || newResizeHover || newFrameHover || newRotationHover || newLockHover) ? null : queryPlusHover(cx, cy);
-    const newAnchorHover  = (newSideActionHover || newResizeHover || newFrameHover || newRotationHover || newPlusHover || newLockHover) ? null : queryAnchorHover(mathX, mathY);
-    const newHandleHover  = (newSideActionHover || newResizeHover || newFrameHover || newRotationHover || newPlusHover || newAnchorHover || newLockHover) ? null : queryHandleHover(mathX, mathY);
-    const newSegmentHover = (newSideActionHover || newResizeHover || newFrameHover || newRotationHover || newPlusHover || newAnchorHover || newHandleHover || newLockHover) ? null : querySegmentHover(cx, cy);
-    const sideActionChanged = (newSideActionHover?.anim !== sideActionHover?.anim) || (newSideActionHover?.kind !== sideActionHover?.kind);
-    const resizeChanged = (newResizeHover?.anim !== resizeHover?.anim) || (newResizeHover?.handle !== resizeHover?.handle);
-    const frameChanged = newFrameHover?.id !== frameHover?.id;
-    const rotationChanged = newRotationHover?.anim !== rotateHover?.anim;
+    const newPlusHover    = (newSideActionHover || newResizeHover || newFrameHover) ? null : queryPlusHover(cx, cy);
+    const newRotationHover = (newSideActionHover || newResizeHover || newFrameHover || newPlusHover) ? null : queryRotationWheelHover(cx, cy);
+    const newLockHover    = (newSideActionHover || newResizeHover || newFrameHover || newPlusHover || newRotationHover) ? null : queryLockHover(cx, cy);
+    const newAnchorHover  = (newSideActionHover || newResizeHover || newFrameHover || newPlusHover || newRotationHover || newLockHover) ? null : queryAnchorHover(mathX, mathY);
+    const newHandleHover  = (newSideActionHover || newResizeHover || newFrameHover || newPlusHover || newRotationHover || newAnchorHover || newLockHover) ? null : queryHandleHover(mathX, mathY);
+    const newSegmentHover = (newSideActionHover || newResizeHover || newFrameHover || newPlusHover || newRotationHover || newAnchorHover || newHandleHover || newLockHover) ? null : querySegmentHover(cx, cy);
+    const sideActionChanged = (newSideActionHover?.anim !== sideActionHover?.anim) || (newSideActionHover?.groupId !== sideActionHover?.groupId) || (newSideActionHover?.kind !== sideActionHover?.kind);
+    const resizeChanged = (newResizeHover?.anim !== resizeHover?.anim) || (newResizeHover?.groupId !== resizeHover?.groupId) || (newResizeHover?.handle !== resizeHover?.handle);
+    const frameChanged = (newFrameHover?.id !== frameHover?.id) || (newFrameHover?.groupId !== frameHover?.groupId);
+    const rotationChanged = (newRotationHover?.anim !== rotateHover?.anim) || (newRotationHover?.groupId !== rotateHover?.groupId);
     const plusChanged = (newPlusHover?.anim !== plusHover?.anim) || (newPlusHover?.end !== plusHover?.end);
     const lockChanged = (newLockHover?.anim !== lockHover?.anim) || (newLockHover?.anchorIdx !== lockHover?.anchorIdx);
     const changed = sideActionChanged || resizeChanged || frameChanged || rotationChanged || plusChanged || lockChanged || (newAnchorHover !== anchorHover) || (newHandleHover !== handleHover) ||
@@ -4428,10 +5214,10 @@ window.addEventListener('mouseup', e => {
 
   if (eccDrag) {
     eccDrag = null;
-    const list = document.getElementById('anim-list');
-    const scrollTop = list ? list.scrollTop : 0;
+    const detail = document.getElementById('object-detail');
+    const scrollTop = detail ? detail.scrollTop : 0;
     renderAnimList();
-    if (list) list.scrollTop = scrollTop;
+    if (detail) detail.scrollTop = scrollTop;
     draw(); updateCursor(); return;
   }
 
@@ -4466,8 +5252,8 @@ canvas.addEventListener('auxclick', e => {
 canvas.addEventListener('mouseleave', () => {
   placementPreviewPos = null;
   rubberBand = null;
-  if (anchorHover || handleHover || segmentHover || resizeHover || rotateHover || sideActionHover || plusHover || lockHover) {
-    anchorHover = null; handleHover = null; segmentHover = null; resizeHover = null; rotateHover = null; sideActionHover = null; plusHover = null; lockHover = null;
+  if (anchorHover || handleHover || segmentHover || resizeHover || rotateHover || sideActionHover || frameHover || plusHover || lockHover) {
+    anchorHover = null; handleHover = null; segmentHover = null; resizeHover = null; rotateHover = null; sideActionHover = null; frameHover = null; plusHover = null; lockHover = null;
     updateCursor(); draw();
   }
 });
@@ -4487,12 +5273,16 @@ document.addEventListener('click', e => {
   if (globalSettingsOpen && !(e.target.closest && e.target.closest('#global-settings'))) {
     setGlobalSettingsOpen(false);
   }
-  if (e.target.closest && (e.target.closest('#canvas-wrap') || e.target.closest('#sidebar'))) return;
+  const path = e.composedPath ? e.composedPath() : [];
+  const inUI = path.some(el => el.id === 'canvas-wrap' || el.id === 'sidebar');
+  if (inUI) return;
   if (openColorMenuAnimId !== null) { openColorMenuAnimId = null; renderAnimList(); }
   const placing = animations.find(a => a.inPlacementMode);
   if (placing && isPrimitiveAnim(placing)) cancelPlacement(placing);
   if (editModeAnimId !== null) exitEditMode();
   selectedId = null;
+  selectedGroupId = null;
+  clearGroupMode();
   sideActionHover = null;
   animations.forEach(a => {
     a.expanded = false;
@@ -4542,14 +5332,23 @@ function drawHandles(anim) {
   // "+" signs always visible in edit mode
   for (const pp of getPlusPositions(anim)) {
     const isHov = plusHover?.anim === anim && plusHover?.end === pp.end;
-    drawPlusSign(pp.cx, pp.cy, CANVAS_TOOL_COLOR, dpr, isHov);
+    drawPlusSign(pp.cx, pp.cy, CANVAS_BUTTON_COLOR, dpr, isHov);
   }
 
-  // Bézier handles, anchor dots, and lock toggles only visible when an arc is selected
+  // Anchor dots visible whenever in edit mode
+  const softColor = softenedSelectionColor(anim.color);
+  for (let i = 0; i < anim.anchors.length; i++) {
+    if (!anim.anchors[i]) continue;
+    const isHov = anchorHover?.anim === anim && anchorHover?.anchorIdx === i;
+    const isExp = anim.expandedAnchors?.has(i);
+    const anchorColor = activeArc === null || i === activeArc || i === activeArc + 1 ? anim.color : softColor;
+    drawAnchorDot(toCanvas(anim.anchors[i].re, anim.anchors[i].im), anchorColor, (isHov || isExp ? 7 : 5) * dpr);
+  }
+
+  // Bézier handles and lock toggles only visible when an arc is selected
   if (activeArc === null) return;
 
   const { anchorSet, handlePairs } = getActiveHandleInfo(anim);
-  const softColor = softenedSelectionColor(anim.color);
   if (anchorSet.size === 0) return;
   // Dashed lines + handle dots
   for (const { segIdx, side } of handlePairs) {
@@ -4564,28 +5363,16 @@ function drawHandles(anim) {
     const isHov = handleHover?.anim === anim && handleHover?.segIdx === segIdx && handleHover?.side === side;
     drawHandleDot(hcp, anim.color, (isHov ? 5 : 3.5) * dpr);
   }
-  // Anchor dots stay visible for the whole curve even when one arc is selected
-  for (let i = 0; i < anim.anchors.length; i++) {
-    if (i >= anim.anchors.length) continue;
-    const isHov = anchorHover?.anim === anim && anchorHover?.anchorIdx === i;
-    const isSelected = editModeAnimId === anim.id && anim.expandedAnchors?.has(i);
-    const anchorColor = activeArc === null || i === activeArc || i === activeArc + 1 ? anim.color : softColor;
-    drawAnchorDot(toCanvas(anim.anchors[i].re, anim.anchors[i].im), anchorColor, (isHov || isSelected ? 7 : 5) * dpr);
-  }
-  // Lock toggles for visible interior anchors
+  // Lock toggles only for interior anchors adjacent to the selected arc
   if (!isPolylineAnim(anim)) {
     for (let i = 1; i < anim.anchors.length - 1; i++) {
       if (!anchorSet.has(i)) continue;
-      const [ax, ay] = toCanvas(anim.anchors[i].re, anim.anchors[i].im);
+      if (activeArc !== null && i !== activeArc && i !== activeArc + 1) continue;
       const locked = isAnchorLocked(anim, i);
       const isHov  = lockHover?.anim === anim && lockHover?.anchorIdx === i;
-      drawLockToggle(ax, ay, locked, isHov, CANVAS_TOOL_COLOR, dpr);
+      const [lx, ly] = lockTogglePosition(anim, i, activeArc);
+      drawLockToggle(lx, ly, locked, isHov, CANVAS_TOOL_COLOR, dpr);
     }
-  }
-  // "+" signs beyond each endpoint
-  for (const pp of getPlusPositions(anim)) {
-    const isHov = plusHover?.anim === anim && plusHover?.end === pp.end;
-    drawPlusSign(pp.cx, pp.cy, CANVAS_TOOL_COLOR, dpr, isHov);
   }
 }
 
@@ -4606,17 +5393,18 @@ function isEccGhostActive(anim, segIdx) {
 }
 
 function drawClosedSegmentFill(anim, fillColorOverride = null, opacityScale = 1) {
-  if (!isClosedPathAnim(anim) || !animFillColor(anim)) return;
-  const first = anim.anchors[0];
-  if (!first) return;
-  const [x0, y0] = toCanvas(first.re, first.im);
+  const loop = findLoopRange(anim);
+  if (!loop || !anim.closed || !animFillColor(anim)) return;
+  const startAnchor = anim.anchors[loop.loopStart];
+  if (!startAnchor) return;
+  const [x0, y0] = toCanvas(startAnchor.re, startAnchor.im);
   const fillColor = fillColorOverride || animFillColor(anim);
   ctx.save();
   ctx.fillStyle = fillStyleValue(fillColor, animFillStyle(anim)) || fillColor;
   ctx.globalAlpha = animFillOpacity(anim) * opacityScale;
   ctx.beginPath();
   ctx.moveTo(x0, y0);
-  for (let i = 0; i < anim.segments.length; i++) {
+  for (let i = loop.loopStart; i < loop.loopEnd; i++) {
     const seg = anim.segments[i];
     const end = anim.anchors[i + 1];
     if (!seg || !end) continue;
@@ -4638,6 +5426,11 @@ function drawSegment(anim, segIdx, colorOverride = null, opacityScale = 1, thick
   const cw = (1 + 5 * (effectiveThickness / 10)) * dpr;
   const color = colorOverride || anim.color;
   const opacity = animOutlineOpacity(anim) * opacityScale;
+  if (seg.visible === false) {
+    if (editModeAnimId !== anim.id) return;
+    drawCompiledCurve(seg.compiled, color, cw * 0.4, 0.18 * opacityScale);
+    return;
+  }
   const eccGhostActive = isEccGhostActive(anim, segIdx);
   const arcSelectGhost = !eccGhostActive && activeArcIndex(anim) === segIdx;
   if (eccGhostActive && seg.compiledRef) {
@@ -4658,7 +5451,7 @@ function drawSegment(anim, segIdx, colorOverride = null, opacityScale = 1, thick
     seg.compiledRef.forEach((entry, i) => {
       if (i % 2 !== 0) return; // every 10% only
       if (Math.abs(entry.eccentricity - seg.eccentricity) >= 1e-9)
-        drawCompiledCurve(entry.fn, '#888888', cw * 0.14, 0.18 * opacity);
+        drawCompiledCurve(entry.fn, '#888888', cw * 0.2, 0.4 * opacity);
     });
     drawCompiledCurve(seg.compiled, color, cw, opacity);
   } else {
@@ -4752,8 +5545,15 @@ function drawPrimitiveShape(kind, p0, p1, color, lineWidth, alpha = 1, dashed = 
   } else if (kind === 'circle') {
     const radius = Math.hypot(x1 - x0, y1 - y0);
     ctx.beginPath();
-    ctx.arc(x0, y0, radius, 0, Math.PI * 2);
-    paint();
+    if (radius < 1e-6) {
+      ctx.fillStyle = fillColor ? (fillStyleValue(fillColor, fillStyle) || fillColor) : color;
+      ctx.globalAlpha = fillColor ? alpha * fillOpacity : alpha * outlineOpacity;
+      ctx.arc(x0, y0, Math.max(2 * devicePixelRatio, lineWidth * 0.5), 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      ctx.arc(x0, y0, radius, 0, Math.PI * 2);
+      paint();
+    }
   } else if (kind === 'ellipse') {
     const rx = Math.abs(x1 - x0), ry = Math.abs(y1 - y0);
     ctx.beginPath();
@@ -4833,50 +5633,75 @@ function drawTentativeFreeformExtension(anchors, segs, previewPoint, color, cw, 
   const L = Math.hypot(previewPoint.re - start.re, previewPoint.im - start.im);
   if (L < 1e-7) return;
 
-  let tOut = chordDir(start, previewPoint);
-  const lastSeg = segs[segs.length - 1];
-  if (lastSeg) tOut = tangentAtBezierEnd(start, lastSeg.h1);
-
-  const pending = buildPendingPlacementArc(start, previewPoint, tOut, null);
-  recompileSegmentRaw(pending.seg, start, previewPoint);
+  // Use the same window algorithm that computeFreshPlacementSegments uses for the last arc,
+  // so the dashed preview exactly matches the arc that gets committed on click.
+  let pendingSeg;
+  if (anchors.length >= 3) {
+    const windowSegs = constrainedFourAnchorPlacementSegments(
+      [...anchors.slice(-3), cloneCx(previewPoint)]
+    );
+    pendingSeg = windowSegs.length === 3 ? windowSegs[2] : null;
+  } else if (anchors.length === 2) {
+    const windowSegs = computeThreeAnchorPlacementSegments(
+      [anchors[0], anchors[1], cloneCx(previewPoint)]
+    );
+    pendingSeg = windowSegs[1] || null;
+  }
+  if (!pendingSeg) {
+    let tOut = chordDir(start, previewPoint);
+    const lastSeg = segs[segs.length - 1];
+    if (lastSeg) tOut = tangentAtBezierEnd(start, lastSeg.h1);
+    pendingSeg = buildPendingPlacementArc(start, previewPoint, tOut, null).seg;
+  }
+  recompileSegmentRaw(pendingSeg, start, previewPoint);
   ctx.save();
   ctx.globalAlpha = 0.32;
   ctx.setLineDash([4 * dpr, 4 * dpr]);
-  drawCompiledCurve(pending.seg.compiled, color, cw, 1);
+  drawCompiledCurve(pendingSeg.compiled, color, cw, 1);
   ctx.restore();
 }
 
 function drawFreshFreeformPlacement(anim, previewPoint, cw, dpr) {
   const anchors = anim.anchors.map(cloneCx);
+  const n = anchors.length;
   const hasPreview = previewPoint && previewPoint.ok && previewPoint.ok();
-  const last = anchors[anchors.length - 1];
-  const previewDist = hasPreview && last ? Math.hypot(previewPoint.re - last.re, previewPoint.im - last.im) : Infinity;
-  const includePreview = hasPreview && (!last || previewDist >= previewAnchorActivationDistance(anchors));
-  const points = includePreview ? anchors.concat([cloneCx(previewPoint)]) : anchors;
-  const segs = computeFreshPlacementSegments(points);
-  const solidCount = Math.max(0, anchors.length - 1);
-
-  for (let i = 0; i < segs.length; i++) {
-    const seg = segs[i];
-    const start = points[i], end = points[i + 1];
-    if (!seg || !start || !end) continue;
-    recompileSegmentRaw(seg, start, end);
-    ctx.save();
-    if (i >= solidCount) {
-      ctx.globalAlpha = 0.4;
-      ctx.setLineDash([4 * dpr, 4 * dpr]);
-    } else {
-      ctx.globalAlpha = 0.85;
+  if (n === 0) {
+    if (hasPreview) {
+      const [hx, hy] = toCanvas(previewPoint.re, previewPoint.im);
+      ctx.beginPath(); ctx.arc(hx, hy, 6 * dpr, 0, Math.PI * 2);
+      ctx.strokeStyle = anim.color; ctx.lineWidth = 2 * dpr;
+      ctx.globalAlpha = 0.8; ctx.stroke(); ctx.globalAlpha = 1;
     }
+    return;
+  }
+  const cursorAtEnd = hasPreview && Math.hypot(previewPoint.re - anchors[n-1].re, previewPoint.im - anchors[n-1].im) < 1e-7;
+  const previewAnchors = (hasPreview && !cursorAtEnd) ? [...anchors, previewPoint] : [...anchors];
+  const previewSegs = computeFreshPlacementSegments(previewAnchors);
+  const solidCount = (hasPreview && !cursorAtEnd) ? previewSegs.length - 1 : previewSegs.length;
+
+  for (let i = 0; i < solidCount; i++) {
+    const seg = previewSegs[i];
+    if (!seg) continue;
+    recompileSegmentRaw(seg, previewAnchors[i], previewAnchors[i + 1]);
+    ctx.save(); ctx.globalAlpha = 0.85;
     drawCompiledCurve(seg.compiled, anim.color, cw, 1);
     ctx.restore();
+  }
+
+  if (hasPreview && !cursorAtEnd && previewSegs.length > 0) {
+    const tentSeg = previewSegs[previewSegs.length - 1];
+    if (tentSeg) {
+      recompileSegmentRaw(tentSeg, anchors[n - 1], previewPoint);
+      ctx.save(); ctx.globalAlpha = 0.4; ctx.setLineDash([4 * dpr, 4 * dpr]);
+      drawCompiledCurve(tentSeg.compiled, anim.color, cw, 1);
+      ctx.restore();
+    }
   }
 
   for (const anchor of anchors)
     drawAnchorDot(toCanvas(anchor.re, anchor.im), anim.color, 5 * dpr);
 
   if (hasPreview) {
-    if (!includePreview) drawTentativeFreeformExtension(anchors, segs, previewPoint, anim.color, cw, dpr);
     const [hx, hy] = toCanvas(previewPoint.re, previewPoint.im);
     ctx.beginPath(); ctx.arc(hx, hy, 6 * dpr, 0, Math.PI * 2);
     ctx.strokeStyle = anim.color; ctx.lineWidth = 2 * dpr;
@@ -4984,13 +5809,13 @@ function includeArcHandleInfluenceBounds(bounds, anim, segIdx) {
   if (segIdx + 1 < anim.segments.length && isAnchorLocked(anim, segIdx + 1) && anim.segments[segIdx + 1])
     bounds = includeMath(anim.segments[segIdx + 1].h0);
 
-  if (isClosedPathAnim(anim)) {
-    const lastSegIdx = anim.segments.length - 1;
-    const lastAnchorIdx = anim.anchors.length - 1;
-    if (segIdx === 0 && isAnchorLocked(anim, 0) && anim.segments[lastSegIdx])
-      bounds = includeMath(anim.segments[lastSegIdx].h1);
-    if (segIdx === lastSegIdx && isAnchorLocked(anim, lastAnchorIdx) && anim.segments[0])
-      bounds = includeMath(anim.segments[0].h0);
+  const loop = findLoopRange(anim);
+  if (loop) {
+    const ls = loop.loopStart, le = loop.loopEnd;
+    if (segIdx === ls && isAnchorLocked(anim, ls) && anim.segments[le - 1])
+      bounds = includeMath(anim.segments[le - 1].h1);
+    if (segIdx === le - 1 && isAnchorLocked(anim, le) && anim.segments[ls])
+      bounds = includeMath(anim.segments[ls].h0);
   }
   return bounds;
 }
@@ -5031,13 +5856,13 @@ function includeArcHandleInfluenceMathBounds(bounds, anim, segIdx) {
   if (segIdx + 1 < anim.segments.length && isAnchorLocked(anim, segIdx + 1) && anim.segments[segIdx + 1])
     bounds = includeMath(anim.segments[segIdx + 1].h0);
 
-  if (isClosedPathAnim(anim)) {
-    const lastSegIdx = anim.segments.length - 1;
-    const lastAnchorIdx = anim.anchors.length - 1;
-    if (segIdx === 0 && isAnchorLocked(anim, 0) && anim.segments[lastSegIdx])
-      bounds = includeMath(anim.segments[lastSegIdx].h1);
-    if (segIdx === lastSegIdx && isAnchorLocked(anim, lastAnchorIdx) && anim.segments[0])
-      bounds = includeMath(anim.segments[0].h0);
+  const loopM = findLoopRange(anim);
+  if (loopM) {
+    const ls = loopM.loopStart, le = loopM.loopEnd;
+    if (segIdx === ls && isAnchorLocked(anim, ls) && anim.segments[le - 1])
+      bounds = includeMath(anim.segments[le - 1].h1);
+    if (segIdx === le - 1 && isAnchorLocked(anim, le) && anim.segments[ls])
+      bounds = includeMath(anim.segments[ls].h0);
   }
   return bounds;
 }
@@ -5095,12 +5920,41 @@ function objectMathBounds(anim) {
   return bounds;
 }
 
-function selectionFrameMetrics(anim) {
-  const arcBounds = selectedArcCanvasBounds(anim);
-  const bounds = arcBounds || selectedObjectCanvasBounds(anim);
+function unionCanvasBounds(bounds, next) {
+  if (!next) return bounds;
+  if (!bounds) return { ...next };
+  bounds.left = Math.min(bounds.left, next.left);
+  bounds.right = Math.max(bounds.right, next.right);
+  bounds.top = Math.min(bounds.top, next.top);
+  bounds.bottom = Math.max(bounds.bottom, next.bottom);
+  return bounds;
+}
+
+function unionMathBounds(bounds, next) {
+  if (!next) return bounds;
+  if (!bounds) return { ...next };
+  bounds.left = Math.min(bounds.left, next.left);
+  bounds.right = Math.max(bounds.right, next.right);
+  bounds.bottom = Math.min(bounds.bottom, next.bottom);
+  bounds.top = Math.max(bounds.top, next.top);
+  return bounds;
+}
+
+function groupCanvasBounds(groupId) {
+  let bounds = null;
+  for (const anim of groupMembers(groupId)) bounds = unionCanvasBounds(bounds, selectedObjectCanvasBounds(anim));
+  return bounds;
+}
+
+function groupMathBounds(groupId) {
+  let bounds = null;
+  for (const anim of groupMembers(groupId)) bounds = unionMathBounds(bounds, objectMathBounds(anim));
+  return bounds;
+}
+
+function frameMetricsFromCanvasBounds(bounds, lineWidth = devicePixelRatio) {
   if (!bounds) return null;
   const dpr = devicePixelRatio;
-  const lineWidth = isPrimitiveAnim(anim) ? primitiveStrokeWidth(anim) : (1 + 5 * (anim.thickness / 10)) * dpr;
   const pad = 10 * dpr + lineWidth * 0.5;
   const x = bounds.left - pad;
   const y = bounds.top - pad;
@@ -5118,6 +5972,20 @@ function selectionFrameMetrics(anim) {
   };
 }
 
+function groupSelectionFrameMetrics(groupId) {
+  const bounds = groupCanvasBounds(groupId);
+  return frameMetricsFromCanvasBounds(bounds, 2 * devicePixelRatio);
+}
+
+function selectionFrameMetrics(anim) {
+  const arcBounds = selectedArcCanvasBounds(anim);
+  const bounds = arcBounds || selectedObjectCanvasBounds(anim);
+  if (!bounds) return null;
+  const dpr = devicePixelRatio;
+  const lineWidth = isPrimitiveAnim(anim) ? primitiveStrokeWidth(anim) : (1 + 5 * (anim.thickness / 10)) * dpr;
+  return frameMetricsFromCanvasBounds(bounds, lineWidth);
+}
+
 function frameMathBounds(frame) {
   const [x0, y0] = toMath(frame.x, frame.y);
   const [x1, y1] = toMath(frame.x + frame.w, frame.y + frame.h);
@@ -5131,6 +5999,15 @@ function frameMathBounds(frame) {
 
 function selectionRotationWheel(anim) {
   const f = selectionFrameMetrics(anim);
+  return rotationWheelForFrame(f);
+}
+
+function groupSelectionRotationWheel(groupId) {
+  const f = groupSelectionFrameMetrics(groupId);
+  return rotationWheelForFrame(f);
+}
+
+function rotationWheelForFrame(f) {
   if (!f) return null;
   const cx = f.x + f.w * 0.5;
   const cy = f.y + f.h * 0.5;
@@ -5140,6 +6017,15 @@ function selectionRotationWheel(anim) {
 
 function selectionSideActionButtons(anim) {
   const f = selectionFrameMetrics(anim);
+  return sideActionButtonsForFrame(f);
+}
+
+function groupSelectionSideActionButtons(groupId) {
+  const f = groupSelectionFrameMetrics(groupId);
+  return sideActionButtonsForFrame(f);
+}
+
+function sideActionButtonsForFrame(f) {
   if (!f) return [];
   const dpr = devicePixelRatio;
   const w = 38 * dpr;
@@ -5160,6 +6046,12 @@ function pointInRect(px, py, rect) {
 }
 
 function querySideActionButtonHover(cx, cy) {
+  if (selectedGroupId != null) {
+    for (const btn of groupSelectionSideActionButtons(selectedGroupId)) {
+      if (pointInRect(cx, cy, btn)) return { groupId: selectedGroupId, kind: btn.kind };
+    }
+    return null;
+  }
   const anim = animations.find(a => a.id === selectedId);
   if (!anim || !anim.visible || anim.inPlacementMode) return null;
   for (const btn of selectionSideActionButtons(anim)) {
@@ -5170,6 +6062,15 @@ function querySideActionButtonHover(cx, cy) {
 
 function selectionResizeSegments(anim) {
   const f = selectionFrameMetrics(anim);
+  return resizeSegmentsForFrame(f);
+}
+
+function groupSelectionResizeSegments(groupId) {
+  const f = groupSelectionFrameMetrics(groupId);
+  return resizeSegmentsForFrame(f);
+}
+
+function resizeSegmentsForFrame(f) {
   if (!f) return [];
   const { x, y, w, h, outerX, outerY, outerW, outerH, extend } = f;
   return [
@@ -5185,14 +6086,24 @@ function selectionResizeSegments(anim) {
 }
 
 function resizeCursorForHandle(handle) {
-  if (handle === 'n' || handle === 's') return 'ns-resize';
-  if (handle === 'e' || handle === 'w') return 'ew-resize';
   if (handle === 'nw' || handle === 'se') return 'nwse-resize';
   if (handle === 'ne' || handle === 'sw') return 'nesw-resize';
   return 'grab';
 }
 
 function queryResizeHandleHover(cx, cy) {
+  if (selectedGroupId != null) {
+    const threshold = 8 * devicePixelRatio;
+    let best = null, bestDist = Infinity;
+    for (const seg of groupSelectionResizeSegments(selectedGroupId)) {
+      const dist = distPointToSegmentPx(cx, cy, seg.from[0], seg.from[1], seg.to[0], seg.to[1]);
+      if (dist <= threshold && dist < bestDist) {
+        bestDist = dist;
+        best = { groupId: selectedGroupId, handle: seg.handle };
+      }
+    }
+    return best;
+  }
   const anim = animations.find(a => a.id === selectedId);
   if (!anim || !anim.visible || anim.inPlacementMode || isDotAnim(anim)) return null;
   if (hasActiveArcSelection(anim)) return null;
@@ -5209,6 +6120,21 @@ function queryResizeHandleHover(cx, cy) {
 }
 
 function queryFrameBorderHover(cx, cy) {
+  if (selectedGroupId != null) {
+    if (queryResizeHandleHover(cx, cy)) return null;
+    const f = groupSelectionFrameMetrics(selectedGroupId);
+    if (!f) return null;
+    const { x, y, w, h, outerX, outerY, outerW, outerH, extend } = f;
+    const ol = outerX - extend, or_ = outerX + outerW + extend;
+    const ot = outerY - extend, ob = outerY + outerH + extend;
+    const dpr = devicePixelRatio;
+    const tol = 4 * dpr;
+    const il = x + tol, ir = x + w - tol;
+    const it = y + tol, ib = y + h - tol;
+    const inOuter = cx >= ol && cx <= or_ && cy >= ot && cy <= ob;
+    const inInner = cx >= il && cx <= ir && cy >= it && cy <= ib;
+    return (inOuter && !inInner) ? { groupId: selectedGroupId } : null;
+  }
   const anim = animations.find(a => a.id === selectedId);
   if (!anim || !anim.visible || anim.inPlacementMode || isDotAnim(anim)) return null;
   if (hasActiveArcSelection(anim)) return null;
@@ -5230,6 +6156,13 @@ function queryFrameBorderHover(cx, cy) {
 }
 
 function queryRotationWheelHover(cx, cy) {
+  if (selectedGroupId != null) {
+    const wheel = groupSelectionRotationWheel(selectedGroupId);
+    if (!wheel || wheel.r < 4 * devicePixelRatio) return null;
+    const threshold = 8 * devicePixelRatio;
+    const d = Math.hypot(cx - wheel.cx, cy - wheel.cy);
+    return Math.abs(d - wheel.r) <= threshold ? { groupId: selectedGroupId } : null;
+  }
   const anim = animations.find(a => a.id === selectedId);
   if (!anim || !anim.visible || anim.inPlacementMode || isDotAnim(anim)) return null;
   if (hasActiveArcSelection(anim)) return null;
@@ -5242,6 +6175,82 @@ function queryRotationWheelHover(cx, cy) {
 
 function cloneResizeSeg(seg) {
   return seg ? { h0: cloneCx(seg.h0), h1: cloneCx(seg.h1), eccentricity: seg.eccentricity } : null;
+}
+
+function cloneTransformState(anim) {
+  return {
+    anim,
+    origKind: animKind(anim),
+    origClosed: !!anim.closed,
+    origRotation: animRotation(anim),
+    origTextScaleX: textScaleX(anim),
+    origTextScaleY: textScaleY(anim),
+    origTextShearX: textShearX(anim),
+    origTextShearY: textShearY(anim),
+    origAnchors: anim.anchors.map(cloneCx),
+    origSegs: anim.segments.map(cloneResizeSeg),
+    origAnchorLocked: anim.anchorLocked ? [...anim.anchorLocked] : [],
+  };
+}
+
+function applyPointTransformFromState(state, transformPoint, options = {}) {
+  const { anim, origKind, origAnchors, origSegs } = state;
+  anim.kind = origKind;
+  anim.closed = !!state.origClosed;
+  anim.rotation = state.origRotation;
+  anim.anchorLocked = state.origAnchorLocked ? [...state.origAnchorLocked] : [];
+
+  if (origKind === 'text') {
+    if (options.canvasMatrix) {
+      applyTextCanvasLinearTransform(anim, {
+        origRotation: state.origRotation,
+        origTextScaleX: state.origTextScaleX,
+        origTextScaleY: state.origTextScaleY,
+        origTextShearX: state.origTextShearX,
+        origTextShearY: state.origTextShearY,
+        origAnchors,
+      }, options.canvasMatrix, transformPoint);
+    } else {
+      anim.rotation = state.origRotation + (options.rotationDelta || 0);
+      anim.textScaleX = state.origTextScaleX;
+      anim.textScaleY = state.origTextScaleY;
+      anim.textShearX = state.origTextShearX;
+      anim.textShearY = state.origTextShearY;
+      anim.anchors = origAnchors.map(transformPoint);
+    }
+    return;
+  }
+
+  anim.anchors = origAnchors.map(transformPoint);
+  if (isPrimitiveAnim(anim)) {
+    if (options.forcePath && (origKind === 'rectangle' || origKind === 'circle' || origKind === 'ellipse')) {
+      const path = primitivePathForDrag(state);
+      if (path) {
+        anim.kind = path.kind;
+        anim.closed = path.closed;
+        anim.rotation = 0;
+        anim.anchors = path.anchors.map(transformPoint);
+        anim.segments = path.segments.map(seg => transformResizeSeg(seg, transformPoint));
+        anim.anchorLocked = anim.anchors.map(() => !!path.locked);
+        recompileAnim(anim);
+      }
+      return;
+    }
+    anim.segments = [];
+    if (options.rotationDelta && (origKind === 'rectangle' || origKind === 'circle' || origKind === 'ellipse')) {
+      anim.rotation = state.origRotation + options.rotationDelta;
+    }
+    return;
+  }
+
+  anim.segments = origSegs.map(seg => transformResizeSeg(seg, transformPoint));
+  recompileAnim(anim);
+}
+
+function applyGroupTranslation(drag, dx, dy) {
+  for (const state of drag.origStates) {
+    applyPointTransformFromState(state, pt => new Cx(pt.re + dx, pt.im + dy));
+  }
 }
 
 function transformPointInBounds(pt, fromBounds, toBounds) {
@@ -5260,26 +6269,19 @@ function isSideResizeHandle(handle) {
   return handle === 'n' || handle === 'e' || handle === 's' || handle === 'w';
 }
 
-function resizeDragModeForCursor(drag, mathX, mathY) {
-  if (!isSideResizeHandle(drag.handle)) {
-    drag.mode = 'resize';
-    return drag.mode;
-  }
-  if (drag.mode) return drag.mode;
+function snapShearOffsetMath(offsetMath) {
+  const threshold = (2 * devicePixelRatio) / Math.max(scale, 1e-9);
+  const absOffset = Math.abs(offsetMath);
+  if (absOffset <= threshold) return 0;
+  return Math.sign(offsetMath) * (absOffset - threshold);
+}
 
-  const dxPx = Math.abs(mathX - drag.startMathX) * scale;
-  const dyPx = Math.abs(mathY - drag.startMathY) * scale;
-  if (Math.max(dxPx, dyPx) < 6 * devicePixelRatio) return null;
-
-  const shearSlope = Math.sqrt(3);
-  if (drag.handle === 'e' || drag.handle === 'w') {
-    if (dxPx >= dyPx) drag.mode = 'resize';
-    else if (dyPx >= dxPx * shearSlope) drag.mode = 'shear';
-  } else {
-    if (dyPx >= dxPx) drag.mode = 'resize';
-    else if (dxPx >= dyPx * shearSlope) drag.mode = 'shear';
-  }
-  return drag.mode || null;
+function sideShearOffsetForCursor(drag, mathX, mathY) {
+  const dx = mathX - drag.startMathX;
+  const dy = mathY - drag.startMathY;
+  return (drag.handle === 'e' || drag.handle === 'w')
+    ? snapShearOffsetMath(dy)
+    : snapShearOffsetMath(dx);
 }
 
 function shearParamsForCursor(drag, mathX, mathY) {
@@ -5300,6 +6302,27 @@ function shearParamsForCursor(drag, mathX, mathY) {
       axis: 'horizontal',
       k: drag.handle === 'n' ? dx / h : -dx / h,
       fixedY: drag.handle === 'n' ? b.bottom : b.top,
+    };
+  }
+  return null;
+}
+
+function shearParamsForSideOffset(handle, bounds, offset) {
+  if (!bounds || Math.abs(offset) < 1e-10) return null;
+  const w = bounds.right - bounds.left;
+  const h = bounds.top - bounds.bottom;
+  if ((handle === 'e' || handle === 'w') && Math.abs(w) >= 1e-9) {
+    return {
+      axis: 'vertical',
+      k: handle === 'e' ? offset / w : -offset / w,
+      fixedX: handle === 'e' ? bounds.left : bounds.right,
+    };
+  }
+  if ((handle === 'n' || handle === 's') && Math.abs(h) >= 1e-9) {
+    return {
+      axis: 'horizontal',
+      k: handle === 'n' ? offset / h : -offset / h,
+      fixedY: handle === 'n' ? bounds.bottom : bounds.top,
     };
   }
   return null;
@@ -5332,6 +6355,19 @@ function shearGuideForCursor(drag, mathX, mathY) {
     };
   }
   return null;
+}
+
+function transformSelectionCrossbeamGuide(drag, transformPoint) {
+  const b = drag.origFrameBounds || drag.origBounds;
+  if (!b) return null;
+  const midX = (b.left + b.right) * 0.5;
+  const midY = (b.bottom + b.top) * 0.5;
+  return {
+    crossbeams: [
+      [transformPoint(new Cx(b.left, midY)), transformPoint(new Cx(b.right, midY))],
+      [transformPoint(new Cx(midX, b.bottom)), transformPoint(new Cx(midX, b.top))],
+    ],
+  };
 }
 
 function shearPointForParams(pt, params) {
@@ -5455,7 +6491,21 @@ function multiplyMatrix2(a, b) {
   ];
 }
 
-function applyTextShearFromParams(anim, drag, params, transformPoint) {
+function shearCanvasMatrixForParams(params) {
+  return params.axis === 'vertical'
+    ? [[1, 0], [-params.k, 1]]
+    : [[1, -params.k], [0, 1]];
+}
+
+function resizeCanvasMatrixForBounds(origBounds, nextBounds) {
+  const ow = origBounds.right - origBounds.left;
+  const oh = origBounds.top - origBounds.bottom;
+  const sx = Math.abs(ow) < 1e-9 ? 1 : (nextBounds.right - nextBounds.left) / ow;
+  const sy = Math.abs(oh) < 1e-9 ? 1 : (nextBounds.top - nextBounds.bottom) / oh;
+  return [[sx, 0], [0, sy]];
+}
+
+function applyTextCanvasLinearTransform(anim, drag, canvasMatrix, transformPoint) {
   const oldMatrix = textCanvasLinearMatrixFromValues(
     drag.origRotation ?? 0,
     drag.origTextScaleX ?? 1,
@@ -5463,10 +6513,7 @@ function applyTextShearFromParams(anim, drag, params, transformPoint) {
     drag.origTextShearX ?? 0,
     drag.origTextShearY ?? 0
   );
-  const shearMatrix = params.axis === 'vertical'
-    ? [[1, 0], [-params.k, 1]]
-    : [[1, -params.k], [0, 1]];
-  const nextMatrix = multiplyMatrix2(shearMatrix, oldMatrix);
+  const nextMatrix = multiplyMatrix2(canvasMatrix, oldMatrix);
   const rotation = drag.origRotation ?? 0;
   const theta = -rotation;
   const c = Math.cos(theta), s = Math.sin(theta);
@@ -5482,6 +6529,10 @@ function applyTextShearFromParams(anim, drag, params, transformPoint) {
   anim.textShearY = q10 / sx;
   anim.textShearX = q01 / sy;
   anim.anchors = drag.origAnchors.map(transformPoint);
+}
+
+function applyTextShearFromParams(anim, drag, params, transformPoint) {
+  applyTextCanvasLinearTransform(anim, drag, shearCanvasMatrixForParams(params), transformPoint);
 }
 
 function applyShearForCursor(drag, mathX, mathY) {
@@ -5536,13 +6587,90 @@ function applyShearForCursor(drag, mathX, mathY) {
   return true;
 }
 
+function applySideResizeShearForCursor(drag, mathX, mathY) {
+  const nextBounds = resizeBoundsForCursor(drag, mathX, mathY);
+  const shearOffset = sideShearOffsetForCursor(drag, mathX, mathY);
+  const params = shearParamsForSideOffset(drag.handle, nextBounds, shearOffset);
+
+  if (!params) {
+    drag.anim.selectionGuideShear = null;
+    applyResizeBounds(drag, nextBounds);
+    return true;
+  }
+
+  const { anim, origKind, origBounds, origAnchors, origSegs } = drag;
+  const resizePoint = pt => transformPointInBounds(pt, origBounds, nextBounds);
+  const transformPoint = pt => shearPointForParams(resizePoint(pt), params);
+  anim.selectionGuideShear = transformSelectionCrossbeamGuide(drag, transformPoint);
+
+  if (origKind === 'text') {
+    const resizeMatrix = resizeCanvasMatrixForBounds(origBounds, nextBounds);
+    const shearMatrix = shearCanvasMatrixForParams(params);
+    applyTextCanvasLinearTransform(anim, drag, multiplyMatrix2(shearMatrix, resizeMatrix), transformPoint);
+    return true;
+  }
+
+  if (origKind === 'line') {
+    anim.kind = 'line';
+    anim.closed = false;
+    anim.rotation = drag.origRotation ?? 0;
+    anim.anchors = origAnchors.map(transformPoint);
+    anim.segments = [];
+    return true;
+  }
+
+  if (origKind === 'rectangle' || origKind === 'circle' || origKind === 'ellipse') {
+    const path = primitivePathForDrag(drag);
+    if (!path) return false;
+    anim.kind = path.kind;
+    anim.closed = path.closed;
+    anim.rotation = 0;
+    anim.anchors = path.anchors.map(transformPoint);
+    anim.segments = path.segments.map(seg => transformResizeSeg(seg, transformPoint));
+    anim.anchorLocked = anim.anchors.map(() => !!path.locked);
+    anim.activeSegments = new Set();
+    anim.expandedAnchors = new Set();
+    anim.expandedArcs = new Set();
+    recompileAnim(anim);
+    return true;
+  }
+
+  anim.kind = origKind;
+  anim.closed = !!drag.origClosed;
+  anim.rotation = drag.origRotation ?? 0;
+  anim.anchors = origAnchors.map(transformPoint);
+  anim.segments = origSegs.map(seg => transformResizeSeg(seg, transformPoint));
+  anim.anchorLocked = drag.origAnchorLocked ? [...drag.origAnchorLocked] : [];
+  recompileAnim(anim);
+  return true;
+}
+
 function applyResizeOrShearForCursor(drag, mathX, mathY) {
-  const mode = resizeDragModeForCursor(drag, mathX, mathY);
-  if (!mode) return false;
-  if (mode === 'shear') return applyShearForCursor(drag, mathX, mathY);
+  if (drag.groupId != null) return applyGroupResizeOrShearForCursor(drag, mathX, mathY);
+  if (isSideResizeHandle(drag.handle)) return applySideResizeShearForCursor(drag, mathX, mathY);
   drag.anim.selectionGuideShear = null;
   const nextBounds = resizeBoundsForCursor(drag, mathX, mathY);
   applyResizeBounds(drag, nextBounds);
+  return true;
+}
+
+function applyGroupResizeOrShearForCursor(drag, mathX, mathY) {
+  const nextBounds = resizeBoundsForCursor(drag, mathX, mathY);
+  const shearOffset = isSideResizeHandle(drag.handle) ? sideShearOffsetForCursor(drag, mathX, mathY) : 0;
+  const params = shearParamsForSideOffset(drag.handle, nextBounds, shearOffset);
+  const resizePoint = pt => transformPointInBounds(pt, drag.origBounds, nextBounds);
+  const transformPoint = params
+    ? pt => shearPointForParams(resizePoint(pt), params)
+    : resizePoint;
+  groupSelectionGuideShear = params ? transformSelectionCrossbeamGuide(drag, transformPoint) : null;
+  const resizeMatrix = resizeCanvasMatrixForBounds(drag.origBounds, nextBounds);
+  const canvasMatrix = params
+    ? multiplyMatrix2(shearCanvasMatrixForParams(params), resizeMatrix)
+    : resizeMatrix;
+  const forcePath = !!params || isSideResizeHandle(drag.handle);
+  for (const state of drag.origStates) {
+    applyPointTransformFromState(state, transformPoint, { canvasMatrix, forcePath });
+  }
   return true;
 }
 
@@ -5628,8 +6756,13 @@ function applyResizeBounds(drag, nextBounds) {
     const isCircle = Math.abs(rx - ry) <= 1e-7;
     anim.kind = isCircle ? 'circle' : 'ellipse';
     anim.rotation = drag.origRotation ?? animRotation(anim);
-    anim.anchors[0] = new Cx(cx, cy);
-    anim.anchors[1] = isCircle ? new Cx(cx + rx, cy) : new Cx(cx + rx, cy + ry);
+    anim.closed = false;
+    anim.anchors = [
+      new Cx(cx, cy),
+      isCircle ? new Cx(cx + rx, cy) : new Cx(cx + rx, cy + ry),
+    ];
+    anim.segments = [];
+    anim.anchorLocked = [];
     return;
   }
 
@@ -5655,7 +6788,24 @@ function rotationCenterForAnim(anim) {
   return new Cx(mx, my);
 }
 
+function rotationCenterForGroup(groupId) {
+  const bounds = groupCanvasBounds(groupId);
+  if (!bounds) return null;
+  const [mx, my] = toMath((bounds.left + bounds.right) * 0.5, (bounds.top + bounds.bottom) * 0.5);
+  return new Cx(mx, my);
+}
+
 function applyRotationDelta(drag, delta) {
+  if (drag.groupId != null) {
+    for (const state of drag.origStates) {
+      applyPointTransformFromState(
+        state,
+        pt => rotateMathPoint(pt, drag.center, delta),
+        { rotationDelta: delta }
+      );
+    }
+    return;
+  }
   const { anim, center, origRotation, origAnchors, origSegs } = drag;
   const kind = animKind(anim);
   if (isTextAnim(anim)) {
@@ -5694,7 +6844,7 @@ function drawSelectionSideActionButton(btn, active) {
   ctx.fillRect(btn.x, btn.y, btn.w, btn.h);
 
   ctx.globalAlpha = active ? 0.78 : 0.56;
-  ctx.strokeStyle = active ? CANVAS_TOOL_COLOR : CANVAS_CONTROL_IDLE_COLOR;
+  ctx.strokeStyle = active ? CANVAS_BUTTON_COLOR : CANVAS_BUTTON_IDLE_COLOR;
   ctx.lineWidth = (active ? 1.4 : 1) * dpr;
   ctx.strokeRect(btn.x, btn.y, btn.w, btn.h);
 
@@ -5705,7 +6855,7 @@ function drawSelectionSideActionButton(btn, active) {
   ctx.stroke();
 
   ctx.globalAlpha = active ? 0.9 : 0.7;
-  ctx.fillStyle = active ? CANVAS_TOOL_COLOR : CANVAS_CONTROL_IDLE_COLOR;
+  ctx.fillStyle = active ? CANVAS_BUTTON_COLOR : CANVAS_BUTTON_IDLE_COLOR;
   ctx.font = `700 ${12 * dpr}px sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -5762,6 +6912,18 @@ function drawSelectionCrossbeams(anim, frame) {
   const guide = anim.selectionGuideShear;
 
   ctx.beginPath();
+  if (guide?.crossbeams) {
+    for (const beam of guide.crossbeams) {
+      if (!beam || beam.length < 2) continue;
+      const p0 = toCanvas(beam[0].re, beam[0].im);
+      const p1 = toCanvas(beam[1].re, beam[1].im);
+      ctx.moveTo(p0[0], p0[1]);
+      ctx.lineTo(p1[0], p1[1]);
+    }
+    ctx.stroke();
+    return;
+  }
+
   if (guide?.frameBounds && guide?.params) {
     const b = guide.frameBounds;
     const midX = (b.left + b.right) * 0.5;
@@ -5801,7 +6963,8 @@ function drawSelectionCrossbeams(anim, frame) {
 }
 
 function drawSelectedObjectBounds(anim) {
-  if (selectedId !== anim.id && editModeAnimId !== anim.id) return;
+  const groupCandidate = groupSelectionMode && groupCandidateIds.has(anim.id);
+  if (selectedId !== anim.id && editModeAnimId !== anim.id && !groupCandidate) return;
   const arcSelected = hasActiveArcSelection(anim);
   const frame = selectionFrameMetrics(anim);
   if (!frame) return;
@@ -5829,9 +6992,14 @@ function drawSelectedObjectBounds(anim) {
   ctx.globalAlpha = 0.3;
   ctx.strokeRect(outerX - extend, outerY - extend, outerW + extend * 2, outerH + extend * 2);
 
+  if (groupCandidate) {
+    ctx.restore();
+    return;
+  }
+
   if (!arcSelected) {
     ctx.shadowBlur = 0;
-    ctx.lineWidth = 2 * dpr;
+    ctx.lineWidth = 1 * dpr;
     ctx.globalAlpha = 0.32;
     drawSelectionCrossbeams(anim, frame);
 
@@ -5840,7 +7008,7 @@ function drawSelectedObjectBounds(anim) {
       const wheelActive = rotateDrag?.anim === anim || rotateHover?.anim === anim;
       if (wheel && wheel.r > 0) {
         ctx.strokeStyle = wheelActive ? CANVAS_TOOL_COLOR : CANVAS_CONTROL_IDLE_COLOR;
-        ctx.lineWidth = (wheelActive ? 2.4 : 1.4) * dpr;
+        ctx.lineWidth = (wheelActive ? 2.4 : 1.0) * dpr;
         ctx.globalAlpha = wheelActive ? 0.62 : 0.48;
         ctx.shadowBlur = wheelActive ? 6 * dpr : 0;
         ctx.shadowColor = CANVAS_TOOL_COLOR;
@@ -5850,7 +7018,7 @@ function drawSelectedObjectBounds(anim) {
       }
 
       ctx.shadowBlur = 0;
-      ctx.strokeStyle = (resizeDrag?.anim === anim || resizeHover?.anim === anim) ? CANVAS_TOOL_COLOR : CANVAS_CONTROL_IDLE_COLOR;
+      ctx.strokeStyle = (resizeDrag?.anim === anim || resizeHover?.anim === anim) ? CANVAS_BUTTON_COLOR : CANVAS_BUTTON_IDLE_COLOR;
       ctx.beginPath();
       for (const seg of selectionResizeSegments(anim)) {
         ctx.moveTo(seg.from[0], seg.from[1]);
@@ -5860,7 +7028,72 @@ function drawSelectedObjectBounds(anim) {
       ctx.globalAlpha = (resizeDrag?.anim === anim || resizeHover?.anim === anim) ? 0.62 : 0.52;
       ctx.stroke();
     }
-    drawSelectionSideActionButtons(anim);
+  }
+  ctx.shadowBlur = 0;
+  drawSelectionSideActionButtons(anim);
+  ctx.restore();
+}
+
+function drawSelectedGroupBounds() {
+  if (!isGroupSelectionActive()) return;
+  const frame = groupSelectionFrameMetrics(selectedGroupId);
+  if (!frame) return;
+  const dpr = devicePixelRatio;
+  const { x, y, w, h, outerX, outerY, outerW, outerH, extend } = frame;
+
+  ctx.save();
+  ctx.fillStyle = CANVAS_TOOL_COLOR;
+  ctx.globalAlpha = 0.045;
+  ctx.fillRect(x, y, w, h);
+
+  ctx.strokeStyle = CANVAS_TOOL_COLOR;
+  ctx.lineWidth = 1.4 * dpr;
+  ctx.globalAlpha = 0.56;
+  ctx.shadowBlur = 8 * dpr;
+  ctx.shadowColor = CANVAS_TOOL_COLOR;
+  ctx.strokeRect(x, y, w, h);
+
+  ctx.shadowBlur = 0;
+  ctx.lineWidth = 0.9 * dpr;
+  ctx.globalAlpha = 0.3;
+  ctx.strokeRect(outerX, outerY, outerW, outerH);
+
+  ctx.lineWidth = 2 * dpr;
+  ctx.globalAlpha = 0.34;
+  ctx.strokeRect(outerX - extend, outerY - extend, outerW + extend * 2, outerH + extend * 2);
+
+  ctx.lineWidth = 1 * dpr;
+  ctx.globalAlpha = 0.32;
+  drawSelectionCrossbeams({ selectionGuideShear: groupSelectionGuideShear }, frame);
+
+  const wheel = groupSelectionRotationWheel(selectedGroupId);
+  const wheelActive = rotateDrag?.groupId === selectedGroupId || rotateHover?.groupId === selectedGroupId;
+  if (wheel && wheel.r > 0) {
+    ctx.strokeStyle = wheelActive ? CANVAS_TOOL_COLOR : CANVAS_CONTROL_IDLE_COLOR;
+    ctx.lineWidth = (wheelActive ? 2.4 : 1.0) * dpr;
+    ctx.globalAlpha = wheelActive ? 0.62 : 0.48;
+    ctx.shadowBlur = wheelActive ? 6 * dpr : 0;
+    ctx.shadowColor = CANVAS_TOOL_COLOR;
+    ctx.beginPath();
+    ctx.arc(wheel.cx, wheel.cy, wheel.r, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = (resizeDrag?.groupId === selectedGroupId || resizeHover?.groupId === selectedGroupId) ? CANVAS_BUTTON_COLOR : CANVAS_BUTTON_IDLE_COLOR;
+  ctx.beginPath();
+  for (const seg of groupSelectionResizeSegments(selectedGroupId)) {
+    ctx.moveTo(seg.from[0], seg.from[1]);
+    ctx.lineTo(seg.to[0], seg.to[1]);
+  }
+  ctx.lineWidth = 1.8 * dpr;
+  ctx.globalAlpha = (resizeDrag?.groupId === selectedGroupId || resizeHover?.groupId === selectedGroupId) ? 0.62 : 0.52;
+  ctx.stroke();
+
+  ctx.shadowBlur = 0;
+  for (const btn of groupSelectionSideActionButtons(selectedGroupId)) {
+    const active = sideActionHover?.groupId === selectedGroupId && sideActionHover?.kind === btn.kind;
+    drawSelectionSideActionButton(btn, active);
   }
   ctx.restore();
 }
@@ -5881,6 +7114,7 @@ function drawAnimations() {
       }
     }
   }
+
 
   for (const anim of animations) {
     if (!anim.visible) continue;
@@ -6019,6 +7253,8 @@ function drawAnimations() {
     if (inEditMode) drawHandles(anim);
   }
 
+  drawSelectedGroupBounds();
+
   // Rubber-band selection rectangle
   if (rubberBand) {
     const dpr = devicePixelRatio;
@@ -6045,21 +7281,28 @@ function drawAnimations() {
 
 // Called during anchor/handle drag to keep inputs current
 function updateSidebarInputs(anim) {
-  const row = document.querySelector(`[data-anim-id="${anim.id}"]`);
-  if (!row) return;
+  const detail = document.querySelector(`[data-anim-id="${anim.id}"]`);
+  if (!detail) return;
   anim.anchors.forEach((anchor, i) => {
-    row.querySelectorAll(`[data-anchor-loc="${i}"]`).forEach(inp => {
-      if (document.activeElement !== inp) inp.value = formatCx(anchor);
+    detail.querySelectorAll(`[data-anchor-loc="${i}"]`).forEach(el => {
+      if (el.tagName === 'INPUT') { if (document.activeElement !== el) el.value = formatCx(anchor); }
+      else el.textContent = formatCoordPairHundredths(anchor);
     });
   });
   anim.segments.forEach((seg, i) => {
     if (!seg) return;
-    const h0inp = row.querySelector(`[data-seg-h0="${i}"]`);
-    const h1inp = row.querySelector(`[data-seg-h1="${i}"]`);
-    if (h0inp && document.activeElement !== h0inp) h0inp.value = formatCx(seg.h0);
-    if (h1inp && document.activeElement !== h1inp) h1inp.value = formatCx(seg.h1);
-    const eccSlider = row.querySelector(`[data-seg-ecc="${i}"]`);
-    const eccVal    = row.querySelector(`[data-seg-ecc-val="${i}"]`);
+    const h0el = detail.querySelector(`[data-seg-h0="${i}"]`);
+    const h1el = detail.querySelector(`[data-seg-h1="${i}"]`);
+    if (h0el) {
+      if (h0el.tagName === 'INPUT') { if (document.activeElement !== h0el) h0el.value = formatCx(seg.h0); }
+      else h0el.textContent = formatCoordPairHundredths(seg.h0);
+    }
+    if (h1el) {
+      if (h1el.tagName === 'INPUT') { if (document.activeElement !== h1el) h1el.value = formatCx(seg.h1); }
+      else h1el.textContent = formatCoordPairHundredths(seg.h1);
+    }
+    const eccSlider = detail.querySelector(`[data-seg-ecc="${i}"]`);
+    const eccVal    = detail.querySelector(`[data-seg-ecc-val="${i}"]`);
     if (eccSlider && document.activeElement !== eccSlider) {
       const pct = Math.round(eccentricityToPercent(seg.eccentricity));
       eccSlider.value = pct;
@@ -6188,6 +7431,96 @@ function appendReadOnlyRow(parent, lbl, val) {
   parent.appendChild(r);
 }
 
+function circleRadius(anim) {
+  const p0 = anim?.anchors?.[0], p1 = anim?.anchors?.[1];
+  return p0 && p1 ? Math.hypot(p1.re - p0.re, p1.im - p0.im) : 0;
+}
+
+function setCircleRadius(anim, radius) {
+  const center = anim?.anchors?.[0];
+  if (!center || !isFinite(radius) || radius < 0) return false;
+  const edge = anim.anchors[1];
+  let ux = 1, uy = 0;
+  if (edge) {
+    const dx = edge.re - center.re;
+    const dy = edge.im - center.im;
+    const len = Math.hypot(dx, dy);
+    if (len > 1e-12) {
+      ux = dx / len;
+      uy = dy / len;
+    }
+  }
+  anim.kind = 'circle';
+  anim.anchors[1] = new Cx(center.re + ux * radius, center.im + uy * radius);
+  anim.segments = [];
+  return true;
+}
+
+function appendCircleRadiusRow(parent, anim) {
+  const row = document.createElement('div');
+  row.className = 'tree-input-row';
+  const label = document.createElement('label');
+  label.textContent = 'Radius';
+  const input = document.createElement('input');
+  input.type = 'number';
+  input.min = '0';
+  input.step = 'any';
+  input.value = formatNumberHundredths(circleRadius(anim));
+  let lastCommitted = circleRadius(anim);
+
+  const parseRadius = () => {
+    const v = parseFloat(input.value);
+    return isFinite(v) && v >= 0 ? v : null;
+  };
+  const validate = () => {
+    const ok = parseRadius() !== null;
+    input.classList.toggle('error', !ok);
+    return ok;
+  };
+  const commit = () => {
+    const next = parseRadius();
+    if (next === null) {
+      input.value = formatNumberHundredths(lastCommitted);
+      input.classList.remove('error');
+      return false;
+    }
+    input.classList.remove('error');
+    if (Math.abs(next - lastCommitted) <= 1e-10) return true;
+    pushUndo();
+    setCircleRadius(anim, next);
+    lastCommitted = next;
+    saveProject();
+    renderAnimList();
+    draw();
+    return true;
+  };
+
+  input.addEventListener('input', validate);
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (validate()) commit();
+    } else if (e.key === 'Escape') {
+      input.value = formatNumberHundredths(lastCommitted);
+      input.classList.remove('error');
+      input.blur();
+    }
+  });
+  input.addEventListener('blur', commit);
+  row.append(label, input);
+  parent.appendChild(row);
+}
+
+function appendPrimitiveDetailRows(parent, anim) {
+  if (anim.kind === 'circle') {
+    const p0 = anim.anchors[0];
+    if (p0) appendReadOnlyRow(parent, 'Center', formatCoordPairHundredths(p0));
+    appendCircleRadiusRow(parent, anim);
+    return;
+  }
+  primitiveDetails(anim).forEach(([lbl, val]) => appendReadOnlyRow(parent, lbl, val));
+}
+
 function sameColor(a, b) {
   return (a || '').toLowerCase() === (b || '').toLowerCase();
 }
@@ -6289,104 +7622,82 @@ function appendSliderRow(parent, labelText, min, max, step, value, formatValue, 
 function appendColorExpansion(parent, anim) {
   if (colorEditTarget === 'fill' && !canFillAnim(anim)) colorEditTarget = 'outline';
   const fillEnabled = canFillAnim(anim);
+  const isOutline = colorEditTarget === 'outline';
   const fillActive = fillEnabled && !!animFillColor(anim);
+
   const root = document.createElement('div');
   root.className = 'color-expansion';
 
-  const outlineSection = document.createElement('div');
-  outlineSection.className = 'color-section';
-  const outlineHeader = document.createElement('div');
-  outlineHeader.className = 'color-section-title';
-  const outlineLabel = document.createElement('span');
-  outlineLabel.textContent = 'Outline';
-  const outlineSwatch = document.createElement('button');
-  outlineSwatch.className = 'color-target-swatch' + (colorEditTarget === 'outline' ? ' active' : '');
-  outlineSwatch.title = 'Edit outline color';
-  outlineSwatch.style.background = anim.color;
-  outlineSwatch.addEventListener('click', e => {
+  // ── Tab bar ──
+  const tabBar = document.createElement('div');
+  tabBar.className = 'color-tab-bar';
+
+  const outlineTab = document.createElement('button');
+  outlineTab.className = 'color-tab' + (isOutline ? ' active' : '');
+  outlineTab.textContent = 'Outline';
+  outlineTab.addEventListener('click', e => {
     e.stopPropagation();
     colorEditTarget = 'outline';
     renderAnimList();
   });
-  outlineHeader.append(outlineLabel, outlineSwatch);
-  outlineSection.appendChild(outlineHeader);
-  appendSliderRow(outlineSection, 'Thickness', 1, 10, 1, anim.thickness, v => `${Math.round(v)}`, v => {
-    anim.thickness = parseInt(v, 10);
-  });
-  appendSliderRow(outlineSection, 'Opacity', 0, 100, 1, Math.round(animOutlineOpacity(anim) * 100), v => `${Math.round(v)}%`, v => {
-    anim.outlineOpacity = clamp(parseFloat(v) / 100, 0, 1);
-  });
-  root.appendChild(outlineSection);
 
-  const fillSection = document.createElement('div');
-  fillSection.className = 'color-section' + (fillEnabled ? '' : ' disabled');
-  const fillHeader = document.createElement('div');
-  fillHeader.className = 'color-section-title';
-  const fillLabel = document.createElement('span');
-  fillLabel.textContent = 'Fill';
-  const fillSwatch = document.createElement('button');
-  fillSwatch.className = 'color-target-swatch' + (colorEditTarget === 'fill' ? ' active' : '') + (!animFillColor(anim) ? ' no-fill' : '');
-  fillSwatch.title = fillEnabled ? 'Edit fill color' : 'Fill unavailable';
-  fillSwatch.style.background = animFillColor(anim) || '#11111b';
-  fillSwatch.disabled = !fillEnabled;
-  fillSwatch.addEventListener('click', e => {
+  const fillTab = document.createElement('button');
+  fillTab.className = 'color-tab' + (!isOutline ? ' active' : '');
+  fillTab.textContent = 'Fill';
+  fillTab.disabled = !fillEnabled;
+  fillTab.addEventListener('click', e => {
     e.stopPropagation();
     if (!fillEnabled) return;
     colorEditTarget = 'fill';
     renderAnimList();
   });
-  fillHeader.append(fillLabel, fillSwatch);
-  fillSection.appendChild(fillHeader);
 
-  const fillControls = document.createElement('div');
-  fillControls.className = fillActive ? '' : 'color-controls-dim';
-  const styleRow = document.createElement('div');
-  styleRow.className = 'fill-style-row';
-  FILL_STYLES.forEach(({ key, title }) => {
-    const btn = document.createElement('button');
-    btn.className = 'fill-style-btn' + (animFillStyle(anim) === key ? ' active' : '');
-    btn.title = title;
-    btn.disabled = !fillActive;
-    btn.appendChild(makeFillStyleIcon(key));
-    btn.addEventListener('click', e => {
-      e.stopPropagation();
-      if (!fillActive) return;
-      if (animFillStyle(anim) !== key) {
-        pushUndo();
-        anim.fillStyle = key;
-        renderAnimList(); draw();
-      }
+  tabBar.append(outlineTab, fillTab);
+  root.appendChild(tabBar);
+
+  // ── Tab content panel ──
+  const panel = document.createElement('div');
+  panel.className = 'color-tab-content' + (!isOutline ? ' fill-active' : '');
+
+  if (isOutline) {
+    appendSliderRow(panel, 'Thickness', 1, 10, 1, anim.thickness ?? 2, v => `${Math.round(v)}`, v => {
+      anim.thickness = parseInt(v, 10);
     });
-    styleRow.appendChild(btn);
-  });
-  fillControls.appendChild(styleRow);
-  appendSliderRow(fillControls, 'Opacity', 0, 100, 1, Math.round(animFillOpacity(anim) * 100), v => `${Math.round(v)}%`, v => {
-    anim.fillOpacity = clamp(parseFloat(v) / 100, 0, 1);
-  }, !fillActive);
-  fillSection.appendChild(fillControls);
-  root.appendChild(fillSection);
+    appendSliderRow(panel, 'Opacity', 0, 100, 1, Math.round(animOutlineOpacity(anim) * 100), v => `${Math.round(v)}%`, v => {
+      anim.outlineOpacity = clamp(parseFloat(v) / 100, 0, 1);
+    });
+  } else {
+    const styleRow = document.createElement('div');
+    styleRow.className = 'fill-style-row';
+    if (!fillActive) styleRow.style.opacity = '0.45';
+    FILL_STYLES.forEach(({ key, title }) => {
+      const btn = document.createElement('button');
+      btn.className = 'fill-style-btn' + (animFillStyle(anim) === key ? ' active' : '');
+      btn.title = title;
+      btn.disabled = !fillActive;
+      btn.appendChild(makeFillStyleIcon(key));
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        if (!fillActive) return;
+        if (animFillStyle(anim) !== key) {
+          pushUndo();
+          anim.fillStyle = key;
+          renderAnimList(); draw();
+        }
+      });
+      styleRow.appendChild(btn);
+    });
+    panel.appendChild(styleRow);
+    appendSliderRow(panel, 'Opacity', 0, 100, 1, Math.round(animFillOpacity(anim) * 100), v => `${Math.round(v)}%`, v => {
+      anim.fillOpacity = clamp(parseFloat(v) / 100, 0, 1);
+    }, !fillActive);
+  }
 
-  const colorsSection = document.createElement('div');
-  colorsSection.className = 'color-section';
+  // Color swatches grid
   const swatches = document.createElement('div');
   swatches.className = 'color-menu-section';
-  appendColorMenuLabel(swatches, 'Colors');
-  if (colorEditTarget === 'fill' && fillEnabled) {
-    const noneOpt = document.createElement('button');
-    noneOpt.className = 'color-swatch-option no-fill' + (!animFillColor(anim) ? ' active' : '');
-    noneOpt.title = 'No fill';
-    noneOpt.addEventListener('click', e => {
-      e.stopPropagation();
-      if (animFillColor(anim)) {
-        pushUndo();
-        anim.fillColor = null;
-      }
-      renderAnimList(); draw();
-    });
-    swatches.appendChild(noneOpt);
-  }
-  appendPaletteSwatches(swatches, colorEditTarget === 'fill' ? animFillColor(anim) : anim.color, color => {
-    if (colorEditTarget === 'fill' && fillEnabled) {
+  appendPaletteSwatches(swatches, !isOutline ? animFillColor(anim) : anim.color, color => {
+    if (!isOutline && fillEnabled) {
       if (!sameColor(animFillColor(anim), color)) {
         pushUndo();
         anim.fillColor = color;
@@ -6398,13 +7709,770 @@ function appendColorExpansion(parent, anim) {
     }
     renderAnimList(); draw();
   });
-  colorsSection.appendChild(swatches);
-  root.appendChild(colorsSection);
+  panel.appendChild(swatches);
+
+  root.appendChild(panel);
   parent.appendChild(root);
 }
 
+function renderAnimThumbnail(anim, canvasEl) {
+  const dpr = window.devicePixelRatio || 1;
+  const PX = 48 * dpr;
+  canvasEl.width = PX; canvasEl.height = PX;
+  const tctx = canvasEl.getContext('2d');
+  tctx.clearRect(0, 0, PX, PX);
+  const color = anim.color || '#cdd6f4';
+
+  // Collect math-space sample points
+  const mathPts = [];
+  const addPt = (re, im) => { if (isFinite(re) && isFinite(im)) mathPts.push([re, im]); };
+
+  if (isTextAnim(anim)) {
+    const lines = textLines(anim);
+    const hasText = lines.some(line => line.trim().length > 0);
+    const displayLines = hasText ? lines : ['T'];
+    const basePx = hasText ? Math.max(1, anim.fontSize ?? 36) : 36;
+    const baseLineHeight = basePx * 1.2;
+    tctx.save();
+    tctx.font = `${hasText ? 600 : 700} ${basePx}px ${hasText ? 'sans-serif' : 'Georgia, serif'}`;
+    let textW = 1;
+    for (const line of displayLines) textW = Math.max(textW, tctx.measureText(line || ' ').width);
+    const textH = Math.max(baseLineHeight, displayLines.length * baseLineHeight);
+    const pad = 5 * dpr;
+    const fit = Math.min((PX - 2 * pad) / textW, (PX - 2 * pad) / textH);
+    const fontPx = Math.max(4 * dpr, basePx * fit);
+    const lineHeight = baseLineHeight * fit;
+    tctx.font = `${hasText ? 600 : 700} ${fontPx}px ${hasText ? 'sans-serif' : 'Georgia, serif'}`;
+    tctx.textAlign = 'center';
+    tctx.textBaseline = 'middle';
+    tctx.lineJoin = 'round';
+    tctx.lineCap = 'round';
+    tctx.translate(PX / 2, PX / 2);
+    tctx.rotate(-animRotation(anim));
+    tctx.transform(1, textShearY(anim), textShearX(anim), 1, 0, 0);
+    tctx.scale(textScaleX(anim), textScaleY(anim));
+    const startY = -(displayLines.length - 1) * lineHeight * 0.5;
+    const lineWidth = Math.max(0.45 * dpr, (anim.thickness ?? 1) * fit);
+    if (animOutlineOpacity(anim) > 0) {
+      tctx.strokeStyle = color;
+      tctx.lineWidth = lineWidth;
+      tctx.globalAlpha = hasText ? animOutlineOpacity(anim) : 0.8;
+      displayLines.forEach((line, i) => tctx.strokeText(line || ' ', 0, startY + i * lineHeight));
+    }
+    const fillCol = animFillColor(anim);
+    tctx.fillStyle = fillCol || color;
+    tctx.globalAlpha = fillCol ? animFillOpacity(anim) : (hasText ? animOutlineOpacity(anim) : 0.8);
+    displayLines.forEach((line, i) => tctx.fillText(line || ' ', 0, startY + i * lineHeight));
+    tctx.restore();
+    return;
+  }
+  if (isPrimitiveAnim(anim)) {
+    anim.anchors.forEach(a => { if (a) addPt(a.re, a.im); });
+    const p0 = anim.anchors[0], p1 = anim.anchors[1];
+    if (anim.kind === 'circle' && p0 && p1) {
+      const r = Math.hypot(p1.re - p0.re, p1.im - p0.im);
+      for (let i = 0; i <= 32; i++) { const a = (i / 32) * Math.PI * 2; addPt(p0.re + r * Math.cos(a), p0.im + r * Math.sin(a)); }
+    } else if (anim.kind === 'ellipse' && p0 && p1) {
+      const rx = Math.abs(p1.re - p0.re), ry = Math.abs(p1.im - p0.im);
+      for (let i = 0; i <= 32; i++) { const a = (i / 32) * Math.PI * 2; addPt(p0.re + rx * Math.cos(a), p0.im + ry * Math.sin(a)); }
+    }
+  } else {
+    anim.anchors.forEach(a => { if (a) addPt(a.re, a.im); });
+    for (const seg of anim.segments) {
+      if (!seg || !seg.compiled) continue;
+      for (let i = 0; i <= 24; i++) {
+        try { const pt = seg.compiled(0, i / 24, {}); if (pt) addPt(pt.re, pt.im); } catch (_) {}
+      }
+    }
+  }
+
+  if (mathPts.length === 0) return;
+
+  // Bounding box + transform
+  let minRe = Infinity, maxRe = -Infinity, minIm = Infinity, maxIm = -Infinity;
+  for (const [re, im] of mathPts) {
+    if (re < minRe) minRe = re; if (re > maxRe) maxRe = re;
+    if (im < minIm) minIm = im; if (im > maxIm) maxIm = im;
+  }
+  const pad = 5 * dpr;
+  const rangeRe = maxRe - minRe || 1, rangeIm = maxIm - minIm || 1;
+  const drawW = PX - 2 * pad, drawH = PX - 2 * pad;
+  const ts = Math.min(drawW / rangeRe, drawH / rangeIm);
+  const ox = pad + (drawW - rangeRe * ts) / 2;
+  const oy = pad + (drawH - rangeIm * ts) / 2;
+  const T = (re, im) => [ox + (re - minRe) * ts, PX - oy - (im - minIm) * ts];
+
+  const fillCol = animFillColor(anim);
+  const fillAlpha = fillCol ? animFillOpacity(anim) : 0;
+  tctx.strokeStyle = color;
+  tctx.lineWidth = 1.5 * dpr; tctx.lineCap = 'round'; tctx.lineJoin = 'round';
+
+  if (isPrimitiveAnim(anim)) {
+    const p0 = anim.anchors[0], p1 = anim.anchors[1];
+    if (!p0 || !p1) return;
+    tctx.beginPath();
+    if (anim.kind === 'line') {
+      const [x0,y0] = T(p0.re, p0.im), [x1,y1] = T(p1.re, p1.im);
+      tctx.moveTo(x0,y0); tctx.lineTo(x1,y1);
+      tctx.globalAlpha = 0.9; tctx.stroke();
+    } else if (anim.kind === 'rectangle') {
+      const [x0,y0] = T(Math.min(p0.re,p1.re), Math.max(p0.im,p1.im));
+      const [x1,y1] = T(Math.max(p0.re,p1.re), Math.min(p0.im,p1.im));
+      tctx.rect(x0, y0, x1-x0, y1-y0);
+      if (fillCol) { tctx.fillStyle = fillCol; tctx.globalAlpha = fillAlpha; tctx.fill(); }
+      tctx.globalAlpha = 0.9; tctx.stroke();
+    } else if (anim.kind === 'circle') {
+      const r = Math.hypot(p1.re-p0.re, p1.im-p0.im);
+      const [cx,cy] = T(p0.re, p0.im);
+      tctx.arc(cx, cy, r * ts, 0, Math.PI*2);
+      if (fillCol) { tctx.fillStyle = fillCol; tctx.globalAlpha = fillAlpha; tctx.fill(); }
+      tctx.globalAlpha = 0.9; tctx.stroke();
+    } else if (anim.kind === 'ellipse') {
+      const [cx,cy] = T(p0.re, p0.im);
+      tctx.ellipse(cx, cy, Math.abs(p1.re-p0.re)*ts, Math.abs(p1.im-p0.im)*ts, 0, 0, Math.PI*2);
+      if (fillCol) { tctx.fillStyle = fillCol; tctx.globalAlpha = fillAlpha; tctx.fill(); }
+      tctx.globalAlpha = 0.9; tctx.stroke();
+    }
+  } else if (anim.anchors.length === 1 && anim.segments.length === 0) {
+    const [x,y] = T(anim.anchors[0].re, anim.anchors[0].im);
+    tctx.beginPath(); tctx.arc(x, y, 3.5 * dpr, 0, Math.PI*2);
+    tctx.globalAlpha = 0.9; tctx.fillStyle = color; tctx.fill();
+  } else {
+    const loop = findLoopRange(anim);
+    if (loop && anim.closed && fillCol) {
+      tctx.beginPath(); let started = false;
+      for (let si = loop.loopStart; si < loop.loopEnd; si++) {
+        const seg = anim.segments[si];
+        if (!seg || !seg.compiled || seg.visible === false) continue;
+        for (let i = 0; i <= 32; i++) {
+          try {
+            const pt = seg.compiled(0, i / 32, {});
+            if (!pt) continue;
+            const [x,y] = T(pt.re, pt.im);
+            if (!started) { tctx.moveTo(x,y); started = true; } else tctx.lineTo(x,y);
+          } catch (_) {}
+        }
+      }
+      tctx.closePath();
+      tctx.fillStyle = fillCol; tctx.globalAlpha = fillAlpha; tctx.fill();
+    }
+    tctx.globalAlpha = 0.9;
+    for (const seg of anim.segments) {
+      if (!seg || !seg.compiled || seg.visible === false) continue;
+      tctx.beginPath(); let first = true;
+      for (let i = 0; i <= 32; i++) {
+        try {
+          const pt = seg.compiled(0, i / 32, {});
+          if (!pt) continue;
+          const [x,y] = T(pt.re, pt.im);
+          if (first) { tctx.moveTo(x,y); first = false; } else tctx.lineTo(x,y);
+        } catch (_) {}
+      }
+      tctx.stroke();
+    }
+    if (anim.segments.length === 0 && anim.anchors.length > 1) {
+      tctx.beginPath(); tctx.setLineDash([3*dpr, 3*dpr]);
+      anim.anchors.forEach((a, i) => {
+        const [x,y] = T(a.re, a.im);
+        i === 0 ? tctx.moveTo(x,y) : tctx.lineTo(x,y);
+      });
+      tctx.globalAlpha = 0.9; tctx.stroke(); tctx.setLineDash([]);
+    }
+  }
+}
+
+function objectTileInsertionIndexFromEvent(e) {
+  const tilesEl = document.getElementById('object-tiles');
+  let wrap = e.target.closest && e.target.closest('.obj-tile-wrap[data-index]');
+  const wraps = [...tilesEl.querySelectorAll('.obj-tile-wrap[data-index]')];
+  if (!wrap || !tilesEl.contains(wrap)) {
+    if (!wraps.length) return animations.length;
+    const firstRect = wraps[0].getBoundingClientRect();
+    const lastRect = wraps[wraps.length - 1].getBoundingClientRect();
+    if (e.clientY < firstRect.top) return 0;
+    if (e.clientY > lastRect.bottom) return animations.length;
+    let best = wraps[0], bestDist = Infinity;
+    for (const candidate of wraps) {
+      const rect = candidate.getBoundingClientRect();
+      const cx = rect.left + rect.width * 0.5;
+      const cy = rect.top + rect.height * 0.5;
+      const dist = Math.hypot(e.clientX - cx, e.clientY - cy);
+      if (dist < bestDist) { best = candidate; bestDist = dist; }
+    }
+    wrap = best;
+  }
+  const idx = parseInt(wrap.dataset.index, 10);
+  if (!isFinite(idx)) return animations.length;
+  const rect = wrap.getBoundingClientRect();
+  const after = e.clientX >= rect.left + rect.width * 0.5;
+  return clamp(idx + (after ? 1 : 0), 0, animations.length);
+}
+
+function clearObjectTileDropCues() {
+  document.querySelectorAll('.obj-tile-wrap.drop-before, .obj-tile-wrap.drop-after').forEach(el => {
+    el.classList.remove('drop-before', 'drop-after');
+  });
+}
+
+function updateObjectTileDropCue(insertionIndex) {
+  clearObjectTileDropCues();
+  const wraps = [...document.querySelectorAll('#object-tiles .obj-tile-wrap[data-index]')];
+  if (!wraps.length) return;
+  const idx = clamp(Math.round(insertionIndex), 0, wraps.length);
+  if (idx >= wraps.length) wraps[wraps.length - 1].classList.add('drop-after');
+  else wraps[idx].classList.add('drop-before');
+}
+
+function moveAnimationInStack(fromIndex, insertionIndex) {
+  if (fromIndex < 0 || fromIndex >= animations.length) return false;
+  const source = animations[fromIndex];
+  let toIndex = clamp(Math.round(insertionIndex), 0, animations.length);
+  if (toIndex > fromIndex) toIndex--;
+  if (toIndex === fromIndex) return false;
+
+  const tilesEl = document.getElementById('object-tiles');
+  const tileScrollTop = tilesEl ? tilesEl.scrollTop : 0;
+  pushUndo();
+  animations.splice(fromIndex, 1);
+  animations.splice(toIndex, 0, source);
+  renumberAnimationsByStackOrder();
+  clearObjectTileDropCues();
+  renderAnimList();
+  const nextTilesEl = document.getElementById('object-tiles');
+  if (nextTilesEl && selectedId == null && editModeAnimId == null) {
+    nextTilesEl.scrollTop = tileScrollTop;
+    updateTilesMoreIndicator();
+  }
+  draw();
+  updateCursor();
+  return true;
+}
+
+function handleObjectTileDragOver(e) {
+  if (!objectTileDrag) return;
+  e.preventDefault();
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+  const tilesEl = document.getElementById('object-tiles');
+  if (tilesEl) {
+    const rect = tilesEl.getBoundingClientRect();
+    const edge = 28;
+    if (e.clientY < rect.top + edge) tilesEl.scrollTop -= 10;
+    else if (e.clientY > rect.bottom - edge) tilesEl.scrollTop += 10;
+  }
+  objectTileDrag.insertionIndex = objectTileInsertionIndexFromEvent(e);
+  updateObjectTileDropCue(objectTileDrag.insertionIndex);
+}
+
+function handleObjectTileDrop(e) {
+  if (!objectTileDrag) return;
+  e.preventDefault();
+  const fromIndex = animations.findIndex(anim => anim.id === objectTileDrag.animId);
+  const insertionIndex = objectTileInsertionIndexFromEvent(e);
+  objectTileDrag = null;
+  suppressTileClickUntil = Date.now() + 250;
+  clearObjectTileDropCues();
+  moveAnimationInStack(fromIndex, insertionIndex);
+}
+
+function renderGroupDetail(detailEl, groupId) {
+  const members = groupMembers(groupId);
+  if (!members.length) { selectedGroupId = null; setView('tiles'); return; }
+  setView('detail');
+  detailEl.dataset.groupId = String(groupId);
+
+  const header = document.createElement('div');
+  header.className = 'detail-header';
+  const leftGroup = document.createElement('div');
+  leftGroup.className = 'detail-header-left';
+  const numSpan = document.createElement('span');
+  numSpan.className = 'detail-num';
+  numSpan.textContent = 'Group';
+  const label = document.createElement('span');
+  label.style.cssText = 'font-size:0.78rem;color:#a6adc8;';
+  label.textContent = `${members.length} objects`;
+  leftGroup.append(numSpan, label);
+
+  const rightGroup = document.createElement('div');
+  rightGroup.className = 'detail-header-right';
+  const ungroupBtn = document.createElement('button');
+  ungroupBtn.className = 'anim-icon-btn';
+  ungroupBtn.title = 'Ungroup';
+  ungroupBtn.textContent = 'U';
+  ungroupBtn.style.fontWeight = '700';
+  ungroupBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    ungroup(groupId);
+  });
+  const delBtn = document.createElement('button');
+  delBtn.className = 'anim-icon-btn anim-delete-btn';
+  delBtn.title = 'Delete group';
+  delBtn.textContent = '×';
+  delBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    deleteGroup(groupId);
+  });
+  rightGroup.append(ungroupBtn, delBtn);
+  header.append(leftGroup, rightGroup);
+  detailEl.appendChild(header);
+
+  const body = document.createElement('div');
+  body.style.padding = '6px 8px';
+  appendReadOnlyRow(body, 'Objects', members.map(a => objectLabel(a)).join(', '));
+  appendReadOnlyRow(body, 'Layer span', `${animations.indexOf(members[0]) + 1} - ${animations.indexOf(members[members.length - 1]) + 1}`);
+  detailEl.appendChild(body);
+  updateToolPanel();
+}
+
+function updateGroupObjectsButton() {
+  const btn = document.getElementById('group-objects-btn');
+  if (!btn) return;
+  btn.className = '';
+  btn.disabled = false;
+  const objectDetailOpen = (selectedId != null || editModeAnimId != null) && selectedGroupId == null;
+  const shouldShow = groupSelectionMode || selectedGroupId != null || !objectDetailOpen;
+  btn.style.display = shouldShow ? 'block' : 'none';
+  if (!shouldShow) return;
+
+  if (selectedGroupId != null) {
+    btn.textContent = 'Ungroup';
+    btn.classList.add('is-ungroup');
+    return;
+  }
+
+  if (groupSelectionMode) {
+    if (groupCandidateIds.size >= 2) {
+      btn.textContent = 'Group';
+      btn.classList.add('is-ready');
+    } else {
+      btn.textContent = 'Select two or more objects and then click Group.';
+      btn.disabled = true;
+    }
+    return;
+  }
+
+  btn.textContent = 'Group Objects';
+  if (animations.filter(a => !a.inPlacementMode).length < 2) btn.disabled = true;
+}
+
 function renderAnimList() {
-  const list = document.getElementById('anim-list');
+  // ── Tiles ──
+  const tilesEl = document.getElementById('object-tiles');
+  const detailGroupId = isGroupSelectionActive() ? selectedGroupId : null;
+  const detailAnim = animations.find(a => a.id === selectedId) ||
+                     animations.find(a => a.id === editModeAnimId);
+  tilesEl.innerHTML = '';
+  if (animations.length === 0) {
+    const hint = document.createElement('p');
+    hint.className = 'placement-hint';
+    hint.style.gridColumn = '1 / -1';
+    hint.textContent = 'To get started, select a tool (above).';
+    tilesEl.appendChild(hint);
+  }
+  animations.forEach((anim, idx) => {
+    if (!anim.activeSegments) anim.activeSegments = new Set();
+    if (!anim.expandedArcs) anim.expandedArcs = new Set();
+    if (!anim.expandedAnchors) anim.expandedAnchors = new Set();
+    const isSelected = selectedId === anim.id || editModeAnimId === anim.id;
+    const wrap = document.createElement('div');
+    const grouped = objectGroupId(anim) != null;
+    const groupSelected = selectedGroupId != null && objectGroupId(anim) === selectedGroupId;
+    const groupCandidate = groupSelectionMode && groupCandidateIds.has(anim.id);
+    wrap.className = 'obj-tile-wrap'
+      + (grouped ? ' grouped' : '')
+      + (groupSelected ? ' group-selected' : '')
+      + (groupCandidate ? ' group-candidate' : '');
+    wrap.draggable = !anim.inPlacementMode;
+    wrap.dataset.animId = anim.id;
+    wrap.dataset.index = idx;
+    const label = document.createElement('div');
+    label.className = 'obj-tile-label';
+    label.textContent = idx + 1;
+    const tile = document.createElement('button');
+    tile.className = 'obj-tile' + (!anim.visible ? ' obj-tile-hidden' : '');
+    tile.title = objectLabel(anim);
+    tile.dataset.animId = anim.id;
+    if (isSelected) { tile.style.borderColor = '#cdd6f4'; tile.style.borderWidth = '2px'; }
+    const thumbCanvas = document.createElement('canvas');
+    thumbCanvas.draggable = false;
+    tile.appendChild(thumbCanvas);
+    renderAnimThumbnail(anim, thumbCanvas);
+    wrap.addEventListener('dragstart', e => {
+      if (anim.inPlacementMode) { e.preventDefault(); return; }
+      objectTileDrag = { animId: anim.id, fromIndex: idx, insertionIndex: idx };
+      suppressTileClickUntil = Date.now() + 250;
+      if (e.dataTransfer) {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', String(anim.id));
+      }
+      requestAnimationFrame(() => wrap.classList.add('dragging'));
+    });
+    wrap.addEventListener('dragend', () => {
+      objectTileDrag = null;
+      suppressTileClickUntil = Date.now() + 250;
+      wrap.classList.remove('dragging');
+      clearObjectTileDropCues();
+    });
+    tile.addEventListener('click', () => {
+      if (Date.now() < suppressTileClickUntil) return;
+      openColorMenuAnimId = null;
+      if (anim.inPlacementMode) { selectedId = anim.id; renderAnimList(); return; }
+      if (groupSelectionMode) {
+        toggleGroupCandidate(anim);
+        renderAnimList(); draw(); updateCursor();
+        return;
+      }
+      if (objectGroupId(anim) != null && selectedId !== anim.id) {
+        if (selectedGroupId === objectGroupId(anim)) drillSelectObject(anim);
+        else selectGroup(objectGroupId(anim));
+        renderAnimList(); draw(); updateCursor();
+        return;
+      }
+      const alreadySelected = selectedId === anim.id || editModeAnimId === anim.id;
+      if (alreadySelected) {
+        if (anim.activeSegments && anim.activeSegments.size > 0) {
+          // Arc selected → drop to object-level selection, stay in edit mode
+          anim.activeSegments = new Set();
+          anim.expandedArcs = new Set();
+        } else {
+          // Object selected, no arc → deselect entirely
+          selectedId = null;
+          exitEditMode();
+        }
+        renderAnimList(); draw(); updateCursor();
+        return;
+      }
+      selectObjectOrGroup(anim);
+      renderAnimList(); draw(); updateCursor();
+    });
+    wrap.append(label, tile);
+    tilesEl.appendChild(wrap);
+  });
+  // Set tile area height to show 1–8 rows based on object count
+  const _tileCount = animations.length;
+  const _tileRows = _tileCount === 0 ? 1 : (detailAnim || detailGroupId ? 1 : Math.min(8, Math.ceil(_tileCount / 5)));
+  _tilesVisibleRows = _tileRows;
+  tilesEl.style.height = (_tileRows * 67 + Math.max(0, _tileRows - 1) * 5 + 10) + 'px';
+  // Auto-scroll so the selected tile is always visible
+  const _focusId = selectedId ?? editModeAnimId ?? groupMembers(detailGroupId)[0]?.id;
+  const _selIdx = animations.findIndex(a => a.id === _focusId);
+  if (_selIdx >= 0) {
+    const _rowH = 72;
+    const _selRow = Math.floor(_selIdx / 5);
+    const _firstVis = Math.floor(tilesEl.scrollTop / _rowH);
+    const _lastVis = _firstVis + (_tileRows - 1);
+    if (_selRow < _firstVis) tilesEl.scrollTop = _selRow * _rowH;
+    else if (_selRow > _lastVis) tilesEl.scrollTop = (_selRow - _tileRows + 1) * _rowH;
+  }
+  updateTilesMoreIndicator();
+  updateGroupObjectsButton();
+
+  // ── Detail panel ──
+  const detailEl = document.getElementById('object-detail');
+  detailEl.innerHTML = '';
+  detailEl.removeAttribute('data-anim-id');
+  detailEl.removeAttribute('data-group-id');
+
+  if (detailGroupId != null) {
+    renderGroupDetail(detailEl, detailGroupId);
+    return;
+  }
+
+  const anim = detailAnim;
+  if (!anim) { updateToolPanel(); setView('tiles'); return; }
+  setView('detail');
+
+  if (!anim.activeSegments) anim.activeSegments = new Set();
+  if (!anim.expandedArcs) anim.expandedArcs = new Set();
+  if (!anim.expandedAnchors) anim.expandedAnchors = new Set();
+
+  detailEl.dataset.animId = String(anim.id);
+
+  // Header
+  const header = document.createElement('div');
+  header.className = 'detail-header';
+
+  // Left: number + identity thumbnail
+  const leftGroup = document.createElement('div');
+  leftGroup.className = 'detail-header-left';
+  const numSpan = document.createElement('span');
+  numSpan.className = 'detail-num';
+  numSpan.textContent = animations.indexOf(anim) + 1;
+  const thumbDiv = document.createElement('div');
+  thumbDiv.className = 'detail-thumb';
+  const thumbCanvas = document.createElement('canvas');
+  thumbDiv.appendChild(thumbCanvas);
+  renderAnimThumbnail(anim, thumbCanvas);
+  leftGroup.append(numSpan, thumbDiv);
+
+  // Right: color + hide + delete
+  const rightGroup = document.createElement('div');
+  rightGroup.className = 'detail-header-right';
+  const colorBtn = document.createElement('button');
+  colorBtn.className = 'anim-color-btn';
+  colorBtn.title = 'Change colors';
+  colorBtn.style.background = anim.color;
+  colorBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    const opening = openColorMenuAnimId !== anim.id;
+    clearSelectionShearGuides(selectedId === anim.id || editModeAnimId === anim.id ? anim : null);
+    selectedId = anim.id; editModeAnimId = anim.id;
+    anim.activeSegments = new Set();
+    openColorMenuAnimId = opening ? anim.id : null;
+    colorEditTarget = 'outline';
+    renderAnimList(); draw();
+  });
+  const visBtn = document.createElement('button');
+  visBtn.className = 'anim-icon-btn anim-vis-btn' + (!anim.visible ? ' is-hidden' : '');
+  visBtn.title = anim.visible ? 'Hide' : 'Show';
+  visBtn.appendChild(makeVisibilityIcon(anim.visible));
+  visBtn.addEventListener('click', e => {
+    e.stopPropagation(); pushUndo();
+    anim.visible = !anim.visible;
+    openColorMenuAnimId = null;
+    renderAnimList(); draw();
+  });
+  const delBtn = document.createElement('button');
+  delBtn.className = 'anim-icon-btn anim-delete-btn';
+  delBtn.title = 'Delete'; delBtn.textContent = '×';
+  delBtn.addEventListener('click', e => {
+    e.stopPropagation(); openColorMenuAnimId = null; deleteAnimation(anim.id);
+  });
+  rightGroup.append(colorBtn, visBtn, delBtn);
+
+  header.append(leftGroup, rightGroup);
+  detailEl.appendChild(header);
+
+  if (openColorMenuAnimId === anim.id) { appendColorExpansion(detailEl, anim); updateToolPanel(); return; }
+
+  if (anim.inPlacementMode) {
+    const hint = document.createElement('div');
+    hint.className = 'placement-hint';
+    hint.style.padding = '10px 12px';
+    hint.textContent = 'Click canvas to place anchors. Press Escape to finish.';
+    detailEl.appendChild(hint);
+    updateToolPanel(); return;
+  }
+
+  if (isTextAnim(anim)) {
+    const textArea = document.createElement('textarea');
+    textArea.className = 'text-edit-area';
+    textArea.dataset.textEditAnimId = String(anim.id);
+    textArea.value = anim.text ?? ''; textArea.placeholder = 'Type text';
+    textArea.addEventListener('click', e => e.stopPropagation());
+    textArea.addEventListener('mousedown', e => e.stopPropagation());
+    textArea.addEventListener('focus', () => {
+      selectedId = anim.id;
+      if (activeTextEditUndoAnimId !== anim.id) { pushUndo(); activeTextEditUndoAnimId = anim.id; }
+    });
+    textArea.addEventListener('blur', () => { if (activeTextEditUndoAnimId === anim.id) activeTextEditUndoAnimId = null; });
+    textArea.addEventListener('input', () => { anim.text = textArea.value; updateCanvasTextEditorFromAnim(anim); draw(); });
+    textArea.addEventListener('change', () => renderAnimList());
+    detailEl.appendChild(textArea);
+    appendSliderRow(detailEl, 'Font size', 8, 144, 1, anim.fontSize ?? 36, v => `${Math.round(v)}`, v => {
+      anim.fontSize = parseInt(v, 10); updateCanvasTextEditorFromAnim(anim);
+    });
+    updateToolPanel(); return;
+  }
+
+  if (isPrimitiveAnim(anim)) {
+    const detailsDiv = document.createElement('div');
+    detailsDiv.style.padding = '6px 8px';
+    appendPrimitiveDetailRows(detailsDiv, anim);
+    detailEl.appendChild(detailsDiv);
+    updateToolPanel(); return;
+  }
+
+  if (anim.anchors.length === 1 && anim.segments.length === 0) {
+    appendSliderRow(detailEl, 'Size', 1, 10, 1, anim.thickness, v => `${Math.round(v)}`, v => { anim.thickness = parseInt(v, 10); });
+    updateToolPanel(); return;
+  }
+
+  // Link / Unlink endpoints
+  const _epLoop = findLoopRange(anim);
+  if (_epLoop || anim.closed) {
+    const linkRow = document.createElement('div');
+    linkRow.style.cssText = 'padding:5px 10px; border-bottom:1px solid #313244;';
+    const linkBtn = document.createElement('button');
+    linkBtn.textContent = anim.closed ? 'Unlink endpoints' : 'Link endpoints';
+    linkBtn.style.cssText = 'width:100%; background:#313244; color:#cdd6f4; border:1px solid #45475a; border-radius:4px; padding:4px 10px; cursor:pointer; font-size:12px;';
+    linkBtn.addEventListener('mouseenter', () => { linkBtn.style.background = '#45475a'; });
+    linkBtn.addEventListener('mouseleave', () => { linkBtn.style.background = '#313244'; });
+    linkBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      pushUndo();
+      anim.closed = !anim.closed;
+      if (anim.closed && !anim.fillColor) anim.fillColor = anim.color;
+      saveProject();
+      renderAnimList(); draw();
+    });
+    linkRow.appendChild(linkBtn);
+    detailEl.appendChild(linkRow);
+  }
+
+  // Interleaved anchor / arc list
+  const segmentLabel = isPolylineAnim(anim) ? 'Segment' : 'Arc';
+  const curveColor = !anim.visible ? '#585b70' : anim.color;
+  const interleavedList = document.createElement('div');
+  interleavedList.className = 'arc-list';
+
+  const addAnchorRow = (anchorIdx) => {
+    const pt = anim.anchors[anchorIdx];
+    const lbl = anchorLabel(anim, anchorIdx);
+    const isActive = anim.expandedAnchors?.has(anchorIdx);
+    const item = document.createElement('div');
+    item.className = 'anchor-list-item';
+    const header = document.createElement('div');
+    header.className = 'anchor-list-header' + (isActive ? ' anchor-active' : '');
+    if (isActive) header.style.color = curveColor;
+    const labelSpan = document.createElement('span');
+    labelSpan.className = 'anchor-label';
+    labelSpan.textContent = lbl;
+    const coordSpan = document.createElement('span');
+    coordSpan.className = 'anchor-coords';
+    coordSpan.textContent = pt ? formatCoordPairHundredths(pt) : '—';
+    coordSpan.setAttribute('data-anchor-loc', anchorIdx);
+    header.append(labelSpan, coordSpan);
+    // Split anchor button: only for interior anchors with valid neighbors
+    const prevSeg = anchorIdx > 0 ? anim.segments[anchorIdx - 1] : null;
+    const nextSeg = anchorIdx < anim.segments.length ? anim.segments[anchorIdx] : null;
+    if (prevSeg && nextSeg && !isPolylineAnim(anim)) {
+      const splitBtn = document.createElement('button');
+      splitBtn.className = 'anchor-split-btn';
+      splitBtn.textContent = 'Split';
+      splitBtn.title = `Split anchor ${lbl} into ${lbl}⁻ / ${lbl}⁺`;
+      splitBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        pushUndo();
+        splitAnchorPoint(anim, anchorIdx);
+        saveProject();
+        renderAnimList(); draw();
+      });
+      header.appendChild(splitBtn);
+    }
+    item.appendChild(header);
+    interleavedList.appendChild(item);
+  };
+
+  const addArcRow = (segIdx) => {
+    const seg = anim.segments[segIdx];
+    if (!seg) return;
+    const arcSelected = anim.activeSegments?.has(segIdx);
+    const arcExpanded = anim.expandedArcs?.has(segIdx);
+    const isSplitActive = splitArcMode && splitArcMode.anim === anim && splitArcMode.segIdx === segIdx;
+    const pct = Math.round(eccentricityToPercent(seg.eccentricity) / 5) * 5;
+    const item = document.createElement('div');
+    item.className = 'arc-list-item' + (arcSelected ? ' arc-selected' : '');
+    if (arcSelected) item.style.borderColor = `${curveColor}99`;
+    const arcHeader = document.createElement('div');
+    arcHeader.className = 'arc-list-header' + (arcExpanded ? ' arc-expanded' : '');
+    const arcLabelSpan = document.createElement('span');
+    arcLabelSpan.textContent = `${segmentLabel} ${segIdx + 1}`;
+    const arcVisBtn = document.createElement('button');
+    arcVisBtn.className = 'arc-vis-btn';
+    arcVisBtn.title = seg.visible === false ? 'Show arc' : 'Hide arc';
+    arcVisBtn.appendChild(makeVisibilityIcon(seg.visible !== false));
+    arcVisBtn.addEventListener('click', e => {
+      e.stopPropagation(); pushUndo();
+      seg.visible = seg.visible === false ? true : false;
+      renderAnimList(); draw();
+    });
+    const splitArcBtn = document.createElement('button');
+    splitArcBtn.className = 'arc-split-btn' + (isSplitActive ? ' split-active' : '');
+    splitArcBtn.textContent = isSplitActive ? 'Click arc…' : 'Split';
+    splitArcBtn.title = isSplitActive ? 'Click on the arc to place the split point. Escape to cancel.' : `Split ${segmentLabel} ${segIdx + 1}`;
+    splitArcBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      if (isSplitActive) {
+        splitArcMode = null;
+      } else {
+        if (editModeAnimId !== anim.id) enterEditMode(anim, new Set());
+        selectedId = anim.id;
+        anim.activeSegments = new Set([segIdx]);
+        anim.expandedArcs = new Set([segIdx]);
+        anim.expandedAnchors = new Set();
+        splitArcMode = { anim, segIdx };
+      }
+      renderAnimList(); draw(); updateCursor();
+    });
+    arcHeader.append(arcLabelSpan, splitArcBtn, arcVisBtn);
+    arcHeader.addEventListener('click', e => {
+      e.stopPropagation();
+      if (editModeAnimId !== anim.id) enterEditMode(anim, new Set());
+      selectedId = anim.id;
+      anim.activeSegments = new Set([segIdx]);
+      resizeHover = null; rotateHover = null;
+      anim.expandedArcs = anim.expandedArcs?.has(segIdx) ? new Set() : new Set([segIdx]);
+      anim.expandedAnchors = new Set();
+      if (splitArcMode && splitArcMode.anim === anim && splitArcMode.segIdx !== segIdx) splitArcMode = null;
+      renderAnimList(); draw(); updateCursor();
+    });
+    item.appendChild(arcHeader);
+    if (arcExpanded) {
+      const body = document.createElement('div');
+      body.className = 'arc-detail-body';
+      const p0 = anim.anchors[segIdx], p1 = anim.anchors[segIdx + 1];
+      const addCoordRow = (label, point, attr, attrVal) => {
+        const row = document.createElement('div'); row.className = 'arc-coord-row';
+        const lbl2 = document.createElement('span'); lbl2.className = 'arc-coord-label'; lbl2.textContent = label;
+        const val = document.createElement('span'); val.className = 'arc-coord-val';
+        val.textContent = point ? formatCoordPairHundredths(point) : '—';
+        if (attr) val.setAttribute(attr, attrVal);
+        row.append(lbl2, val); body.appendChild(row);
+      };
+      addCoordRow('Start Anchor', p0, 'data-anchor-loc', segIdx);
+      if (!isPolylineAnim(anim)) {
+        addCoordRow('First Control Point', seg.h0, 'data-seg-h0', segIdx);
+        addCoordRow('Second Control Point', seg.h1, 'data-seg-h1', segIdx);
+      }
+      addCoordRow('End Anchor', p1, 'data-anchor-loc', segIdx + 1);
+      if (!isPolylineAnim(anim)) {
+        const sliderRow = document.createElement('div'); sliderRow.className = 'tree-slider-row arc-slider-row';
+        const sliderLbl = document.createElement('label'); sliderLbl.textContent = 'Eccentricity';
+        const slider = document.createElement('input');
+        slider.type = 'range'; slider.min = 0; slider.max = 100; slider.step = 1; slider.value = pct;
+        slider.setAttribute('data-seg-ecc', segIdx);
+        const sliderVal = document.createElement('span'); sliderVal.className = 'tree-slider-val';
+        sliderVal.textContent = `${pct}%`; sliderVal.setAttribute('data-seg-ecc-val', segIdx);
+        slider.addEventListener('mousedown', () => {
+          if (editModeAnimId !== anim.id) enterEditMode(anim, new Set());
+          anim.activeSegments = new Set([segIdx]); resizeHover = null; rotateHover = null;
+          anim.expandedArcs = new Set([segIdx]); anim.expandedAnchors = new Set();
+          pushUndo(); draw();
+        });
+        slider.addEventListener('focus', () => { eccentricitySliderActiveKey = { animId: anim.id, segIdx }; draw(); });
+        slider.addEventListener('blur',  () => { eccentricitySliderActiveKey = null; draw(); });
+        slider.addEventListener('input', () => {
+          seg.eccentricity = percentToEccentricity(parseFloat(slider.value));
+          sliderVal.textContent = `${Math.round(slider.value)}%`;
+          recompileSegment(anim, segIdx); draw();
+        });
+        sliderRow.append(sliderLbl, slider, sliderVal);
+        body.appendChild(sliderRow);
+      }
+      item.appendChild(body);
+    }
+    interleavedList.appendChild(item);
+  };
+
+  for (let i = 0; i < anim.anchors.length; i++) {
+    addAnchorRow(i);
+    if (i < anim.segments.length) addArcRow(i);
+  }
+
+  detailEl.appendChild(interleavedList);
+
+  // Legacy list loop for compatibility — no output
+  for (const _a of animations) {
+    if (!_a.activeSegments) _a.activeSegments = new Set();
+    if (!_a.expandedArcs) _a.expandedArcs = new Set();
+    if (!_a.expandedAnchors) _a.expandedAnchors = new Set();
+  }
+
+  updateToolPanel();
+}
+
+function _skipOld() { // dead code stub — body deleted
+  const list = document.createElement('div');
   list.innerHTML = '';
 
   for (const anim of animations) {
@@ -6562,7 +8630,7 @@ function renderAnimList() {
     }
 
     if (isPrimitiveAnim(anim)) {
-      primitiveDetails(anim).forEach(([lbl, val]) => appendReadOnlyRow(inner, lbl, val));
+      appendPrimitiveDetailRows(inner, anim);
       accordion.appendChild(inner);
       row.appendChild(accordion);
       list.appendChild(row);
@@ -6693,6 +8761,18 @@ function renderAnimList() {
         e.stopPropagation();
         selectArcRow(segIdx);
       });
+      const arcVisBtn = document.createElement('button');
+      arcVisBtn.className = 'arc-vis-btn';
+      arcVisBtn.title = seg?.visible === false ? 'Show arc' : 'Hide arc';
+      arcVisBtn.appendChild(makeVisibilityIcon(seg?.visible !== false));
+      arcVisBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        if (!seg) return;
+        pushUndo();
+        seg.visible = seg.visible === false ? true : false;
+        renderAnimList(); draw();
+      });
+      arcHeader.append(arcVisBtn);
       item.appendChild(arcHeader);
 
       if (coordsOpen) {
@@ -6749,13 +8829,43 @@ function renderAnimList() {
   updateToolPanel();
 }
 
-function scrollToShowExpanded(animId) {
-  const list = document.getElementById('anim-list');
-  const row = list.querySelector(`[data-anim-id="${animId}"]`);
-  if (!row) return;
-  const rowBottom = row.offsetTop + row.offsetHeight;
-  const listVisible = list.scrollTop + list.clientHeight;
-  if (rowBottom > listVisible) list.scrollTo({ top: rowBottom - list.clientHeight, behavior: 'smooth' });
+function scrollToShowExpanded(_animId) {
+  // No-op in new layout — arc items use scrollIntoView directly
+}
+
+let _tilesVisibleRows = 1;
+
+function setView(view) {
+  const wrapper = document.getElementById('object-tiles-wrapper');
+  const detail = document.getElementById('object-detail');
+  wrapper.style.display = 'flex';
+  if (view === 'detail') {
+    if (detail.style.display !== 'none') return;
+    detail.style.display = 'block';
+    detail.style.opacity = '0';
+    requestAnimationFrame(() => requestAnimationFrame(() => { detail.style.opacity = '1'; }));
+  } else {
+    if (detail.style.display === 'none') return;
+    detail.style.display = 'none';
+    wrapper.style.opacity = '0';
+    requestAnimationFrame(() => requestAnimationFrame(() => { wrapper.style.opacity = '1'; }));
+  }
+}
+
+function updateTilesMoreIndicator() {
+  const tilesEl = document.getElementById('object-tiles');
+  const aboveEl = document.getElementById('tiles-more-above');
+  const belowEl = document.getElementById('tiles-more');
+  const count = animations.length;
+  if (count <= _tilesVisibleRows * 5) { aboveEl.style.display = 'none'; belowEl.style.display = 'none'; return; }
+  const rowH = 72; // 67px tile-wrap + 5px gap
+  const rowsScrolled = Math.round(tilesEl.scrollTop / rowH);
+  const hiddenAbove = rowsScrolled * 5;
+  const hiddenBelow = Math.max(0, count - (rowsScrolled + _tilesVisibleRows) * 5);
+  aboveEl.style.display = hiddenAbove > 0 ? 'block' : 'none';
+  if (hiddenAbove > 0) aboveEl.textContent = `▲ +${hiddenAbove} more`;
+  belowEl.style.display = hiddenBelow > 0 ? 'block' : 'none';
+  if (hiddenBelow > 0) belowEl.textContent = `▼ +${hiddenBelow} more`;
 }
 
 
@@ -6917,7 +9027,60 @@ document.querySelectorAll('.tool-btn').forEach(btn => {
   });
 });
 
-document.getElementById('anim-list').addEventListener('click', e => {
+document.getElementById('animations-panel').addEventListener('click', e => {
+  if (e.target !== e.currentTarget) return;
+  const placing = animations.find(a => a.inPlacementMode);
+  if (placing) { finalizePlacement(placing); return; }
+  const detail = document.getElementById('object-detail');
+  if (detail.style.display === 'none') return;
+  openColorMenuAnimId = null;
+  selectedId = null;
+  selectedGroupId = null;
+  clearGroupMode();
+  exitEditMode();
+  renderAnimList(); draw(); updateCursor();
+});
+
+document.getElementById('group-objects-btn').addEventListener('click', e => {
+  e.stopPropagation();
+  if (selectedGroupId != null) {
+    ungroup(selectedGroupId);
+    return;
+  }
+  if (groupSelectionMode) {
+    if (groupCandidateIds.size >= 2) createGroupFromCandidates();
+    return;
+  }
+  if (animations.filter(a => !a.inPlacementMode).length < 2) return;
+  selectedId = null;
+  editModeAnimId = null;
+  selectedGroupId = null;
+  groupSelectionMode = true;
+  groupCandidateIds = new Set();
+  openColorMenuAnimId = null;
+  animations.forEach(a => {
+    a.expanded = false;
+    a.activeSegments = new Set();
+    a.expandedArcs = new Set();
+    a.expandedAnchors = new Set();
+  });
+  renderAnimList(); draw(); updateCursor();
+});
+
+document.getElementById('object-tiles').addEventListener('scroll', updateTilesMoreIndicator);
+document.getElementById('object-tiles').addEventListener('dragover', handleObjectTileDragOver);
+document.getElementById('object-tiles').addEventListener('drop', handleObjectTileDrop);
+document.getElementById('object-tiles').addEventListener('dragleave', e => {
+  if (!e.currentTarget.contains(e.relatedTarget)) clearObjectTileDropCues();
+});
+document.getElementById('object-tiles').addEventListener('wheel', e => {
+  e.preventDefault();
+  const _el = document.getElementById('object-tiles');
+  const _rowH = 72;
+  const _dir = e.deltaY > 0 ? 1 : -1;
+  _el.scrollTop = Math.round(_el.scrollTop / _rowH) * _rowH + _dir * _rowH;
+}, { passive: false });
+document.getElementById('object-tiles').addEventListener('click', e => {
   if (e.target !== e.currentTarget) return;
   openColorMenuAnimId = null;
   const placing = animations.find(a => a.inPlacementMode);
@@ -6927,6 +9090,8 @@ document.getElementById('anim-list').addEventListener('click', e => {
   }
   if (editModeAnimId !== null) exitEditMode();
   selectedId = null;
+  selectedGroupId = null;
+  clearGroupMode();
   sideActionHover = null;
   animations.forEach(a => {
     a.expanded = false;
@@ -6936,11 +9101,12 @@ document.getElementById('anim-list').addEventListener('click', e => {
   renderAnimList(); draw();
 });
 
+document.getElementById('object-detail').style.display = 'none';
 addFunction('sin(x)', 'cartesian');
 addFunction('cos(theta)', 'polar');
 functions.forEach(compileFunction);
 renderFunctionList();
-renderAnimList();
+if (!loadProject()) renderAnimList();
 renderGlobalSettingsControls();
 
 resize();
