@@ -136,6 +136,8 @@
       gap: 5px;
       overflow-y: scroll;
       scrollbar-width: none;
+      position: relative;
+      isolation: isolate;
     }
     #object-tiles::-webkit-scrollbar { display: none; }
     #group-objects-btn {
@@ -189,6 +191,7 @@
     .obj-tile-wrap {
       display: flex; flex-direction: column; align-items: center; gap: 3px;
       position: relative;
+      z-index: 2;
       border-radius: 7px;
       user-select: none;
     }
@@ -211,17 +214,32 @@
     }
     .obj-tile-wrap.drop-before::before { left: -4px; }
     .obj-tile-wrap.drop-after::after { right: -4px; }
-    .obj-tile-wrap.grouped .obj-tile {
-      border-color: #89b4fa;
-      box-shadow: 0 0 0 1px rgba(137, 180, 250, 0.28);
+    .obj-group-backdrop {
+      position: absolute;
+      z-index: 1;
+      pointer-events: none;
+      border: 1px solid rgba(137, 180, 250, 0.34);
+      border-radius: 8px;
+      background: rgba(49, 50, 68, 0.62);
+      box-shadow: inset 0 0 0 1px rgba(24, 24, 37, 0.62);
+    }
+    .obj-group-backdrop.selected {
+      border-color: rgba(245, 247, 255, 0.78);
+      background: rgba(69, 71, 90, 0.76);
+      box-shadow: 0 0 0 1px rgba(137, 180, 250, 0.38), 0 0 10px rgba(137, 180, 250, 0.18);
+    }
+    .obj-group-backdrop.candidate {
+      border-color: rgba(203, 166, 247, 0.78);
+      background: rgba(69, 71, 90, 0.72);
+      box-shadow: 0 0 0 1px rgba(203, 166, 247, 0.35);
     }
     .obj-tile-wrap.group-candidate .obj-tile {
       border-color: #cba6f7;
       box-shadow: 0 0 0 2px rgba(203, 166, 247, 0.6);
     }
     .obj-tile-wrap.group-selected .obj-tile {
-      border-color: #f5f7ff;
-      box-shadow: 0 0 0 2px rgba(137, 180, 250, 0.72);
+      border-color: #45475a;
+      box-shadow: none;
     }
     .obj-tile-label {
       font-family: monospace; font-size: 1.0rem; font-weight: 600;
@@ -240,6 +258,52 @@
     .obj-tile:hover { border-color: #6c7086; }
     .obj-tile.obj-tile-hidden { opacity: 0.45; }
     .obj-tile canvas { display: block; width: 100%; height: 100%; }
+    #object-tiles.line-tool-options-host {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 8px 7px;
+      overflow: hidden;
+    }
+    .line-tool-mode-btn {
+      width: 58px;
+      height: 50px;
+      border-radius: 6px;
+      border: 1.5px solid #45475a;
+      background: #1e1e2e;
+      color: #cdd6f4;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s;
+    }
+    .line-tool-mode-btn:hover {
+      border-color: #89b4fa;
+      background: #313244;
+      color: #f5f7ff;
+    }
+    .line-tool-mode-btn.active {
+      border-color: #89b4fa;
+      background: #313244;
+      color: #f5f7ff;
+      box-shadow: 0 0 0 1px rgba(137, 180, 250, 0.32), 0 0 10px rgba(137, 180, 250, 0.18);
+    }
+    .line-tool-mode-btn svg {
+      width: 46px;
+      height: 34px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2.1;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .line-tool-mode-btn svg circle {
+      fill: currentColor;
+      stroke: none;
+    }
 
     /* ── Object detail panel ── */
     #object-detail {
@@ -563,6 +627,29 @@
     .color-swatch-option.active {
       border-color: #cdd6f4;
       box-shadow: 0 0 0 1px #11111b, 0 0 0 3px #cdd6f4;
+    }
+    .color-preview-row {
+      display: grid;
+      grid-template-columns: 48px 1fr;
+      align-items: center;
+      gap: 8px;
+      padding: 2px 0;
+    }
+    .color-preview-box {
+      width: 44px;
+      height: 26px;
+      border: 1px solid #585b70;
+      border-radius: 5px;
+      box-shadow: inset 0 0 0 1px rgba(17, 17, 27, 0.55), 0 0 0 1px rgba(0,0,0,0.28);
+    }
+    .color-preview-value {
+      color: #cdd6f4;
+      font-family: monospace;
+      font-size: 0.68rem;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .fill-style-row {
       display: grid;
@@ -1023,6 +1110,77 @@
       font-variant-numeric: tabular-nums;
       text-align: right;
     }
+    .settings-default-color-row button {
+      grid-column: 3;
+      justify-self: end;
+      width: 44px;
+      height: 26px;
+      border: 1px solid #45475a;
+      border-radius: 5px;
+      background: #11111b;
+      color: #a6adc8;
+      cursor: pointer;
+      font-size: 0.68rem;
+      padding: 0;
+      text-align: center;
+      box-shadow: inset 0 0 0 1px rgba(17, 17, 27, 0.55), 0 0 0 1px rgba(0,0,0,0.28);
+    }
+    .settings-default-color-row button:hover,
+    .settings-default-color-row button.active {
+      border-color: #89b4fa;
+      background: #313244;
+      color: #f5f7ff;
+    }
+    .settings-default-color-row button.has-color {
+      color: transparent;
+      box-shadow: inset 0 0 0 1px rgba(17, 17, 27, 0.55), 0 0 0 1px rgba(0,0,0,0.22);
+    }
+    .settings-color-picker {
+      position: fixed;
+      left: 280px;
+      bottom: 52px;
+      width: 258px;
+      padding: 10px;
+      display: none;
+      flex-direction: column;
+      gap: 7px;
+      background: #181825;
+      border: 1px solid #585b70;
+      border-radius: 8px;
+      box-shadow: 0 12px 26px rgba(0,0,0,0.38), inset 0 1px 0 rgba(205,214,244,0.05);
+      z-index: 260;
+    }
+    .settings-color-picker.open {
+      display: flex;
+    }
+    .settings-color-picker .color-menu-section {
+      gap: 6px;
+    }
+    .settings-color-picker .tree-slider-row {
+      padding-left: 0;
+      padding-right: 0;
+    }
+    .default-color-popout-actions {
+      display: flex;
+      justify-content: flex-end;
+      padding-bottom: 2px;
+      border-bottom: 1px solid #313244;
+    }
+    .default-color-popout-actions button {
+      height: 24px;
+      border: 1px solid #45475a;
+      border-radius: 5px;
+      background: #11111b;
+      color: #a6adc8;
+      cursor: pointer;
+      font-size: 0.68rem;
+      padding: 0 10px;
+    }
+    .default-color-popout-actions button.active {
+      border-color: #89b4fa;
+      background: #313244;
+      color: #f5f7ff;
+    }
     /* ── Canvas ── */
     #canvas-wrap { flex: 1; position: relative; overflow: hidden; }
     #canvas-text-editor {
@@ -1112,6 +1270,11 @@
       </button>
       <div id="global-settings-menu" aria-label="Global Settings">
         <div class="settings-title">Global Settings</div>
+        <div class="settings-row settings-default-color-row">
+          <label for="default-color-trigger">Default Color</label>
+          <button id="default-color-trigger" type="button" aria-expanded="false">None</button>
+        </div>
+        <div id="default-color-picker" class="settings-color-picker"></div>
         <div class="settings-row">
           <label for="default-thickness">Default Thickness</label>
           <input id="default-thickness" type="range" min="1" max="10" step="1" />
@@ -1200,11 +1363,17 @@ function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 const GLOBAL_SETTINGS_KEY = 'animatorGlobalSettings.v1';
 const PROJECT_KEY = 'animatorProject.v1';
 const SNAP_STRENGTH_VALUES = [0, 1, 2, 5, 10, 20, 50, 100];
+const LINE_TOOL_MODE_POLYLINE = 'polyline';
+const LINE_TOOL_MODE_SEGMENTS = 'segments';
+const LINE_TOOL_MODE_CURVES = 'curves';
+const LINE_TOOL_MODES = new Set([LINE_TOOL_MODE_POLYLINE, LINE_TOOL_MODE_SEGMENTS, LINE_TOOL_MODE_CURVES]);
 const DEFAULT_GLOBAL_SETTINGS = {
   defaultThickness: 4,
+  defaultColor: null,
   gridStrength: 50,
   axisStrength: 50,
   snapStrength: 10,
+  lineToolMode: LINE_TOOL_MODE_POLYLINE,
 };
 
 function nearestSnapStrength(v) {
@@ -1224,9 +1393,11 @@ function normalizeGlobalSettings(raw = {}) {
     : raw.snapStrength ?? DEFAULT_GLOBAL_SETTINGS.snapStrength;
   return {
     defaultThickness: Math.round(clamp(Number(raw.defaultThickness ?? DEFAULT_GLOBAL_SETTINGS.defaultThickness), 1, 10)),
+    defaultColor: normalizeColorString(raw.defaultColor),
     gridStrength: Math.round(clamp(Number(raw.gridStrength ?? DEFAULT_GLOBAL_SETTINGS.gridStrength), 0, 100) / 5) * 5,
     axisStrength: Math.round(clamp(Number(raw.axisStrength ?? DEFAULT_GLOBAL_SETTINGS.axisStrength), 0, 100) / 5) * 5,
     snapStrength: nearestSnapStrength(Number(rawSnapStrength)),
+    lineToolMode: LINE_TOOL_MODES.has(raw.lineToolMode) ? raw.lineToolMode : DEFAULT_GLOBAL_SETTINGS.lineToolMode,
   };
 }
 
@@ -1318,6 +1489,21 @@ function splitAnchorPoint(anim, anchorIdx) {
 }
 
 let globalSettings = loadGlobalSettings();
+
+function currentLineToolMode() {
+  return LINE_TOOL_MODES.has(globalSettings.lineToolMode)
+    ? globalSettings.lineToolMode
+    : LINE_TOOL_MODE_POLYLINE;
+}
+
+function setLineToolMode(mode) {
+  if (!LINE_TOOL_MODES.has(mode)) return;
+  globalSettings.lineToolMode = mode;
+  saveGlobalSettings();
+  renderAnimList();
+  draw();
+  updateCursor();
+}
 
 function colorFromStrength(strength, base, max) {
   const pct = clamp(strength, 0, 100);
@@ -2468,6 +2654,61 @@ function makeStraightSegment(p0, p1) {
   return makeSeg(lerpCx(p0, p1, 1 / 3), lerpCx(p0, p1, 2 / 3));
 }
 
+function cloneSegment(seg) {
+  return seg ? {
+    h0: cloneCx(seg.h0),
+    h1: cloneCx(seg.h1),
+    eccentricity: seg.eccentricity ?? 1,
+    visible: seg.visible ?? true,
+    compiled: null,
+    compiledRef: null,
+  } : null;
+}
+
+function lineToolModeForPlacement(anim) {
+  return anim?.extensionAnchorIdx != null ? LINE_TOOL_MODE_POLYLINE : currentLineToolMode();
+}
+
+function polylineHasOpenDisconnectedStart(anim) {
+  return !!anim && anim.anchors.length > 0 &&
+    (anim.segments.length === 0 || anim.segments[anim.segments.length - 1] === null);
+}
+
+function committedPolylineSegmentCount(anim) {
+  return anim ? anim.segments.reduce((count, seg) => count + (seg ? 1 : 0), 0) : 0;
+}
+
+function addDisconnectedPolylineStart(anim, anchor) {
+  const target = cloneCx(anchor);
+  if (polylineHasOpenDisconnectedStart(anim)) {
+    anim.anchors[anim.anchors.length - 1] = target;
+    return;
+  }
+  if (anim.anchors.length > 0) anim.segments.push(null);
+  anim.anchors.push(target);
+  anim.anchorLocked.push(false);
+}
+
+function addDisconnectedPolylineConnector(anim, endpoint, seg = null) {
+  if (!polylineHasOpenDisconnectedStart(anim)) addDisconnectedPolylineStart(anim, endpoint);
+  const start = anim.anchors[anim.anchors.length - 1];
+  const target = cloneCx(endpoint);
+  const committedSeg = cloneSegment(seg || makeStraightSegment(start, target));
+  anim.anchors.push(target);
+  anim.anchorLocked.push(false);
+  anim.segments.push(committedSeg);
+  recompileSegment(anim, anim.segments.length - 1);
+}
+
+function trimDanglingDisconnectedPolylineStart(anim) {
+  if (!polylineHasOpenDisconnectedStart(anim)) return;
+  anim.anchors.pop();
+  if (anim.anchorLocked) anim.anchorLocked.pop();
+  if (anim.anchorLabels) anim.anchorLabels.pop();
+  if (anim.segments.length > 0 && anim.segments[anim.segments.length - 1] === null)
+    anim.segments.pop();
+}
+
 function addPolylineSegment(anim, anchor) {
   const anch = anim.anchors;
   const segs = anim.segments;
@@ -2477,6 +2718,87 @@ function addPolylineSegment(anim, anchor) {
   anim.anchorLocked.push(false);
   segs.push(makeStraightSegment(start, target));
   recompileAnim(anim);
+}
+
+function rotateUnitVector(vec, angle) {
+  const c = Math.cos(angle), s = Math.sin(angle);
+  return new Cx(vec.re * c - vec.im * s, vec.re * s + vec.im * c);
+}
+
+function lineIntersection(p, d, q, e) {
+  const det = d.re * e.im - d.im * e.re;
+  if (Math.abs(det) < 1e-9) return null;
+  const qx = q.re - p.re, qy = q.im - p.im;
+  const t = (qx * e.im - qy * e.re) / det;
+  return new Cx(p.re + d.re * t, p.im + d.im * t);
+}
+
+function makeParabolicLineConnector(p0, p1, angleDeg, side) {
+  const dx = p1.re - p0.re, dy = p1.im - p0.im;
+  const L = Math.hypot(dx, dy);
+  if (L < 1e-9) return makeStraightSegment(p0, p1);
+  const chord = new Cx(dx / L, dy / L);
+  const theta = angleDeg * Math.PI / 180;
+  const t0 = rotateUnitVector(chord, side * theta);
+  const t1 = rotateUnitVector(chord, -side * theta);
+  let control = lineIntersection(p0, t0, p1, new Cx(-t1.re, -t1.im));
+  if (!control || !control.ok()) {
+    const normal = new Cx(-chord.im, chord.re);
+    control = new Cx(
+      (p0.re + p1.re) * 0.5 + normal.re * side * L * Math.tan(theta) * 0.5,
+      (p0.im + p1.im) * 0.5 + normal.im * side * L * Math.tan(theta) * 0.5
+    );
+  }
+  return makeSeg(
+    new Cx(p0.re + (control.re - p0.re) * 2 / 3, p0.im + (control.im - p0.im) * 2 / 3),
+    new Cx(p1.re + (control.re - p1.re) * 2 / 3, p1.im + (control.im - p1.im) * 2 / 3)
+  );
+}
+
+function buildLineConnectorChoices(start, end) {
+  const choices = [
+    { key: 'straight', title: 'Straight line', seg: makeStraightSegment(start, end) },
+    { key: 'inner-up', title: 'Gentle curve above', seg: makeParabolicLineConnector(start, end, 22.5, 1) },
+    { key: 'outer-up', title: 'Wide curve above', seg: makeParabolicLineConnector(start, end, 45, 1) },
+    { key: 'inner-down', title: 'Gentle curve below', seg: makeParabolicLineConnector(start, end, 22.5, -1) },
+    { key: 'outer-down', title: 'Wide curve below', seg: makeParabolicLineConnector(start, end, 45, -1) },
+  ];
+  for (const choice of choices) recompileSegmentRaw(choice.seg, start, end);
+  return choices;
+}
+
+function clearLineConnectorChoice() {
+  lineConnectorChoice = null;
+  lineConnectorChoiceHover = null;
+}
+
+function queryLineConnectorChoice(cx, cy) {
+  if (!lineConnectorChoice) return null;
+  let best = null, bestDist = Infinity;
+  lineConnectorChoice.choices.forEach((choice, idx) => {
+    const samples = sampleCompiledAdaptive(choice.seg.compiled);
+    const hit = polylineHitInfo(samples, cx, cy);
+    const threshold = (idx === 0 ? 10 : 8) * devicePixelRatio;
+    if (hit.dist <= threshold && hit.dist < bestDist) {
+      bestDist = hit.dist;
+      best = { idx, choice };
+    }
+  });
+  return best;
+}
+
+function commitLineConnectorChoice(choiceIdx = 0, shouldRender = true) {
+  const pending = lineConnectorChoice;
+  if (!pending?.anim) return false;
+  const choice = pending.choices[choiceIdx] || pending.choices[0];
+  clearLineConnectorChoice();
+  addDisconnectedPolylineConnector(pending.anim, pending.end, choice.seg);
+  if (shouldRender) {
+    renderAnimList();
+    draw();
+    updateCursor();
+  }
+  return true;
 }
 
 // Commit a pending arc with independent handle lengths at each end.
@@ -2496,19 +2818,15 @@ function _commitPendingArc(anim, nextPoint) {
 // ANIMATIONS MODE — state & undo
 // ════════════════════════════════════════════════════════
 
-const ANIM_COLORS = [
-  '#7f1d1d','#7c2d12','#713f12','#14532d','#134e4a','#1e3a8a','#3b0764','#500724',
-  '#991b1b','#9a3412','#854d0e','#166534','#115e59','#1e40af','#4c1d95','#831843',
-  '#b91c1c','#c2410c','#a16207','#15803d','#0f766e','#1d4ed8','#5b21b6','#9d174d',
-  '#dc2626','#ea580c','#ca8a04','#16a34a','#0d9488','#2563eb','#7c3aed','#be185d',
-  '#ef4444','#f97316','#eab308','#22c55e','#14b8a6','#3b82f6','#8b5cf6','#ec4899',
-  '#f87171','#fb923c','#facc15','#4ade80','#2dd4bf','#60a5fa','#a78bfa','#f472b6',
-  '#fca5a5','#fdba74','#fde047','#86efac','#5eead4','#93c5fd','#c4b5fd','#f9a8d4',
-  '#fecaca','#fed7aa','#fef08a','#bbf7d0','#99f6e4','#bfdbfe','#ddd6fe','#fce7f3',
-  '#ffe5e6','#ffedd9','#fef8cc','#e0fbe9','#d6fbf3','#e1eeff','#f1ecff','#fdf0fb',
-  '#ffffff','#dbdbdb','#b6b6b6','#929292','#6d6d6d','#494949','#242424','#000000',
-];
 const DEFAULT_COLORS = ['#ef4444','#f97316','#eab308','#22c55e','#14b8a6','#3b82f6','#8b5cf6','#ec4899'];
+const HUE_SWATCH_COUNT = 24;
+const HUE_SWATCH_ANGLES = [
+  0, 10, 20, 30, 40, 50, 60, 78,
+  96, 114, 132, 150, 168, 186, 204, 222,
+  240, 255, 270, 285, 300, 315, 330, 345,
+];
+const HUE_PRESET_INDICES = [0, 3, 6, 9, 12, 15, 18, 20];
+const HUE_PRESET_MATCH_TOLERANCE = 1.2;
 const PRIMITIVE_KINDS = new Set(['line', 'rectangle', 'circle', 'ellipse']);
 const POLYLINE_KIND = 'polyline';
 const FILL_STYLES = [
@@ -2532,7 +2850,7 @@ let selectedGroupId = null;
 let groupSelectionMode = false;
 let groupCandidateIds = new Set();
 let groupSelectionGuideShear = null;
-let objectTileDrag = null; // {animId, fromIndex, insertionIndex} | null
+let objectTileDrag = null; // {animId, animIds, fromIndex, insertionIndex} | null
 let suppressTileClickUntil = 0;
 let openColorMenuAnimId = null;
 let colorEditTarget = 'outline';
@@ -2561,6 +2879,8 @@ let plusHover    = null; // {anim, end:'A0'|'A2'} | null
 let lockHover    = null; // {anim, anchorIdx} | null — interior anchor lock toggle
 let rubberBand   = null; // {startX,startY,curX,curY,ctrl} | null — drag-region selection
 let splitArcMode = null; // {anim, segIdx} | null — pending arc split waiting for canvas click
+let lineConnectorChoice = null; // {anim,start,end,choices} | null — pending straight/curve choice for line tool
+let lineConnectorChoiceHover = null; // {idx, choice} | null
 // curvePicker removed — arc type is now auto-selected during placement
 
 // Future playback state, disabled for now.
@@ -2642,6 +2962,7 @@ function restoreSnapshot(snap) {
   eccDrag = null;
   frameDrag = null;
   frameHover = null;
+  clearLineConnectorChoice();
   animations = snap.map(s => {
     const anim = {
       id: s.id, letter: s.letter, color: s.color, kind: s.kind || 'freeform',
@@ -2739,8 +3060,58 @@ function objectGroupId(anim) {
   return anim?.groupId ?? null;
 }
 
+function selectedObjectAnim() {
+  const anim = animations.find(a => a.id === selectedId) ||
+               animations.find(a => a.id === editModeAnimId);
+  if (anim && selectedGroupId != null) {
+    selectedGroupId = null;
+    groupSelectionGuideShear = null;
+    clearSelectionHovers();
+  }
+  return anim || null;
+}
+
+function focusedGroupMember() {
+  const anim = selectedObjectAnim();
+  return objectGroupId(anim) == null ? null : anim;
+}
+
+function focusedGroupMemberGroupId() {
+  const anim = focusedGroupMember();
+  return objectGroupId(anim);
+}
+
+function frontEditingAnim() {
+  const anim = selectedObjectAnim();
+  return anim && anim.visible && !anim.inPlacementMode ? anim : null;
+}
+
+function clearObjectSelectionState() {
+  selectedId = null;
+  editModeAnimId = null;
+  openColorMenuAnimId = null;
+  colorEditTarget = 'outline';
+  animations.forEach(a => {
+    a.activeSegments = new Set();
+    a.expandedArcs = new Set();
+    a.expandedAnchors = new Set();
+  });
+}
+
+function clearSelectionHovers() {
+  sideActionHover = null;
+  resizeHover = null;
+  rotateHover = null;
+  frameHover = null;
+  segmentHover = null;
+  anchorHover = null;
+  handleHover = null;
+  plusHover = null;
+  lockHover = null;
+}
+
 function isGroupSelectionActive() {
-  return selectedGroupId != null && groupMembers(selectedGroupId).length > 0;
+  return selectedGroupId != null && !selectedObjectAnim() && groupMembers(selectedGroupId).length > 0;
 }
 
 function clearGroupMode() {
@@ -2754,10 +3125,8 @@ function selectGroup(groupId) {
   finishCanvasTextEdit(false);
   clearGroupMode();
   selectedGroupId = groupId;
-  selectedId = null;
-  editModeAnimId = null;
-  openColorMenuAnimId = null;
-  colorEditTarget = 'outline';
+  clearObjectSelectionState();
+  clearSelectionHovers();
   animations.forEach(a => {
     a.expanded = false;
     a.activeSegments = new Set();
@@ -2770,6 +3139,7 @@ function drillSelectObject(anim) {
   if (!anim) return;
   selectedGroupId = null;
   clearGroupMode();
+  clearSelectionHovers();
   enterEditMode(anim, new Set());
   selectedId = anim.id;
   anim.expanded = true;
@@ -2782,11 +3152,25 @@ function drillSelectObject(anim) {
   });
 }
 
+function beginObjectFrameDrag(anim, mathX, mathY) {
+  if (!anim) return false;
+  drillSelectObject(anim);
+  pushUndo();
+  frameDrag = {
+    anim,
+    startMathX: mathX, startMathY: mathY,
+    origAnchors: anim.anchors.map(cloneCx),
+    origSegs: anim.segments.map(s => s ? ({ h0: cloneCx(s.h0), h1: cloneCx(s.h1) }) : null),
+  };
+  frameHover = anim;
+  return true;
+}
+
 function selectObjectOrGroup(anim) {
   if (!anim) return;
   const gid = objectGroupId(anim);
   if (gid != null) {
-    if (selectedGroupId === gid) drillSelectObject(anim);
+    if ((isGroupSelectionActive() && selectedGroupId === gid) || focusedGroupMemberGroupId() === gid) drillSelectObject(anim);
     else selectGroup(gid);
     return;
   }
@@ -2929,7 +3313,8 @@ function animFillStyle(anim) {
 }
 
 function canFillAnim(anim) {
-  return !!anim && (isTextAnim(anim) || isClosedPathAnim(anim) || (isPrimitiveAnim(anim) && animKind(anim) !== 'line'));
+  return !!anim && (isTextAnim(anim) || (isPrimitiveAnim(anim) && animKind(anim) !== 'line') ||
+    (!isPrimitiveAnim(anim) && !isTextAnim(anim) && anim.segments?.some(seg => !!seg)));
 }
 
 function isDotAnim(anim) {
@@ -2997,6 +3382,7 @@ function clearAnimationInteractionState(id) {
   if (frameHover?.id === id) frameHover = null;
   if (plusHover?.anim?.id === id) plusHover = null;
   if (lockHover?.anim?.id === id) lockHover = null;
+  if (lineConnectorChoice?.anim?.id === id) clearLineConnectorChoice();
   if (openColorMenuAnimId === id) openColorMenuAnimId = null;
   if (eccentricitySliderActiveKey?.animId === id) eccentricitySliderActiveKey = null;
   if (canvasTextEditAnimId === id) finishCanvasTextEdit(false);
@@ -3030,6 +3416,10 @@ document.addEventListener('keydown', e => {
     e.preventDefault();
     const placing = animations.find(a => a.inPlacementMode);
     if (placing) {
+      if (isPolylineAnim(placing) && lineConnectorChoice?.anim === placing) {
+        commitLineConnectorChoice(0);
+        return;
+      }
       if (isPrimitiveAnim(placing) || placing.anchors.length === 0) {
         cancelPlacement(placing);
       } else {
@@ -3042,7 +3432,7 @@ document.addEventListener('keydown', e => {
       renderAnimList(); draw();
       return;
     }
-    if (groupSelectionMode || selectedGroupId != null) {
+    if (groupSelectionMode || isGroupSelectionActive()) {
       selectedGroupId = null;
       clearGroupMode();
       renderAnimList(); draw();
@@ -3061,7 +3451,7 @@ document.addEventListener('keydown', e => {
     }
     return;
   }
-  if ((e.key === 'Delete' || e.key === 'Backspace') && selectedGroupId != null) {
+  if ((e.key === 'Delete' || e.key === 'Backspace') && isGroupSelectionActive()) {
     e.preventDefault();
     deleteGroup(selectedGroupId);
   }
@@ -3212,6 +3602,7 @@ function deleteArc(anim, segIdx) {
 function cancelPlacement(anim) {
   if (!anim || !anim.inPlacementMode) return;
   placementPreviewPos = null;
+  if (lineConnectorChoice?.anim === anim) clearLineConnectorChoice();
   if (anim.extensionAnchorIdx != null) {
     anim.inPlacementMode = false;
     anim.extensionAnchorIdx = null;
@@ -3244,7 +3635,9 @@ function finalizePrimitivePlacement(anim) {
 function finalizePolylinePlacement(anim) {
   if (!anim || !anim.inPlacementMode || !isPolylineAnim(anim)) return;
   const isExtension = anim.extensionAnchorIdx != null;
-  if (!isExtension && anim.segments.length < 1) {
+  if (lineConnectorChoice?.anim === anim) commitLineConnectorChoice(0, false);
+  if (!isExtension) trimDanglingDisconnectedPolylineStart(anim);
+  if (!isExtension && committedPolylineSegmentCount(anim) < 1) {
     cancelPlacement(anim);
     return;
   }
@@ -3312,7 +3705,8 @@ function addAnimation(kind = 'freeform') {
     a.expandedAnchors = new Set();
   });
   const letter = nextLetter();
-  const color  = DEFAULT_COLORS[animColorIdx++ % DEFAULT_COLORS.length];
+  const defaultColor = normalizeColorString(globalSettings.defaultColor);
+  const color  = defaultColor || DEFAULT_COLORS[animColorIdx++ % DEFAULT_COLORS.length];
   const anim = {
     id: Date.now() + Math.random(),
     letter, color, kind,
@@ -3346,6 +3740,7 @@ function addAnimation(kind = 'freeform') {
   };
   if (canFillAnim(anim)) anim.fillColor = color;
   animations.push(anim);
+  selectedGroupId = null;
   selectedId = anim.id;
   renderAnimList(); draw(); updateCursor();
   return anim;
@@ -3396,7 +3791,7 @@ function startPlacementFromTool(kind) {
 
 
 function duplicateAnimation() {
-  if (selectedGroupId != null) {
+  if (isGroupSelectionActive()) {
     createGroupSideActionCopy(selectedGroupId, 'duplicate');
     return;
   }
@@ -3574,20 +3969,14 @@ function createSideActionCopy(src, kind) {
   animations.push(anim);
   recompileAnim(anim);
 
+  selectedGroupId = null;
   selectedId = src.id;
   src.expanded = true;
   anim.expanded = false;
   anim.activeSegments = new Set();
   anim.expandedAnchors = new Set();
   anim.expandedArcs = new Set();
-  sideActionHover = null;
-  resizeHover = null;
-  rotateHover = null;
-  segmentHover = null;
-  anchorHover = null;
-  handleHover = null;
-  plusHover = null;
-  lockHover = null;
+  clearSelectionHovers();
   renderAnimList(); draw(); updateCursor();
 }
 
@@ -3620,18 +4009,7 @@ function createGroupSideActionCopy(groupId, kind) {
     return copy;
   });
   animations.push(...copies);
-  selectedGroupId = groupId;
-  selectedId = null;
-  editModeAnimId = null;
-  clearGroupMode();
-  sideActionHover = null;
-  resizeHover = null;
-  rotateHover = null;
-  segmentHover = null;
-  anchorHover = null;
-  handleHover = null;
-  plusHover = null;
-  lockHover = null;
+  selectGroup(groupId);
   renderAnimList(); draw(); updateCursor();
 }
 
@@ -3713,7 +4091,9 @@ const SCISSORS_CURSOR = (() => {
 function updateCursor() {
   const placing = animations.some(a => a.inPlacementMode);
   if (placing) {
-    canvas.style.cursor = 'none';
+    canvas.style.cursor = lineConnectorChoice
+      ? (lineConnectorChoiceHover ? 'pointer' : 'crosshair')
+      : 'none';
   } else if (splitArcMode !== null) {
     const onTarget = segmentHover?.anim === splitArcMode.anim && segmentHover?.segIdx === splitArcMode.segIdx;
     canvas.style.cursor = onTarget ? SCISSORS_CURSOR : 'not-allowed';
@@ -3848,37 +4228,44 @@ function primitiveHitDistance(anim, cx, cy) {
   return Infinity;
 }
 
+function segmentHitCandidate(anim, cx, cy) {
+  if (!anim || !anim.visible || anim.inPlacementMode) return null;
+  if (isPrimitiveAnim(anim)) {
+    const dist = primitiveHitDistance(anim, cx, cy);
+    return { dist, hit: { anim, segIdx: 0, primitive: true } };
+  }
+  if (isTextAnim(anim)) {
+    const dist = textHitDistance(anim, cx, cy);
+    return { dist, hit: { anim, segIdx: 0, text: true } };
+  }
+  let bestHit = null, bestDist = Infinity;
+  for (let segIdx = 0; segIdx < anim.segments.length; segIdx++) {
+    const seg = anim.segments[segIdx];
+    if (!seg || !seg.compiled) continue;
+    if (seg.visible === false && editModeAnimId !== anim.id) continue;
+    const samples = sampleCompiledAdaptive(seg.compiled);
+    const hit = polylineHitInfo(samples, cx, cy);
+    if (hit.dist < bestDist) {
+      bestDist = hit.dist;
+      bestHit = { anim, segIdx, u: hit.u };
+    }
+  }
+  return bestHit ? { dist: bestDist, hit: bestHit } : null;
+}
+
 function querySegmentHover(cx, cy) {
   const threshold = 8 * devicePixelRatio;
+  const frontAnim = frontEditingAnim();
+  const frontHit = segmentHitCandidate(frontAnim, cx, cy);
+  if (frontHit && frontHit.dist <= threshold) return frontHit.hit;
+
   let bestHit = null, bestDist = Infinity;
   for (const anim of animations) {
-    if (!anim.visible || anim.inPlacementMode) continue;
-    if (isPrimitiveAnim(anim)) {
-      const dist = primitiveHitDistance(anim, cx, cy);
-      if (dist < bestDist) {
-        bestDist = dist;
-        bestHit = { anim, segIdx: 0, primitive: true };
-      }
-      continue;
-    }
-    if (isTextAnim(anim)) {
-      const dist = textHitDistance(anim, cx, cy);
-      if (dist < bestDist) {
-        bestDist = dist;
-        bestHit = { anim, segIdx: 0, text: true };
-      }
-      continue;
-    }
-    for (let segIdx = 0; segIdx < anim.segments.length; segIdx++) {
-      const seg = anim.segments[segIdx];
-      if (!seg || !seg.compiled) continue;
-      if (seg.visible === false && editModeAnimId !== anim.id) continue;
-      const samples = sampleCompiledAdaptive(seg.compiled);
-      const hit = polylineHitInfo(samples, cx, cy);
-      if (hit.dist < bestDist) {
-        bestDist = hit.dist;
-        bestHit = { anim, segIdx, u: hit.u };
-      }
+    if (anim === frontAnim) continue;
+    const candidate = segmentHitCandidate(anim, cx, cy);
+    if (candidate && candidate.dist < bestDist) {
+      bestDist = candidate.dist;
+      bestHit = candidate.hit;
     }
   }
   return bestDist <= threshold ? bestHit : null;
@@ -4488,8 +4875,53 @@ function insertPolylineExtensionAnchor(anim, target) {
   recompileAnim(anim);
 }
 
+function disconnectedPolylinePlacementClickHandler(anim, snapped, mathX, mathY) {
+  if (lineConnectorChoice?.anim === anim) {
+    const [cx, cy] = toCanvas(mathX, mathY);
+    const hit = queryLineConnectorChoice(cx, cy);
+    commitLineConnectorChoice(hit?.idx ?? 0);
+    return;
+  }
+
+  const mode = currentLineToolMode();
+  const anch = anim.anchors;
+  const nearIdx = nearestPlacementAnchorIndex(anim, mathX, mathY, undefined, snapped);
+  const target = nearIdx >= 0 ? cloneCx(anch[nearIdx]) : cloneCx(snapped);
+
+  if (!polylineHasOpenDisconnectedStart(anim)) {
+    addDisconnectedPolylineStart(anim, target);
+    renderAnimList(); draw(); updateCursor();
+    return;
+  }
+
+  const start = anch[anch.length - 1];
+  if (mode === LINE_TOOL_MODE_CURVES) {
+    lineConnectorChoice = {
+      anim,
+      start: cloneCx(start),
+      end: target,
+      choices: buildLineConnectorChoices(start, target),
+    };
+    lineConnectorChoiceHover = null;
+    placementPreviewPos = null;
+    renderAnimList(); draw(); updateCursor();
+    return;
+  }
+
+  addDisconnectedPolylineConnector(anim, target, makeStraightSegment(start, target));
+  renderAnimList(); draw(); updateCursor();
+}
+
 function polylinePlacementClickHandler(anim, snapped, mathX, mathY) {
   if (!anim || !isPolylineAnim(anim)) return;
+  if (lineConnectorChoice?.anim === anim) {
+    disconnectedPolylinePlacementClickHandler(anim, snapped, mathX, mathY);
+    return;
+  }
+  if (anim.extensionAnchorIdx == null && lineToolModeForPlacement(anim) !== LINE_TOOL_MODE_POLYLINE) {
+    disconnectedPolylinePlacementClickHandler(anim, snapped, mathX, mathY);
+    return;
+  }
   const anch = anim.anchors;
   const n = anch.length;
   const nearIdx = nearestPlacementAnchorIndex(anim, mathX, mathY, undefined, snapped);
@@ -4663,6 +5095,23 @@ canvas.addEventListener('mousedown', e => {
     return;
   }
 
+  if (isGroupSelectionActive()) {
+    const memberFrame = queryGroupMemberFrameBorderHover(selectedGroupId, cx, cy);
+    if (memberFrame) {
+      e.preventDefault();
+      beginObjectFrameDrag(memberFrame, mathX, mathY);
+      renderAnimList(); draw(); updateCursor();
+      return;
+    }
+    const memberHit = querySegmentHover(cx, cy);
+    if (memberHit && objectGroupId(memberHit.anim) === selectedGroupId) {
+      e.preventDefault();
+      drillSelectObject(memberHit.anim);
+      renderAnimList(); draw(); updateCursor();
+      return;
+    }
+  }
+
   const fb = queryFrameBorderHover(cx, cy);
   if (fb) {
     e.preventDefault();
@@ -4673,7 +5122,7 @@ canvas.addEventListener('mousedown', e => {
         startMathX: mathX, startMathY: mathY,
         origStates: groupMembers(fb.groupId).map(cloneTransformState),
       };
-      selectedGroupId = fb.groupId;
+      selectGroup(fb.groupId);
     } else {
       frameDrag = {
         anim: fb,
@@ -4681,6 +5130,7 @@ canvas.addEventListener('mousedown', e => {
         origAnchors: fb.anchors.map(cloneCx),
         origSegs: fb.segments.map(s => s ? ({ h0: cloneCx(s.h0), h1: cloneCx(s.h1) }) : null),
       };
+      selectedGroupId = null;
       selectedId = fb.id;
     }
     updateCursor(); draw(); return;
@@ -4704,7 +5154,7 @@ canvas.addEventListener('mousedown', e => {
         origFrameBounds: frame ? frameMathBounds(frame) : { ...bounds },
         origStates: groupMembers(rh.groupId).map(cloneTransformState),
       };
-      selectedGroupId = rh.groupId;
+      selectGroup(rh.groupId);
       updateCursor(); draw(); return;
     }
     const bounds = objectMathBounds(rh.anim);
@@ -4730,6 +5180,7 @@ canvas.addEventListener('mousedown', e => {
       origSegs: rh.anim.segments.map(cloneResizeSeg),
       origAnchorLocked: rh.anim.anchorLocked ? [...rh.anim.anchorLocked] : [],
     };
+    selectedGroupId = null;
     selectedId = rh.anim.id;
     rh.anim.expanded = true;
     animations.forEach(a => {
@@ -4764,7 +5215,7 @@ canvas.addEventListener('mousedown', e => {
         startAngle: Math.atan2(mathY - center.im, mathX - center.re),
         origStates: groupMembers(rw.groupId).map(cloneTransformState),
       };
-      selectedGroupId = rw.groupId;
+      selectGroup(rw.groupId);
       updateCursor(); draw(); return;
     }
     const center = rotationCenterForAnim(rw.anim);
@@ -4779,6 +5230,7 @@ canvas.addEventListener('mousedown', e => {
       origAnchors: rw.anim.anchors.map(cloneCx),
       origSegs: rw.anim.segments.map(cloneResizeSeg),
     };
+    selectedGroupId = null;
     selectedId = rw.anim.id;
     rw.anim.expanded = true;
     animations.forEach(a => {
@@ -4807,8 +5259,10 @@ canvas.addEventListener('mousedown', e => {
     e.preventDefault();
     pushUndo();
     const { anim, anchorIdx: idx } = ah;
-    const origH0 = idx < anim.segments.length ? cloneCx(anim.segments[idx].h0) : null;
-    const origH1 = idx > 0 && idx - 1 < anim.segments.length ? cloneCx(anim.segments[idx - 1].h1) : null;
+    const nextSegForAnchor = idx < anim.segments.length ? anim.segments[idx] : null;
+    const prevSegForAnchor = idx > 0 && idx - 1 < anim.segments.length ? anim.segments[idx - 1] : null;
+    const origH0 = nextSegForAnchor ? cloneCx(nextSegForAnchor.h0) : null;
+    const origH1 = prevSegForAnchor ? cloneCx(prevSegForAnchor.h1) : null;
     anim.selectionGuideShear = null;
     const _dragLoop = findLoopRange(anim);
     let linkedIdx = null, linkedOrigH0 = null, linkedOrigH1 = null;
@@ -4817,8 +5271,10 @@ canvas.addEventListener('mousedown', e => {
       else if (idx === _dragLoop.loopEnd) linkedIdx = _dragLoop.loopStart;
     }
     if (linkedIdx !== null) {
-      linkedOrigH0 = linkedIdx < anim.segments.length ? cloneCx(anim.segments[linkedIdx].h0) : null;
-      linkedOrigH1 = linkedIdx > 0 && linkedIdx - 1 < anim.segments.length ? cloneCx(anim.segments[linkedIdx - 1].h1) : null;
+      const linkedNextSeg = linkedIdx < anim.segments.length ? anim.segments[linkedIdx] : null;
+      const linkedPrevSeg = linkedIdx > 0 && linkedIdx - 1 < anim.segments.length ? anim.segments[linkedIdx - 1] : null;
+      linkedOrigH0 = linkedNextSeg ? cloneCx(linkedNextSeg.h0) : null;
+      linkedOrigH1 = linkedPrevSeg ? cloneCx(linkedPrevSeg.h1) : null;
     }
     anchorDrag = {
       anim, anchorIdx: idx,
@@ -4858,7 +5314,7 @@ canvas.addEventListener('mousedown', e => {
       return;
     }
     if (objectGroupId(hitAnim) != null && selectedId !== hitAnim.id) {
-      if (selectedGroupId === objectGroupId(hitAnim)) drillSelectObject(hitAnim);
+      if ((isGroupSelectionActive() && selectedGroupId === objectGroupId(hitAnim)) || focusedGroupMemberGroupId() === objectGroupId(hitAnim)) drillSelectObject(hitAnim);
       else selectGroup(objectGroupId(hitAnim));
       renderAnimList(); draw(); updateCursor();
       return;
@@ -4979,8 +5435,18 @@ window.addEventListener('mousemove', e => {
   const [mathX, mathY] = toMath(cx, cy);
 
   // Placement preview
-  if (animations.some(a => a.inPlacementMode)) {
+  const placingForPreview = animations.find(a => a.inPlacementMode);
+  if (placingForPreview) {
     const onCanvas = cx >= 0 && cy >= 0 && cx <= canvas.width && cy <= canvas.height;
+    if (isPolylineAnim(placingForPreview) && lineConnectorChoice?.anim === placingForPreview) {
+      placementPreviewPos = null;
+      const nextHover = onCanvas ? queryLineConnectorChoice(cx, cy) : null;
+      const changed = (nextHover?.idx ?? -1) !== (lineConnectorChoiceHover?.idx ?? -1);
+      lineConnectorChoiceHover = nextHover;
+      if (changed) updateCursor();
+      draw(); return;
+    }
+    lineConnectorChoiceHover = null;
     placementPreviewPos = onCanvas ? new Cx(softSnap(mathX), softSnap(mathY)) : null;
     draw(); return;
   }
@@ -5392,30 +5858,390 @@ function isEccGhostActive(anim, segIdx) {
   return false;
 }
 
-function drawClosedSegmentFill(anim, fillColorOverride = null, opacityScale = 1) {
-  const loop = findLoopRange(anim);
-  if (!loop || !anim.closed || !animFillColor(anim)) return;
-  const startAnchor = anim.anchors[loop.loopStart];
-  if (!startAnchor) return;
-  const [x0, y0] = toCanvas(startAnchor.re, startAnchor.im);
-  const fillColor = fillColorOverride || animFillColor(anim);
-  ctx.save();
-  ctx.fillStyle = fillStyleValue(fillColor, animFillStyle(anim)) || fillColor;
-  ctx.globalAlpha = animFillOpacity(anim) * opacityScale;
-  ctx.beginPath();
-  ctx.moveTo(x0, y0);
-  for (let i = loop.loopStart; i < loop.loopEnd; i++) {
-    const seg = anim.segments[i];
-    const end = anim.anchors[i + 1];
-    if (!seg || !end) continue;
-    const h0 = toCanvas(seg.h0.re, seg.h0.im);
-    const h1 = toCanvas(seg.h1.re, seg.h1.im);
-    const p1 = toCanvas(end.re, end.im);
-    ctx.bezierCurveTo(h0[0], h0[1], h1[0], h1[1], p1[0], p1[1]);
+function fillEvenOdd(renderCtx) {
+  try { renderCtx.fill('evenodd'); }
+  catch (_err) { renderCtx.fill(); }
+}
+
+function addCompiledSegmentToPath(renderCtx, seg, startNewSubpath) {
+  if (!seg || !seg.compiled) return false;
+  let started = !startNewSubpath;
+  let drew = false;
+  for (const pt of sampleCompiledAdaptive(seg.compiled)) {
+    if (!pt) continue;
+    if (!started) {
+      renderCtx.moveTo(pt[0], pt[1]);
+      started = true;
+    } else {
+      renderCtx.lineTo(pt[0], pt[1]);
+    }
+    drew = true;
   }
-  ctx.closePath();
-  ctx.fill();
-  ctx.restore();
+  return drew;
+}
+
+function addCurveFillPath(renderCtx, anim, closedOnly = false) {
+  if (!anim || isPrimitiveAnim(anim) || isTextAnim(anim)) return false;
+  let drew = false;
+
+  if (closedOnly) {
+    const loop = findLoopRange(anim);
+    if (!loop || !anim.closed) return false;
+    let startNewSubpath = true;
+    for (let i = loop.loopStart; i < loop.loopEnd; i++) {
+      const segDrew = addCompiledSegmentToPath(renderCtx, anim.segments[i], startNewSubpath);
+      if (segDrew) {
+        drew = true;
+        startNewSubpath = false;
+      }
+    }
+    if (drew) renderCtx.closePath();
+    return drew;
+  }
+
+  let componentOpen = false;
+  for (const seg of anim.segments) {
+    if (!seg || !seg.compiled) {
+      if (componentOpen) {
+        renderCtx.closePath();
+        componentOpen = false;
+      }
+      continue;
+    }
+    const segDrew = addCompiledSegmentToPath(renderCtx, seg, !componentOpen);
+    if (segDrew) {
+      drew = true;
+      componentOpen = true;
+    }
+  }
+  if (componentOpen) renderCtx.closePath();
+  return drew;
+}
+
+function strokeCompiledSegmentsMask(renderCtx, anim) {
+  const dpr = devicePixelRatio;
+  renderCtx.save();
+  renderCtx.strokeStyle = '#000';
+  renderCtx.lineWidth = (1 + 5 * ((anim.thickness ?? 1) / 10)) * dpr;
+  renderCtx.lineCap = 'round';
+  renderCtx.lineJoin = 'round';
+  for (const seg of anim.segments || []) {
+    if (!seg || !seg.compiled) continue;
+    renderCtx.beginPath();
+    let started = false;
+    for (const pt of sampleCompiledAdaptive(seg.compiled)) {
+      if (!pt) continue;
+      if (!started) { renderCtx.moveTo(pt[0], pt[1]); started = true; }
+      else renderCtx.lineTo(pt[0], pt[1]);
+    }
+    if (started) renderCtx.stroke();
+  }
+  renderCtx.restore();
+}
+
+function drawPrimitiveBlockerMask(renderCtx, anim) {
+  if (!isPrimitiveAnim(anim) || anim.anchors.length < 2) return;
+  const p0 = anim.anchors[0], p1 = anim.anchors[1];
+  const [x0, y0] = toCanvas(p0.re, p0.im);
+  const [x1, y1] = toCanvas(p1.re, p1.im);
+  const lineWidth = primitiveStrokeWidth(anim);
+  renderCtx.save();
+  renderCtx.fillStyle = '#000';
+  renderCtx.strokeStyle = '#000';
+  renderCtx.lineWidth = lineWidth;
+  renderCtx.lineCap = 'round';
+  renderCtx.lineJoin = 'round';
+  renderCtx.beginPath();
+  if (animKind(anim) === 'line') {
+    renderCtx.moveTo(x0, y0);
+    renderCtx.lineTo(x1, y1);
+    renderCtx.stroke();
+  } else if (animKind(anim) === 'rectangle') {
+    const center = new Cx((p0.re + p1.re) * 0.5, (p0.im + p1.im) * 0.5);
+    const corners = [
+      new Cx(p0.re, p0.im),
+      new Cx(p1.re, p0.im),
+      new Cx(p1.re, p1.im),
+      new Cx(p0.re, p1.im),
+    ].map(pt => animRotation(anim) ? rotateMathPoint(pt, center, animRotation(anim)) : pt);
+    const pts = corners.map(pt => toCanvas(pt.re, pt.im));
+    renderCtx.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length; i++) renderCtx.lineTo(pts[i][0], pts[i][1]);
+    renderCtx.closePath();
+    renderCtx.fill();
+    renderCtx.stroke();
+  } else if (animKind(anim) === 'circle') {
+    renderCtx.arc(x0, y0, Math.hypot(x1 - x0, y1 - y0), 0, Math.PI * 2);
+    renderCtx.fill();
+    renderCtx.stroke();
+  } else if (animKind(anim) === 'ellipse') {
+    renderCtx.ellipse(x0, y0, Math.abs(x1 - x0), Math.abs(y1 - y0), -animRotation(anim), 0, Math.PI * 2);
+    renderCtx.fill();
+    renderCtx.stroke();
+  }
+  renderCtx.restore();
+}
+
+function drawTextBlockerMask(renderCtx, anim) {
+  const bounds = selectedObjectCanvasBounds(anim);
+  if (!bounds) return;
+  renderCtx.save();
+  renderCtx.fillStyle = '#000';
+  renderCtx.fillRect(bounds.left, bounds.top, bounds.right - bounds.left, bounds.bottom - bounds.top);
+  renderCtx.restore();
+}
+
+function drawHigherLayerBlockerMask(renderCtx, blocker) {
+  if (!blocker || !blocker.visible || blocker.inPlacementMode) return;
+  if (isPrimitiveAnim(blocker)) {
+    drawPrimitiveBlockerMask(renderCtx, blocker);
+    return;
+  }
+  if (isTextAnim(blocker)) {
+    drawTextBlockerMask(renderCtx, blocker);
+    return;
+  }
+  if (isDotAnim(blocker)) {
+    const [x, y] = toCanvas(blocker.anchors[0].re, blocker.anchors[0].im);
+    renderCtx.save();
+    renderCtx.fillStyle = '#000';
+    renderCtx.beginPath();
+    renderCtx.arc(x, y, dotRadius(blocker), 0, Math.PI * 2);
+    renderCtx.fill();
+    renderCtx.restore();
+    return;
+  }
+  if (blocker.closed && findLoopRange(blocker)) {
+    renderCtx.save();
+    renderCtx.fillStyle = '#000';
+    renderCtx.beginPath();
+    if (addCurveFillPath(renderCtx, blocker, true)) fillEvenOdd(renderCtx);
+    renderCtx.restore();
+  }
+  strokeCompiledSegmentsMask(renderCtx, blocker);
+}
+
+function higherLayerBlockersFor(anim) {
+  const idx = animations.indexOf(anim);
+  if (idx < 0) return [];
+  return animations.slice(idx + 1).filter(blocker => blocker.visible && !blocker.inPlacementMode);
+}
+
+function canvasPixelIndex(x, y, width) {
+  return y * width + x;
+}
+
+function maskAllowsFill(candidateData, barrierData, idx) {
+  const alphaIdx = idx * 4 + 3;
+  return candidateData[alphaIdx] > 0 && barrierData[alphaIdx] === 0;
+}
+
+function barrierPixelSet(barrierData, x, y, width, height) {
+  if (x < 0 || y < 0 || x >= width || y >= height) return false;
+  return barrierData[(canvasPixelIndex(x, y, width) * 4) + 3] > 0;
+}
+
+function barrierLineBetween(barrierData, width, height, x0, y0, x1, y1) {
+  const steps = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0)));
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const x = Math.round(x0 + (x1 - x0) * t);
+    const y = Math.round(y0 + (y1 - y0) * t);
+    if (barrierPixelSet(barrierData, x, y, width, height)) return true;
+  }
+  return false;
+}
+
+function barrierMaskHasPixels(barrierData) {
+  for (let i = 3; i < barrierData.length; i += 4) {
+    if (barrierData[i] > 0) return true;
+  }
+  return false;
+}
+
+function openFillSeedMathOffsets() {
+  const pxToMath = 1 / Math.max(Math.abs(scale), 1e-6);
+  const pixelOffsets = [0.5, 1, 2, 3, 4, 6, 8, 12].map(px => px * pxToMath);
+  const fineOffsets = [1, 2, 4, 8, 16, 32, 64].map(mult => mult / 960);
+  return Array.from(new Set([...fineOffsets, ...pixelOffsets].map(v => v.toFixed(8))))
+    .map(Number)
+    .sort((a, b) => a - b);
+}
+
+function addOpenFillSeed(queue, queued, x, y, width, height, candidateData, barrierData, fromX = null, fromY = null) {
+  const sx = Math.round(x), sy = Math.round(y);
+  if (sx < 0 || sy < 0 || sx >= width || sy >= height) return false;
+  if (fromX !== null && fromY !== null && barrierLineBetween(barrierData, width, height, fromX, fromY, sx, sy)) return false;
+  const idx = canvasPixelIndex(sx, sy, width);
+  if (queued[idx] || !maskAllowsFill(candidateData, barrierData, idx)) return false;
+  queued[idx] = 1;
+  queue.push(idx);
+  return true;
+}
+
+function seedOpenFillFromCurve(queue, queued, anim, width, height, candidateData, barrierData) {
+  let added = 0;
+  const offsets = openFillSeedMathOffsets();
+  for (const seg of anim.segments || []) {
+    if (!seg || !seg.compiled) continue;
+    const samples = sampleCompiledAdaptive(seg.compiled);
+    for (let i = 0; i < samples.length - 1; i++) {
+      const a = samples[i], b = samples[i + 1];
+      if (!a || !b) continue;
+      const [aMx, aMy] = toMath(a[0], a[1]);
+      const [bMx, bMy] = toMath(b[0], b[1]);
+      const dx = bMx - aMx, dy = bMy - aMy;
+      const len = Math.hypot(dx, dy);
+      if (len < 1e-6) continue;
+      const mx = (aMx + bMx) * 0.5;
+      const my = (aMy + bMy) * 0.5;
+      const [seedFromX, seedFromY] = toCanvas(mx, my);
+      const nx = -dy / len, ny = dx / len;
+      for (const dist of offsets) {
+        const pos = toCanvas(mx + nx * dist, my + ny * dist);
+        const neg = toCanvas(mx - nx * dist, my - ny * dist);
+        if (addOpenFillSeed(queue, queued, pos[0], pos[1], width, height, candidateData, barrierData, seedFromX, seedFromY)) added++;
+        if (addOpenFillSeed(queue, queued, neg[0], neg[1], width, height, candidateData, barrierData, seedFromX, seedFromY)) added++;
+      }
+    }
+  }
+  return added;
+}
+
+function seedOpenFillFallback(queue, queued, width, height, candidateData, barrierData) {
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (addOpenFillSeed(queue, queued, x, y, width, height, candidateData, barrierData)) return true;
+    }
+  }
+  return false;
+}
+
+function floodOpenFillMask(anim, candidateCanvas, barrierCanvas) {
+  const width = candidateCanvas.width;
+  const height = candidateCanvas.height;
+  const candidateCtx = candidateCanvas.getContext('2d');
+  const barrierCtx = barrierCanvas.getContext('2d');
+  const candidateData = candidateCtx.getImageData(0, 0, width, height).data;
+  const barrierData = barrierCtx.getImageData(0, 0, width, height).data;
+  const queued = new Uint8Array(width * height);
+  const queue = [];
+  const seedCount = seedOpenFillFromCurve(queue, queued, anim, width, height, candidateData, barrierData);
+  if (seedCount === 0 && !barrierMaskHasPixels(barrierData))
+    seedOpenFillFallback(queue, queued, width, height, candidateData, barrierData);
+
+  const reachable = new Uint8Array(width * height);
+  let head = 0;
+  while (head < queue.length) {
+    const idx = queue[head++];
+    if (reachable[idx] || !maskAllowsFill(candidateData, barrierData, idx)) continue;
+    reachable[idx] = 1;
+    const x = idx % width;
+    const y = Math.floor(idx / width);
+    const neighbors = [
+      x > 0 ? idx - 1 : -1,
+      x + 1 < width ? idx + 1 : -1,
+      y > 0 ? idx - width : -1,
+      y + 1 < height ? idx + width : -1,
+    ];
+    for (const next of neighbors) {
+      if (next < 0 || queued[next]) continue;
+      if (!maskAllowsFill(candidateData, barrierData, next)) continue;
+      queued[next] = 1;
+      queue.push(next);
+    }
+  }
+
+  const maskCanvas = document.createElement('canvas');
+  maskCanvas.width = width;
+  maskCanvas.height = height;
+  const maskCtx = maskCanvas.getContext('2d');
+  const out = maskCtx.createImageData(width, height);
+  for (let i = 0; i < reachable.length; i++) {
+    if (!reachable[i]) continue;
+    const a = i * 4 + 3;
+    out.data[a] = 255;
+  }
+  maskCtx.putImageData(out, 0, 0);
+  return maskCanvas;
+}
+
+function drawOpenCurveFillWithBarriers(anim, fillColor, opacityScale, blockers) {
+  const width = canvas.width;
+  const height = canvas.height;
+  const candidateCanvas = document.createElement('canvas');
+  candidateCanvas.width = width;
+  candidateCanvas.height = height;
+  const candidateCtx = candidateCanvas.getContext('2d');
+  candidateCtx.save();
+  candidateCtx.fillStyle = '#000';
+  candidateCtx.globalAlpha = 1;
+  candidateCtx.beginPath();
+  const drewCandidate = addCurveFillPath(candidateCtx, anim, false);
+  if (drewCandidate) fillEvenOdd(candidateCtx);
+  candidateCtx.restore();
+  if (!drewCandidate) return;
+
+  const barrierCanvas = document.createElement('canvas');
+  barrierCanvas.width = width;
+  barrierCanvas.height = height;
+  const barrierCtx = barrierCanvas.getContext('2d');
+  for (const blocker of blockers) drawHigherLayerBlockerMask(barrierCtx, blocker);
+
+  const reachableMask = floodOpenFillMask(anim, candidateCanvas, barrierCanvas);
+
+  const targetCanvas = document.createElement('canvas');
+  targetCanvas.width = width;
+  targetCanvas.height = height;
+  const targetCtx = targetCanvas.getContext('2d');
+  targetCtx.save();
+  targetCtx.fillStyle = fillStyleValueForContext(targetCtx, fillColor, animFillStyle(anim)) || fillColor;
+  targetCtx.globalAlpha = animFillOpacity(anim) * opacityScale;
+  targetCtx.beginPath();
+  if (addCurveFillPath(targetCtx, anim, false)) fillEvenOdd(targetCtx);
+  targetCtx.restore();
+  targetCtx.save();
+  targetCtx.globalCompositeOperation = 'destination-in';
+  targetCtx.drawImage(reachableMask, 0, 0);
+  targetCtx.restore();
+  ctx.drawImage(targetCanvas, 0, 0);
+}
+
+function drawCurveFill(anim, fillColorOverride = null, opacityScale = 1, blockers = []) {
+  if (!animFillColor(anim) || animFillOpacity(anim) <= 0) return;
+  const closedOnly = !!(anim.closed && findLoopRange(anim));
+  const fillColor = fillColorOverride || animFillColor(anim);
+  if (!closedOnly && blockers.length) {
+    drawOpenCurveFillWithBarriers(anim, fillColor, opacityScale, blockers);
+    return;
+  }
+  const targetCtx = blockers.length ? document.createElement('canvas').getContext('2d') : ctx;
+  if (blockers.length) {
+    targetCtx.canvas.width = canvas.width;
+    targetCtx.canvas.height = canvas.height;
+  }
+  targetCtx.save();
+  targetCtx.fillStyle = fillStyleValueForContext(targetCtx, fillColor, animFillStyle(anim)) || fillColor;
+  targetCtx.globalAlpha = animFillOpacity(anim) * opacityScale;
+  targetCtx.beginPath();
+  const drew = addCurveFillPath(targetCtx, anim, closedOnly);
+  if (drew) fillEvenOdd(targetCtx);
+  targetCtx.restore();
+  if (!drew) return;
+
+  if (blockers.length) {
+    targetCtx.save();
+    targetCtx.globalCompositeOperation = 'destination-out';
+    targetCtx.globalAlpha = 1;
+    for (const blocker of blockers) drawHigherLayerBlockerMask(targetCtx, blocker);
+    targetCtx.restore();
+    ctx.drawImage(targetCtx.canvas, 0, 0);
+  }
+}
+
+function drawClosedSegmentFill(anim, fillColorOverride = null, opacityScale = 1) {
+  if (!anim.closed || !findLoopRange(anim)) return;
+  drawCurveFill(anim, fillColorOverride, opacityScale, []);
 }
 
 function drawSegment(anim, segIdx, colorOverride = null, opacityScale = 1, thicknessOverride = null) {
@@ -5463,7 +6289,7 @@ function primitiveStrokeWidth(anim, extra = 0) {
   return (1 + 5 * (anim.thickness / 10)) * devicePixelRatio + extra;
 }
 
-function fillStyleValue(color, style) {
+function fillStyleValueForContext(renderCtx, color, style) {
   if (!color || style === 'solid') return color;
   const dpr = devicePixelRatio;
   const size = Math.max(8, Math.round(8 * dpr));
@@ -5500,7 +6326,11 @@ function fillStyleValue(color, style) {
   else if (style === 'diagUp') drawDiagUp();
   else if (style === 'cross') { drawHorizontal(); drawVertical(); }
   else if (style === 'diagCross') { drawDiagDown(); drawDiagUp(); }
-  return ctx.createPattern(tile, 'repeat') || color;
+  return renderCtx.createPattern(tile, 'repeat') || color;
+}
+
+function fillStyleValue(color, style) {
+  return fillStyleValueForContext(ctx, color, style);
 }
 
 function drawPrimitiveShape(kind, p0, p1, color, lineWidth, alpha = 1, dashed = false, rotation = 0, fillColor = null, outlineOpacity = 1, fillOpacity = 0.5, fillStyle = 'solid') {
@@ -5709,10 +6539,40 @@ function drawFreshFreeformPlacement(anim, previewPoint, cw, dpr) {
   }
 }
 
+function drawLineConnectorChoices(start, end, choices, color, cw, dpr, hoverIdx = null) {
+  if (!start || !end || !choices || choices.length === 0) return;
+  const curveOrder = [2, 1, 4, 3];
+  for (const idx of curveOrder) {
+    const choice = choices[idx];
+    if (!choice?.seg?.compiled) continue;
+    const active = hoverIdx === idx;
+    drawCompiledCurve(choice.seg.compiled, color, active ? cw * 0.95 : cw * 0.58, active ? 0.78 : 0.34);
+  }
+  const straight = choices[0];
+  if (straight?.seg?.compiled) {
+    const active = hoverIdx === 0;
+    drawCompiledCurve(straight.seg.compiled, color, active ? cw * 1.45 : cw * 1.18, active ? 0.95 : 0.72);
+  }
+}
+
 function drawPolylinePlacement(anim, previewPoint, cw, dpr) {
   for (let i = 0; i < anim.segments.length; i++) drawSegment(anim, i);
   for (const anchor of anim.anchors)
     drawAnchorDot(toCanvas(anchor.re, anchor.im), anim.color, 5 * dpr);
+
+  if (lineConnectorChoice?.anim === anim) {
+    drawLineConnectorChoices(
+      lineConnectorChoice.start,
+      lineConnectorChoice.end,
+      lineConnectorChoice.choices,
+      anim.color,
+      cw,
+      dpr,
+      lineConnectorChoiceHover?.idx ?? null
+    );
+    drawAnchorDot(toCanvas(lineConnectorChoice.end.re, lineConnectorChoice.end.im), anim.color, 5 * dpr);
+    return;
+  }
 
   if (!previewPoint || !previewPoint.ok || !previewPoint.ok()) return;
   const [px, py] = toCanvas(previewPoint.re, previewPoint.im);
@@ -5725,6 +6585,31 @@ function drawPolylinePlacement(anim, previewPoint, cw, dpr) {
     ctx.arc(px, py, 6 * dpr, 0, Math.PI * 2);
     ctx.stroke();
     ctx.restore();
+    return;
+  }
+
+  if (anim.extensionAnchorIdx == null && lineToolModeForPlacement(anim) !== LINE_TOOL_MODE_POLYLINE) {
+    if (polylineHasOpenDisconnectedStart(anim)) {
+      const src = anim.anchors[anim.anchors.length - 1];
+      if (src) {
+        if (lineToolModeForPlacement(anim) === LINE_TOOL_MODE_CURVES) {
+          drawLineConnectorChoices(src, previewPoint, buildLineConnectorChoices(src, previewPoint), anim.color, cw, dpr);
+        } else {
+          const [sx, sy] = toCanvas(src.re, src.im);
+          ctx.save();
+          ctx.globalAlpha = 0.55;
+          ctx.strokeStyle = anim.color;
+          ctx.lineWidth = cw;
+          ctx.setLineDash([4 * dpr, 4 * dpr]);
+          ctx.beginPath();
+          ctx.moveTo(sx, sy);
+          ctx.lineTo(px, py);
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
+    }
+    drawAnchorDot([px, py], anim.color, 5 * dpr);
     return;
   }
 
@@ -6046,16 +6931,18 @@ function pointInRect(px, py, rect) {
 }
 
 function querySideActionButtonHover(cx, cy) {
-  if (selectedGroupId != null) {
+  const anim = selectedObjectAnim();
+  if (anim && anim.visible && !anim.inPlacementMode) {
+    for (const btn of selectionSideActionButtons(anim)) {
+      if (pointInRect(cx, cy, btn)) return { anim, kind: btn.kind };
+    }
+    return null;
+  }
+  if (isGroupSelectionActive()) {
     for (const btn of groupSelectionSideActionButtons(selectedGroupId)) {
       if (pointInRect(cx, cy, btn)) return { groupId: selectedGroupId, kind: btn.kind };
     }
     return null;
-  }
-  const anim = animations.find(a => a.id === selectedId);
-  if (!anim || !anim.visible || anim.inPlacementMode) return null;
-  for (const btn of selectionSideActionButtons(anim)) {
-    if (pointInRect(cx, cy, btn)) return { anim, kind: btn.kind };
   }
   return null;
 }
@@ -6092,7 +6979,9 @@ function resizeCursorForHandle(handle) {
 }
 
 function queryResizeHandleHover(cx, cy) {
-  if (selectedGroupId != null) {
+  const anim = selectedObjectAnim();
+  if (anim) return queryResizeHandleHoverForAnim(anim, cx, cy);
+  if (isGroupSelectionActive()) {
     const threshold = 8 * devicePixelRatio;
     let best = null, bestDist = Infinity;
     for (const seg of groupSelectionResizeSegments(selectedGroupId)) {
@@ -6104,7 +6993,10 @@ function queryResizeHandleHover(cx, cy) {
     }
     return best;
   }
-  const anim = animations.find(a => a.id === selectedId);
+  return null;
+}
+
+function queryResizeHandleHoverForAnim(anim, cx, cy) {
   if (!anim || !anim.visible || anim.inPlacementMode || isDotAnim(anim)) return null;
   if (hasActiveArcSelection(anim)) return null;
   const threshold = 8 * devicePixelRatio;
@@ -6120,7 +7012,9 @@ function queryResizeHandleHover(cx, cy) {
 }
 
 function queryFrameBorderHover(cx, cy) {
-  if (selectedGroupId != null) {
+  const anim = selectedObjectAnim();
+  if (anim) return queryFrameBorderHoverForAnim(anim, cx, cy);
+  if (isGroupSelectionActive()) {
     if (queryResizeHandleHover(cx, cy)) return null;
     const f = groupSelectionFrameMetrics(selectedGroupId);
     if (!f) return null;
@@ -6135,10 +7029,13 @@ function queryFrameBorderHover(cx, cy) {
     const inInner = cx >= il && cx <= ir && cy >= it && cy <= ib;
     return (inOuter && !inInner) ? { groupId: selectedGroupId } : null;
   }
-  const anim = animations.find(a => a.id === selectedId);
+  return null;
+}
+
+function queryFrameBorderHoverForAnim(anim, cx, cy) {
   if (!anim || !anim.visible || anim.inPlacementMode || isDotAnim(anim)) return null;
   if (hasActiveArcSelection(anim)) return null;
-  if (queryResizeHandleHover(cx, cy)) return null;
+  if (queryResizeHandleHoverForAnim(anim, cx, cy)) return null;
   const f = selectionFrameMetrics(anim);
   if (!f) return null;
   const { x, y, w, h, outerX, outerY, outerW, outerH, extend } = f;
@@ -6155,15 +7052,29 @@ function queryFrameBorderHover(cx, cy) {
   return (inOuter && !inInner) ? anim : null;
 }
 
+function queryGroupMemberFrameBorderHover(groupId, cx, cy) {
+  const members = groupMembers(groupId);
+  for (let i = members.length - 1; i >= 0; i--) {
+    const hit = queryFrameBorderHoverForAnim(members[i], cx, cy);
+    if (hit) return hit;
+  }
+  return null;
+}
+
 function queryRotationWheelHover(cx, cy) {
-  if (selectedGroupId != null) {
+  const anim = selectedObjectAnim();
+  if (anim) return queryRotationWheelHoverForAnim(anim, cx, cy);
+  if (isGroupSelectionActive()) {
     const wheel = groupSelectionRotationWheel(selectedGroupId);
     if (!wheel || wheel.r < 4 * devicePixelRatio) return null;
     const threshold = 8 * devicePixelRatio;
     const d = Math.hypot(cx - wheel.cx, cy - wheel.cy);
     return Math.abs(d - wheel.r) <= threshold ? { groupId: selectedGroupId } : null;
   }
-  const anim = animations.find(a => a.id === selectedId);
+  return null;
+}
+
+function queryRotationWheelHoverForAnim(anim, cx, cy) {
   if (!anim || !anim.visible || anim.inPlacementMode || isDotAnim(anim)) return null;
   if (hasActiveArcSelection(anim)) return null;
   const wheel = selectionRotationWheel(anim);
@@ -7098,9 +8009,48 @@ function drawSelectedGroupBounds() {
   ctx.restore();
 }
 
+function drawCommittedAnimation(anim) {
+  if (!anim || !anim.visible || anim.inPlacementMode) return;
+  const inEditMode = (editModeAnimId === anim.id);
+
+  if (isPrimitiveAnim(anim)) {
+    drawPrimitive(anim);
+    drawSelectedObjectBounds(anim);
+    return;
+  }
+  if (isTextAnim(anim)) {
+    if (canvasTextEditAnimId !== anim.id) drawTextAnim(anim);
+    drawSelectedObjectBounds(anim);
+    return;
+  }
+  if (anim.anchors.length === 1 && anim.segments.length === 0) drawDot(anim);
+  const activeArc = activeArcIndex(anim);
+  const softColor = activeArc !== null ? softenedSelectionColor(anim.color) : null;
+  if (canFillAnim(anim) && animFillColor(anim)) {
+    const softFill = activeArc !== null && animFillColor(anim)
+      ? softenedSelectionColor(animFillColor(anim))
+      : null;
+    const isClosedFill = !!(anim.closed && findLoopRange(anim));
+    drawCurveFill(anim, softFill, activeArc !== null ? 0.55 : 1, isClosedFill ? [] : higherLayerBlockersFor(anim));
+  }
+  if (activeArc !== null) {
+    const thickDim   = Math.max(1, anim.thickness - 2);
+    const thickBoost = Math.min(10, anim.thickness + 2);
+    for (let i = 0; i < anim.segments.length; i++) {
+      if (i !== activeArc) drawSegment(anim, i, softColor, 1, thickDim);
+    }
+    drawSegment(anim, activeArc, null, 1, thickBoost);
+  } else {
+    for (let i = 0; i < anim.segments.length; i++) drawSegment(anim, i);
+  }
+  drawSelectedObjectBounds(anim);
+  if (inEditMode) drawHandles(anim);
+}
+
 function drawAnimations() {
   drawGrid();
   const dpr = devicePixelRatio;
+  const frontEditAnim = frontEditingAnim();
 
   // Hover glow under hovered segment
   if (segmentHover && segmentHover.anim.visible) {
@@ -7118,8 +8068,7 @@ function drawAnimations() {
 
   for (const anim of animations) {
     if (!anim.visible) continue;
-
-    const inEditMode = (editModeAnimId === anim.id);
+    if (anim === frontEditAnim) continue;
 
     if (anim.inPlacementMode) {
       if (isTextAnim(anim)) {
@@ -7220,40 +8169,11 @@ function drawAnimations() {
       continue;
     }
 
-    if (isPrimitiveAnim(anim)) {
-      drawPrimitive(anim);
-      drawSelectedObjectBounds(anim);
-      continue;
-    }
-    if (isTextAnim(anim)) {
-      if (canvasTextEditAnimId !== anim.id) drawTextAnim(anim);
-      drawSelectedObjectBounds(anim);
-      continue;
-    }
-    if (anim.anchors.length === 1 && anim.segments.length === 0) drawDot(anim);
-    const activeArc = activeArcIndex(anim);
-    const softColor = activeArc !== null ? softenedSelectionColor(anim.color) : null;
-    if (isClosedPathAnim(anim)) {
-      const softFill = activeArc !== null && animFillColor(anim)
-        ? softenedSelectionColor(animFillColor(anim))
-        : null;
-      drawClosedSegmentFill(anim, softFill, activeArc !== null ? 0.55 : 1);
-    }
-    if (activeArc !== null) {
-      const thickDim   = Math.max(1, anim.thickness - 2);
-      const thickBoost = Math.min(10, anim.thickness + 2);
-      for (let i = 0; i < anim.segments.length; i++) {
-        if (i !== activeArc) drawSegment(anim, i, softColor, 1, thickDim);
-      }
-      drawSegment(anim, activeArc, null, 1, thickBoost);
-    } else {
-      for (let i = 0; i < anim.segments.length; i++) drawSegment(anim, i);
-    }
-    drawSelectedObjectBounds(anim);
-    if (inEditMode) drawHandles(anim);
+    drawCommittedAnimation(anim);
   }
 
   drawSelectedGroupBounds();
+  if (frontEditAnim) drawCommittedAnimation(frontEditAnim);
 
   // Rubber-band selection rectangle
   if (rubberBand) {
@@ -7347,6 +8267,65 @@ function makeObjectIcon(kind, className = 'anim-kind-icon') {
     svg.appendChild(makeSvgEl('path', { d: 'M4 15.5c2.6-7.2 5.6 6.1 8.7-1.7 1.3-3.3 3.5-4.5 7-3.2' }));
   }
   return svg;
+}
+
+function makeLineToolModeIcon(mode) {
+  const svg = makeSvgEl('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' });
+  if (mode === LINE_TOOL_MODE_POLYLINE) {
+    svg.append(
+      makeSvgEl('polyline', { points: '4,17 8.5,9 13,15 20,6' }),
+      makeSvgEl('circle', { cx: 4, cy: 17, r: 1.45 }),
+      makeSvgEl('circle', { cx: 8.5, cy: 9, r: 1.45 }),
+      makeSvgEl('circle', { cx: 13, cy: 15, r: 1.45 }),
+      makeSvgEl('circle', { cx: 20, cy: 6, r: 1.45 })
+    );
+  } else if (mode === LINE_TOOL_MODE_SEGMENTS) {
+    svg.append(
+      makeSvgEl('line', { x1: 5, y1: 16.5, x2: 11, y2: 10.5 }),
+      makeSvgEl('line', { x1: 13, y1: 18, x2: 19, y2: 12 }),
+      makeSvgEl('circle', { cx: 5, cy: 16.5, r: 1.35 }),
+      makeSvgEl('circle', { cx: 11, cy: 10.5, r: 1.35 }),
+      makeSvgEl('circle', { cx: 13, cy: 18, r: 1.35 }),
+      makeSvgEl('circle', { cx: 19, cy: 12, r: 1.35 })
+    );
+  } else {
+    svg.append(
+      makeSvgEl('path', { d: 'M4 17L20 7', 'stroke-width': 2.6 }),
+      makeSvgEl('path', { d: 'M4 17Q11 8 20 7', 'stroke-width': 1.4 }),
+      makeSvgEl('path', { d: 'M4 17Q9 3.5 20 7', 'stroke-width': 1.2 }),
+      makeSvgEl('path', { d: 'M4 17Q13 20 20 7', 'stroke-width': 1.4 }),
+      makeSvgEl('path', { d: 'M4 17Q18 23 20 7', 'stroke-width': 1.2 }),
+      makeSvgEl('circle', { cx: 4, cy: 17, r: 1.45 }),
+      makeSvgEl('circle', { cx: 20, cy: 7, r: 1.45 })
+    );
+  }
+  return svg;
+}
+
+function activeLineToolOptionsAnim() {
+  return animations.find(a => a.inPlacementMode && isPolylineAnim(a) && a.extensionAnchorIdx == null) || null;
+}
+
+function renderLineToolOptions(parent) {
+  const modes = [
+    { mode: LINE_TOOL_MODE_POLYLINE, title: 'Connected line segments' },
+    { mode: LINE_TOOL_MODE_SEGMENTS, title: 'Separate straight segments' },
+    { mode: LINE_TOOL_MODE_CURVES, title: 'Separate segments with curve choices' },
+  ];
+  const activeMode = currentLineToolMode();
+  for (const item of modes) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'line-tool-mode-btn' + (item.mode === activeMode ? ' active' : '');
+    btn.title = item.title;
+    btn.setAttribute('aria-label', item.title);
+    btn.appendChild(makeLineToolModeIcon(item.mode));
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      setLineToolMode(item.mode);
+    });
+    parent.appendChild(btn);
+  }
 }
 
 function makeVisibilityIcon(visible) {
@@ -7526,10 +8505,135 @@ function sameColor(a, b) {
 }
 
 function parseHexColor(color) {
+  const short = /^#?([0-9a-f]{3})$/i.exec(color || '');
+  if (short) {
+    const hex = short[1].split('').map(ch => ch + ch).join('');
+    const n = parseInt(hex, 16);
+    return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+  }
   const m = /^#?([0-9a-f]{6})$/i.exec(color || '');
   if (!m) return null;
   const n = parseInt(m[1], 16);
   return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+}
+
+function rgbToHex(r, g, b) {
+  return `#${[r, g, b].map(v => Math.round(clamp(v, 0, 255)).toString(16).padStart(2, '0')).join('')}`;
+}
+
+function parseRgbColor(color) {
+  const m = /^rgba?\(\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)(?:\s*,\s*[0-9.]+)?\s*\)$/i.exec(color || '');
+  if (!m) return null;
+  return {
+    r: clamp(parseFloat(m[1]), 0, 255),
+    g: clamp(parseFloat(m[2]), 0, 255),
+    b: clamp(parseFloat(m[3]), 0, 255),
+  };
+}
+
+function parseColorToRgb(color) {
+  return parseHexColor(color) || parseRgbColor(color);
+}
+
+function normalizeColorString(color) {
+  const rgb = parseColorToRgb(color);
+  return rgb ? rgbToHex(rgb.r, rgb.g, rgb.b) : null;
+}
+
+function hslToRgb(h, s, l) {
+  h = ((Number(h) % 360) + 360) % 360;
+  s = clamp(Number(s), 0, 100) / 100;
+  l = clamp(Number(l), 0, 100) / 100;
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const x = c * (1 - Math.abs((h / 60) % 2 - 1));
+  const m = l - c / 2;
+  let r1 = 0, g1 = 0, b1 = 0;
+  if (h < 60) { r1 = c; g1 = x; }
+  else if (h < 120) { r1 = x; g1 = c; }
+  else if (h < 180) { g1 = c; b1 = x; }
+  else if (h < 240) { g1 = x; b1 = c; }
+  else if (h < 300) { r1 = x; b1 = c; }
+  else { r1 = c; b1 = x; }
+  return {
+    r: Math.round((r1 + m) * 255),
+    g: Math.round((g1 + m) * 255),
+    b: Math.round((b1 + m) * 255),
+  };
+}
+
+function hslToHex(h, s, l) {
+  const rgb = hslToRgb(h, s, l);
+  return rgbToHex(rgb.r, rgb.g, rgb.b);
+}
+
+function rgbToHsl(r, g, b) {
+  r = clamp(Number(r), 0, 255) / 255;
+  g = clamp(Number(g), 0, 255) / 255;
+  b = clamp(Number(b), 0, 255) / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const d = max - min;
+  let h = 0;
+  const l = (max + min) / 2;
+  const s = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+  if (d !== 0) {
+    if (max === r) h = 60 * (((g - b) / d) % 6);
+    else if (max === g) h = 60 * ((b - r) / d + 2);
+    else h = 60 * ((r - g) / d + 4);
+  }
+  if (h < 0) h += 360;
+  return { h, s: s * 100, l: l * 100 };
+}
+
+function colorToHsl(color, fallbackHue = 0) {
+  const rgb = parseColorToRgb(color) || hslToRgb(fallbackHue, 100, 50);
+  const hsl = rgbToHsl(rgb.r, rgb.g, rgb.b);
+  if (hsl.s < 0.5) hsl.h = fallbackHue;
+  return hsl;
+}
+
+function readableTextColorForBackground(color) {
+  return colorToHsl(color).l < 55 ? '#f5f7ff' : '#11111b';
+}
+
+function nearestHueIndex(h) {
+  const hue = ((Number(h) % 360) + 360) % 360;
+  let bestIdx = 0;
+  let bestDist = Infinity;
+  HUE_SWATCH_ANGLES.forEach((angle, idx) => {
+    const dist = Math.abs((((hue - angle + 540) % 360) - 180));
+    if (dist < bestDist) {
+      bestDist = dist;
+      bestIdx = idx;
+    }
+  });
+  return bestIdx;
+}
+
+function hueForIndex(index) {
+  return HUE_SWATCH_ANGLES[((index % HUE_SWATCH_COUNT) + HUE_SWATCH_COUNT) % HUE_SWATCH_COUNT] ?? 0;
+}
+
+function huePercentToAngle(percent) {
+  const p = clamp(Number(percent), 0, 100);
+  if (p >= 100) return 359.999;
+  if (p <= 25) return (p / 25) * 60;
+  return 60 + ((p - 25) / 75) * 300;
+}
+
+function hueAngleToPercent(angle) {
+  const hue = ((Number(angle) % 360) + 360) % 360;
+  if (hue <= 60) return (hue / 60) * 25;
+  return 25 + ((hue - 60) / 300) * 75;
+}
+
+function huePercentDistance(a, b) {
+  const diff = Math.abs(clamp(Number(a), 0, 100) - clamp(Number(b), 0, 100));
+  return Math.min(diff, 100 - diff);
+}
+
+function formatPercentPrecise(value) {
+  return `${Math.round(Number(value))}%`;
 }
 
 function mixHexColor(a, b, t = 0.5) {
@@ -7553,18 +8657,125 @@ function appendColorMenuLabel(parent, text) {
   parent.appendChild(label);
 }
 
-function appendPaletteSwatches(section, activeColor, onSelect) {
-  ANIM_COLORS.forEach(color => {
+function appendColorSliderControl(parent, labelText, value, onInput, options = {}) {
+  const row = document.createElement('div');
+  row.className = 'tree-slider-row';
+  row.style.padding = '2px 0';
+  const label = document.createElement('label');
+  label.textContent = labelText;
+  const slider = document.createElement('input');
+  const min = Number(options.min ?? 0);
+  const max = Number(options.max ?? 100);
+  slider.type = 'range';
+  slider.min = String(min);
+  slider.max = String(max);
+  slider.step = String(options.step ?? 1);
+  slider.value = clamp(value, min, max);
+  slider.disabled = !!options.disabled;
+  const valSpan = document.createElement('span');
+  valSpan.className = 'tree-slider-val';
+  const formatValue = options.formatValue || (v => `${Math.round(parseFloat(v))}%`);
+  valSpan.textContent = formatValue(slider.value);
+  const begin = () => {
+    if (!slider.disabled && options.withUndo) pushUndo();
+  };
+  slider.addEventListener('mousedown', begin);
+  slider.addEventListener('touchstart', begin, { passive: true });
+  slider.addEventListener('input', () => {
+    onInput(parseFloat(slider.value));
+    valSpan.textContent = formatValue(slider.value);
+  });
+  row.append(label, slider, valSpan);
+  parent.appendChild(row);
+  return {
+    slider,
+    setValue(nextValue) {
+      slider.value = nextValue;
+      valSpan.textContent = formatValue(slider.value);
+    },
+  };
+}
+
+function appendHslColorPicker(parent, activeColor, onChange, options = {}) {
+  const fallbackHue = options.fallbackHue ?? 0;
+  const initialColor = normalizeColorString(activeColor) || hslToHex(fallbackHue, 100, 50);
+  const hsl = colorToHsl(initialColor, fallbackHue);
+  const state = {
+    huePercent: Math.round(hueAngleToPercent(hsl.h)),
+    saturation: Math.round(clamp(hsl.s, 0, 100)),
+    lightness: Math.round(clamp(hsl.l, 0, 100)),
+  };
+
+  const swatches = document.createElement('div');
+  swatches.className = 'color-menu-section';
+  const buttons = [];
+  let hueControl = null;
+  for (const i of HUE_PRESET_INDICES) {
+    const hue = hueForIndex(i);
+    const huePercent = Math.round(hueAngleToPercent(hue));
     const opt = document.createElement('button');
-    opt.className = 'color-swatch-option' + (sameColor(activeColor, color) ? ' active' : '');
-    opt.title = color;
-    opt.style.background = color;
+    opt.type = 'button';
+    opt.className = 'color-swatch-option';
+    opt.title = `Hue ${formatPercentPrecise(huePercent)}`;
+    opt.style.background = hslToHex(hue, 100, 50);
     opt.addEventListener('click', e => {
       e.stopPropagation();
-      onSelect(color);
+      if (huePercentDistance(state.huePercent, huePercent) <= 0.05) {
+        if (options.forceActiveHueClick) applyColor(true);
+        return;
+      }
+      if (options.withUndo) pushUndo();
+      state.huePercent = huePercent;
+      hueControl?.setValue(state.huePercent);
+      applyColor(true);
     });
-    section.appendChild(opt);
-  });
+    buttons.push({ opt, huePercent });
+    swatches.appendChild(opt);
+  }
+  parent.appendChild(swatches);
+
+  const previewRow = document.createElement('div');
+  previewRow.className = 'color-preview-row';
+  const preview = document.createElement('div');
+  preview.className = 'color-preview-box';
+  const previewValue = document.createElement('div');
+  previewValue.className = 'color-preview-value';
+  previewRow.append(preview, previewValue);
+  parent.appendChild(previewRow);
+
+  hueControl = appendColorSliderControl(parent, 'Hue', state.huePercent, value => {
+    state.huePercent = Math.round(value);
+    applyColor(false);
+  }, { withUndo: !!options.withUndo, step: 1, formatValue: formatPercentPrecise });
+  appendColorSliderControl(parent, 'Lightness', state.lightness, value => {
+    state.lightness = Math.round(value);
+    applyColor(false);
+  }, { withUndo: !!options.withUndo });
+  appendColorSliderControl(parent, 'Saturation', state.saturation, value => {
+    state.saturation = Math.round(value);
+    applyColor(false);
+  }, { withUndo: !!options.withUndo });
+
+  function currentHex() {
+    return hslToHex(huePercentToAngle(state.huePercent), state.saturation, state.lightness);
+  }
+
+  function refresh() {
+    const hex = currentHex();
+    buttons.forEach(({ opt, huePercent }) => {
+      opt.classList.toggle('active', huePercentDistance(state.huePercent, huePercent) <= HUE_PRESET_MATCH_TOLERANCE);
+    });
+    preview.style.background = hex;
+    previewValue.textContent = hex.toUpperCase();
+  }
+
+  function applyColor(fromHueClick) {
+    const hex = currentHex();
+    refresh();
+    onChange(hex, { fromHueClick });
+  }
+
+  refresh();
 }
 
 function makeFillStyleIcon(style) {
@@ -7663,9 +8874,6 @@ function appendColorExpansion(parent, anim) {
     appendSliderRow(panel, 'Thickness', 1, 10, 1, anim.thickness ?? 2, v => `${Math.round(v)}`, v => {
       anim.thickness = parseInt(v, 10);
     });
-    appendSliderRow(panel, 'Opacity', 0, 100, 1, Math.round(animOutlineOpacity(anim) * 100), v => `${Math.round(v)}%`, v => {
-      anim.outlineOpacity = clamp(parseFloat(v) / 100, 0, 1);
-    });
   } else {
     const styleRow = document.createElement('div');
     styleRow.className = 'fill-style-row';
@@ -7688,28 +8896,38 @@ function appendColorExpansion(parent, anim) {
       styleRow.appendChild(btn);
     });
     panel.appendChild(styleRow);
-    appendSliderRow(panel, 'Opacity', 0, 100, 1, Math.round(animFillOpacity(anim) * 100), v => `${Math.round(v)}%`, v => {
-      anim.fillOpacity = clamp(parseFloat(v) / 100, 0, 1);
-    }, !fillActive);
   }
 
-  // Color swatches grid
-  const swatches = document.createElement('div');
-  swatches.className = 'color-menu-section';
-  appendPaletteSwatches(swatches, !isOutline ? animFillColor(anim) : anim.color, color => {
+  const activeColor = !isOutline ? (animFillColor(anim) || anim.color) : anim.color;
+  appendHslColorPicker(panel, activeColor, (color, meta = {}) => {
     if (!isOutline && fillEnabled) {
       if (!sameColor(animFillColor(anim), color)) {
-        pushUndo();
         anim.fillColor = color;
         if (!anim.fillStyle) anim.fillStyle = 'solid';
       }
     } else if (!sameColor(anim.color, color)) {
-      pushUndo();
       anim.color = color;
     }
-    renderAnimList(); draw();
-  });
-  panel.appendChild(swatches);
+    saveProject();
+    if (meta.fromHueClick) renderAnimList();
+    draw();
+  }, { withUndo: true, fallbackHue: colorToHsl(anim.color).h });
+
+  if (isOutline) {
+    appendSliderRow(panel, 'Opacity', 0, 100, 1, Math.round(animOutlineOpacity(anim) * 100), v => `${Math.round(v)}%`, v => {
+      anim.outlineOpacity = clamp(parseFloat(v) / 100, 0, 1);
+      saveProject();
+    });
+  } else {
+    appendSliderRow(panel, 'Opacity', 0, 100, 1, Math.round(animFillOpacity(anim) * 100), v => `${Math.round(v)}%`, v => {
+      if (!animFillColor(anim) && fillEnabled) {
+        anim.fillColor = activeColor;
+        if (!anim.fillStyle) anim.fillStyle = 'solid';
+      }
+      anim.fillOpacity = clamp(parseFloat(v) / 100, 0, 1);
+      saveProject();
+    }, !fillEnabled);
+  }
 
   root.appendChild(panel);
   parent.appendChild(root);
@@ -7839,22 +9057,47 @@ function renderAnimThumbnail(anim, canvasEl) {
     tctx.globalAlpha = 0.9; tctx.fillStyle = color; tctx.fill();
   } else {
     const loop = findLoopRange(anim);
-    if (loop && anim.closed && fillCol) {
-      tctx.beginPath(); let started = false;
-      for (let si = loop.loopStart; si < loop.loopEnd; si++) {
-        const seg = anim.segments[si];
-        if (!seg || !seg.compiled || seg.visible === false) continue;
+    if (fillCol && canFillAnim(anim)) {
+      tctx.beginPath();
+      let started = false;
+      let componentOpen = false;
+      const addThumbFillSeg = seg => {
+        if (!seg || !seg.compiled) return;
         for (let i = 0; i <= 32; i++) {
           try {
             const pt = seg.compiled(0, i / 32, {});
             if (!pt) continue;
             const [x,y] = T(pt.re, pt.im);
-            if (!started) { tctx.moveTo(x,y); started = true; } else tctx.lineTo(x,y);
+            if (!componentOpen) {
+              tctx.moveTo(x,y);
+              componentOpen = true;
+              started = true;
+            } else {
+              tctx.lineTo(x,y);
+            }
           } catch (_) {}
         }
+      };
+      if (loop && anim.closed) {
+        for (let si = loop.loopStart; si < loop.loopEnd; si++) addThumbFillSeg(anim.segments[si]);
+        if (componentOpen) tctx.closePath();
+      } else {
+        for (const seg of anim.segments) {
+          if (!seg || !seg.compiled) {
+            if (componentOpen) {
+              tctx.closePath();
+              componentOpen = false;
+            }
+            continue;
+          }
+          addThumbFillSeg(seg);
+        }
+        if (componentOpen) tctx.closePath();
       }
-      tctx.closePath();
-      tctx.fillStyle = fillCol; tctx.globalAlpha = fillAlpha; tctx.fill();
+      if (started) {
+        tctx.fillStyle = fillCol; tctx.globalAlpha = fillAlpha;
+        try { tctx.fill('evenodd'); } catch (_) { tctx.fill(); }
+      }
     }
     tctx.globalAlpha = 0.9;
     for (const seg of anim.segments) {
@@ -7881,6 +9124,30 @@ function renderAnimThumbnail(anim, canvasEl) {
   }
 }
 
+function objectTileBlockForIndex(index) {
+  const anim = animations[index];
+  if (!anim) return null;
+  const gid = objectGroupId(anim);
+  const members = gid == null ? [anim] : groupMembers(gid);
+  const memberIds = new Set(members.map(a => a.id));
+  const ordered = animations.filter(a => memberIds.has(a.id));
+  const indices = ordered.map(a => animations.indexOf(a)).filter(i => i >= 0);
+  return {
+    groupId: gid,
+    animIds: ordered.map(a => a.id),
+    fromIndex: Math.min(...indices),
+    toIndex: Math.max(...indices),
+  };
+}
+
+function setObjectTileDragVisual(animIds, dragging) {
+  const idSet = new Set(animIds || []);
+  document.querySelectorAll('#object-tiles .obj-tile-wrap[data-anim-id]').forEach(wrap => {
+    const id = Number(wrap.dataset.animId);
+    wrap.classList.toggle('dragging', dragging && idSet.has(id));
+  });
+}
+
 function objectTileInsertionIndexFromEvent(e) {
   const tilesEl = document.getElementById('object-tiles');
   let wrap = e.target.closest && e.target.closest('.obj-tile-wrap[data-index]');
@@ -7905,6 +9172,15 @@ function objectTileInsertionIndexFromEvent(e) {
   if (!isFinite(idx)) return animations.length;
   const rect = wrap.getBoundingClientRect();
   const after = e.clientX >= rect.left + rect.width * 0.5;
+  const anim = animations[idx];
+  const gid = objectGroupId(anim);
+  const movingIds = new Set(objectTileDrag?.animIds || []);
+  if (gid != null && !groupMembers(gid).some(member => movingIds.has(member.id))) {
+    const indices = animations
+      .map((candidate, candidateIdx) => objectGroupId(candidate) === gid ? candidateIdx : -1)
+      .filter(candidateIdx => candidateIdx >= 0);
+    if (indices.length) return after ? Math.max(...indices) + 1 : Math.min(...indices);
+  }
   return clamp(idx + (after ? 1 : 0), 0, animations.length);
 }
 
@@ -7919,22 +9195,40 @@ function updateObjectTileDropCue(insertionIndex) {
   const wraps = [...document.querySelectorAll('#object-tiles .obj-tile-wrap[data-index]')];
   if (!wraps.length) return;
   const idx = clamp(Math.round(insertionIndex), 0, wraps.length);
+  if (objectTileDrag?.animIds) {
+    const movingIds = new Set(objectTileDrag.animIds);
+    const movingIndices = animations
+      .map((anim, animIdx) => movingIds.has(anim.id) ? animIdx : -1)
+      .filter(animIdx => animIdx >= 0);
+    if (movingIndices.length) {
+      const first = Math.min(...movingIndices);
+      const last = Math.max(...movingIndices);
+      if (idx >= first && idx <= last + 1) return;
+    }
+  }
   if (idx >= wraps.length) wraps[wraps.length - 1].classList.add('drop-after');
   else wraps[idx].classList.add('drop-before');
 }
 
-function moveAnimationInStack(fromIndex, insertionIndex) {
+function moveAnimationInStack(fromIndex, insertionIndex, sourceAnimIds = null) {
   if (fromIndex < 0 || fromIndex >= animations.length) return false;
-  const source = animations[fromIndex];
+  const sourceIds = new Set(sourceAnimIds && sourceAnimIds.length ? sourceAnimIds : [animations[fromIndex].id]);
+  const moving = animations.filter(anim => sourceIds.has(anim.id));
+  if (!moving.length) return false;
+  const movingIndices = animations
+    .map((anim, idx) => sourceIds.has(anim.id) ? idx : -1)
+    .filter(idx => idx >= 0);
+  const firstIndex = Math.min(...movingIndices);
+  const lastIndex = Math.max(...movingIndices);
   let toIndex = clamp(Math.round(insertionIndex), 0, animations.length);
-  if (toIndex > fromIndex) toIndex--;
-  if (toIndex === fromIndex) return false;
+  if (toIndex >= firstIndex && toIndex <= lastIndex + 1) return false;
 
   const tilesEl = document.getElementById('object-tiles');
   const tileScrollTop = tilesEl ? tilesEl.scrollTop : 0;
   pushUndo();
-  animations.splice(fromIndex, 1);
-  animations.splice(toIndex, 0, source);
+  const insertionInRemaining = animations.slice(0, toIndex).filter(anim => !sourceIds.has(anim.id)).length;
+  const remaining = animations.filter(anim => !sourceIds.has(anim.id));
+  animations = remaining.slice(0, insertionInRemaining).concat(moving, remaining.slice(insertionInRemaining));
   renumberAnimationsByStackOrder();
   clearObjectTileDropCues();
   renderAnimList();
@@ -7966,12 +9260,61 @@ function handleObjectTileDragOver(e) {
 function handleObjectTileDrop(e) {
   if (!objectTileDrag) return;
   e.preventDefault();
-  const fromIndex = animations.findIndex(anim => anim.id === objectTileDrag.animId);
+  const drag = objectTileDrag;
+  const fromIndex = animations.findIndex(anim => anim.id === drag.animId);
   const insertionIndex = objectTileInsertionIndexFromEvent(e);
   objectTileDrag = null;
   suppressTileClickUntil = Date.now() + 250;
   clearObjectTileDropCues();
-  moveAnimationInStack(fromIndex, insertionIndex);
+  setObjectTileDragVisual(drag.animIds, false);
+  moveAnimationInStack(fromIndex, insertionIndex, drag.animIds);
+}
+
+function renderGroupTileBackdrops(tilesEl) {
+  tilesEl.querySelectorAll('.obj-group-backdrop').forEach(el => el.remove());
+  const wraps = [...tilesEl.querySelectorAll('.obj-tile-wrap[data-index]')];
+  const segments = [];
+  let current = null;
+  const focusedGid = focusedGroupMemberGroupId();
+  for (const wrap of wraps) {
+    const idx = Number(wrap.dataset.index);
+    const anim = animations[idx];
+    const gid = objectGroupId(anim);
+    if (gid == null || gid === focusedGid || groupMembers(gid).length < 2) {
+      current = null;
+      continue;
+    }
+    const row = Math.floor(idx / 5);
+    if (current && current.groupId === gid && current.row === row && current.lastIndex === idx - 1) {
+      current.wraps.push(wrap);
+      current.lastIndex = idx;
+    } else {
+      current = { groupId: gid, row, wraps: [wrap], lastIndex: idx };
+      segments.push(current);
+    }
+  }
+
+  for (const segment of segments) {
+    const left = Math.min(...segment.wraps.map(wrap => wrap.offsetLeft));
+    const top = Math.min(...segment.wraps.map(wrap => wrap.offsetTop));
+    const right = Math.max(...segment.wraps.map(wrap => wrap.offsetLeft + wrap.offsetWidth));
+    const bottom = Math.max(...segment.wraps.map(wrap => wrap.offsetTop + wrap.offsetHeight));
+    const padX = 5;
+    const padY = 4;
+    const backdrop = document.createElement('div');
+    const members = groupMembers(segment.groupId);
+    const isCandidate = groupSelectionMode && members.some(member => groupCandidateIds.has(member.id));
+    backdrop.className = 'obj-group-backdrop'
+      + (isGroupSelectionActive() && selectedGroupId === segment.groupId ? ' selected' : '')
+      + (isCandidate ? ' candidate' : '');
+    const x = Math.max(0, left - padX);
+    const y = Math.max(0, top - padY);
+    backdrop.style.left = `${x}px`;
+    backdrop.style.top = `${y}px`;
+    backdrop.style.width = `${right - left + (left - x) + padX}px`;
+    backdrop.style.height = `${bottom - top + (top - y) + padY}px`;
+    tilesEl.appendChild(backdrop);
+  }
 }
 
 function renderGroupDetail(detailEl, groupId) {
@@ -8028,12 +9371,13 @@ function updateGroupObjectsButton() {
   if (!btn) return;
   btn.className = '';
   btn.disabled = false;
-  const objectDetailOpen = (selectedId != null || editModeAnimId != null) && selectedGroupId == null;
-  const shouldShow = groupSelectionMode || selectedGroupId != null || !objectDetailOpen;
+  const groupActive = isGroupSelectionActive();
+  const objectDetailOpen = (selectedId != null || editModeAnimId != null) && !groupActive;
+  const shouldShow = !activeLineToolOptionsAnim() && (groupSelectionMode || groupActive || !objectDetailOpen);
   btn.style.display = shouldShow ? 'block' : 'none';
   if (!shouldShow) return;
 
-  if (selectedGroupId != null) {
+  if (groupActive) {
     btn.textContent = 'Ungroup';
     btn.classList.add('is-ungroup');
     return;
@@ -8061,6 +9405,16 @@ function renderAnimList() {
   const detailAnim = animations.find(a => a.id === selectedId) ||
                      animations.find(a => a.id === editModeAnimId);
   tilesEl.innerHTML = '';
+  const lineOptionsAnim = activeLineToolOptionsAnim();
+  tilesEl.classList.toggle('line-tool-options-host', !!lineOptionsAnim);
+  if (lineOptionsAnim) {
+    renderLineToolOptions(tilesEl);
+    _tilesVisibleRows = 1;
+    tilesEl.style.height = '66px';
+    tilesEl.scrollTop = 0;
+    updateTilesMoreIndicator();
+    updateGroupObjectsButton();
+  } else {
   if (animations.length === 0) {
     const hint = document.createElement('p');
     hint.className = 'placement-hint';
@@ -8075,7 +9429,7 @@ function renderAnimList() {
     const isSelected = selectedId === anim.id || editModeAnimId === anim.id;
     const wrap = document.createElement('div');
     const grouped = objectGroupId(anim) != null;
-    const groupSelected = selectedGroupId != null && objectGroupId(anim) === selectedGroupId;
+    const groupSelected = isGroupSelectionActive() && objectGroupId(anim) === selectedGroupId;
     const groupCandidate = groupSelectionMode && groupCandidateIds.has(anim.id);
     wrap.className = 'obj-tile-wrap'
       + (grouped ? ' grouped' : '')
@@ -8098,18 +9452,25 @@ function renderAnimList() {
     renderAnimThumbnail(anim, thumbCanvas);
     wrap.addEventListener('dragstart', e => {
       if (anim.inPlacementMode) { e.preventDefault(); return; }
-      objectTileDrag = { animId: anim.id, fromIndex: idx, insertionIndex: idx };
+      const block = objectTileBlockForIndex(idx);
+      objectTileDrag = {
+        animId: anim.id,
+        animIds: block?.animIds || [anim.id],
+        fromIndex: block?.fromIndex ?? idx,
+        insertionIndex: idx,
+      };
       suppressTileClickUntil = Date.now() + 250;
       if (e.dataTransfer) {
         e.dataTransfer.effectAllowed = 'move';
         e.dataTransfer.setData('text/plain', String(anim.id));
       }
-      requestAnimationFrame(() => wrap.classList.add('dragging'));
+      requestAnimationFrame(() => setObjectTileDragVisual(objectTileDrag?.animIds || [anim.id], true));
     });
     wrap.addEventListener('dragend', () => {
+      const dragIds = objectTileDrag?.animIds || [anim.id];
       objectTileDrag = null;
       suppressTileClickUntil = Date.now() + 250;
-      wrap.classList.remove('dragging');
+      setObjectTileDragVisual(dragIds, false);
       clearObjectTileDropCues();
     });
     tile.addEventListener('click', () => {
@@ -8122,7 +9483,7 @@ function renderAnimList() {
         return;
       }
       if (objectGroupId(anim) != null && selectedId !== anim.id) {
-        if (selectedGroupId === objectGroupId(anim)) drillSelectObject(anim);
+        if ((isGroupSelectionActive() && selectedGroupId === objectGroupId(anim)) || focusedGroupMemberGroupId() === objectGroupId(anim)) drillSelectObject(anim);
         else selectGroup(objectGroupId(anim));
         renderAnimList(); draw(); updateCursor();
         return;
@@ -8152,6 +9513,7 @@ function renderAnimList() {
   const _tileRows = _tileCount === 0 ? 1 : (detailAnim || detailGroupId ? 1 : Math.min(8, Math.ceil(_tileCount / 5)));
   _tilesVisibleRows = _tileRows;
   tilesEl.style.height = (_tileRows * 67 + Math.max(0, _tileRows - 1) * 5 + 10) + 'px';
+  renderGroupTileBackdrops(tilesEl);
   // Auto-scroll so the selected tile is always visible
   const _focusId = selectedId ?? editModeAnimId ?? groupMembers(detailGroupId)[0]?.id;
   const _selIdx = animations.findIndex(a => a.id === _focusId);
@@ -8165,6 +9527,7 @@ function renderAnimList() {
   }
   updateTilesMoreIndicator();
   updateGroupObjectsButton();
+  }
 
   // ── Detail panel ──
   const detailEl = document.getElementById('object-detail');
@@ -8856,6 +10219,11 @@ function updateTilesMoreIndicator() {
   const tilesEl = document.getElementById('object-tiles');
   const aboveEl = document.getElementById('tiles-more-above');
   const belowEl = document.getElementById('tiles-more');
+  if (tilesEl.classList.contains('line-tool-options-host')) {
+    aboveEl.style.display = 'none';
+    belowEl.style.display = 'none';
+    return;
+  }
   const count = animations.length;
   if (count <= _tilesVisibleRows * 5) { aboveEl.style.display = 'none'; belowEl.style.display = 'none'; return; }
   const rowH = 72; // 67px tile-wrap + 5px gap
@@ -8926,24 +10294,44 @@ const axisStrengthInput = document.getElementById('axis-strength');
 const axisStrengthVal = document.getElementById('axis-strength-val');
 const snapStrengthInput = document.getElementById('snap-strength');
 const snapStrengthVal = document.getElementById('snap-strength-val');
+const defaultColorTriggerBtn = document.getElementById('default-color-trigger');
+const defaultColorPickerEl = document.getElementById('default-color-picker');
 
 let globalSettingsOpen = false;
+let defaultColorPickerOpen = false;
+
+function setDefaultColorPickerOpen(open) {
+  defaultColorPickerOpen = !!open && globalSettingsOpen;
+  defaultColorPickerEl.classList.toggle('open', defaultColorPickerOpen);
+  defaultColorTriggerBtn.classList.toggle('active', defaultColorPickerOpen);
+  defaultColorTriggerBtn.setAttribute('aria-expanded', defaultColorPickerOpen ? 'true' : 'false');
+  if (defaultColorPickerOpen) renderDefaultColorPicker();
+}
 
 function setGlobalSettingsOpen(open) {
   globalSettingsOpen = !!open;
   globalSettingsPanel.classList.toggle('open', globalSettingsOpen);
   globalSettingsBtn.setAttribute('aria-expanded', globalSettingsOpen ? 'true' : 'false');
+  if (!globalSettingsOpen) setDefaultColorPickerOpen(false);
 }
 
 document.addEventListener('click', e => {
-  if (globalSettingsOpen && !(e.target.closest && e.target.closest('#global-settings'))) {
+  const inSettings = e.target.closest && e.target.closest('#global-settings');
+  if (globalSettingsOpen && !inSettings) {
     setGlobalSettingsOpen(false);
+    return;
+  }
+  if (defaultColorPickerOpen && inSettings) {
+    const inPicker = e.target.closest('#default-color-picker');
+    const onTrigger = e.target.closest('#default-color-trigger');
+    if (!inPicker && !onTrigger) setDefaultColorPickerOpen(false);
   }
 }, true);
 
 function renderGlobalSettingsControls() {
   defaultThicknessInput.value = globalSettings.defaultThickness;
   defaultThicknessVal.textContent = globalSettings.defaultThickness;
+  renderDefaultColorSettings();
   gridStrengthInput.value = globalSettings.gridStrength;
   gridStrengthVal.textContent = `${globalSettings.gridStrength}%`;
   axisStrengthInput.value = globalSettings.axisStrength;
@@ -8951,6 +10339,49 @@ function renderGlobalSettingsControls() {
 
   snapStrengthInput.value = snapStrengthIndex(globalSettings.snapStrength);
   snapStrengthVal.textContent = `${currentSnapStrength()}%`;
+}
+
+function renderDefaultColorSettings() {
+  const defaultColor = normalizeColorString(globalSettings.defaultColor);
+  globalSettings.defaultColor = defaultColor;
+  updateDefaultColorTrigger(defaultColor);
+  if (defaultColorPickerOpen) renderDefaultColorPicker();
+}
+
+function updateDefaultColorTrigger(defaultColor = normalizeColorString(globalSettings.defaultColor)) {
+  defaultColorTriggerBtn.classList.toggle('has-color', !!defaultColor);
+  defaultColorTriggerBtn.textContent = defaultColor ? '' : 'None';
+  defaultColorTriggerBtn.style.background = defaultColor || '';
+  defaultColorTriggerBtn.style.color = defaultColor ? 'transparent' : '';
+  defaultColorTriggerBtn.title = defaultColor ? `Default color: ${defaultColor.toUpperCase()}` : 'Default color: None';
+  defaultColorTriggerBtn.setAttribute('aria-label', defaultColor ? `Default color ${defaultColor.toUpperCase()}` : 'Default color None');
+}
+
+function renderDefaultColorPicker() {
+  const defaultColor = normalizeColorString(globalSettings.defaultColor);
+  const pickerColor = defaultColor || DEFAULT_COLORS[animColorIdx % DEFAULT_COLORS.length] || DEFAULT_COLORS[0];
+  defaultColorPickerEl.innerHTML = '';
+  const actionRow = document.createElement('div');
+  actionRow.className = 'default-color-popout-actions';
+  const noneBtn = document.createElement('button');
+  noneBtn.type = 'button';
+  noneBtn.className = defaultColor ? '' : 'active';
+  noneBtn.textContent = 'None';
+  noneBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    globalSettings.defaultColor = null;
+    saveGlobalSettings();
+    updateDefaultColorTrigger(null);
+    setDefaultColorPickerOpen(false);
+  });
+  actionRow.appendChild(noneBtn);
+  defaultColorPickerEl.appendChild(actionRow);
+  appendHslColorPicker(defaultColorPickerEl, pickerColor, color => {
+    globalSettings.defaultColor = color;
+    updateDefaultColorTrigger(color);
+    noneBtn.classList.remove('active');
+    saveGlobalSettings();
+  }, { withUndo: false, fallbackHue: colorToHsl(pickerColor).h, forceActiveHueClick: !defaultColor });
 }
 
 globalSettingsBtn.addEventListener('click', e => {
@@ -8963,6 +10394,12 @@ document.getElementById('redo-btn').addEventListener('click', () => redo());
 updateUndoRedoButtons();
 
 globalSettingsMenu.addEventListener('click', e => e.stopPropagation());
+defaultColorPickerEl.addEventListener('click', e => e.stopPropagation());
+
+defaultColorTriggerBtn.addEventListener('click', e => {
+  e.stopPropagation();
+  setDefaultColorPickerOpen(!defaultColorPickerOpen);
+});
 
 defaultThicknessInput.addEventListener('input', () => {
   globalSettings.defaultThickness = parseInt(defaultThicknessInput.value, 10);
@@ -9043,7 +10480,7 @@ document.getElementById('animations-panel').addEventListener('click', e => {
 
 document.getElementById('group-objects-btn').addEventListener('click', e => {
   e.stopPropagation();
-  if (selectedGroupId != null) {
+  if (isGroupSelectionActive()) {
     ungroup(selectedGroupId);
     return;
   }
@@ -9082,6 +10519,7 @@ document.getElementById('object-tiles').addEventListener('wheel', e => {
 }, { passive: false });
 document.getElementById('object-tiles').addEventListener('click', e => {
   if (e.target !== e.currentTarget) return;
+  if (e.currentTarget.classList.contains('line-tool-options-host')) return;
   openColorMenuAnimId = null;
   const placing = animations.find(a => a.inPlacementMode);
   if (placing) {
