@@ -342,6 +342,51 @@
     }
     .detail-thickness input[type="range"] { width: 100%; }
 
+    .detail-group-tiles {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding: 8px;
+    }
+    .detail-group-tile {
+      width: 64px; height: 64px;
+      box-sizing: border-box;
+      border-radius: 6px;
+      border: 2px solid #313244;
+      background: #1e1e2e;
+      cursor: pointer;
+      overflow: hidden;
+      padding: 0;
+      display: block;
+      flex-shrink: 0;
+    }
+    .detail-group-tile canvas { display: block; width: 100%; height: 100%; }
+    .detail-group-tile:hover { border-color: #585b70; }
+    .detail-group-tile.selected { border-color: #cdd6f4; border-width: 2px; }
+    .group-name-placeholder { color: #585b70; font-weight: 400; font-size: 0.85rem; }
+    #tiles-breadcrumb {
+      display: none;
+      align-items: center;
+      gap: 2px;
+      padding: 3px 6px 2px;
+      font-size: 0.70rem;
+      flex-shrink: 0;
+      flex-wrap: wrap;
+    }
+    #tiles-breadcrumb button {
+      background: none; border: none; padding: 2px 5px;
+      border-radius: 4px; color: #a6adc8; font-size: 0.70rem;
+      cursor: pointer; line-height: 1.4;
+    }
+    #tiles-breadcrumb button:hover { background: #313244; color: #cdd6f4; }
+    .tiles-breadcrumb-sep { color: #45475a; padding: 0 1px; }
+    .obj-group-mosaic-tile { position: relative; }
+    .obj-group-mosaic-icon {
+      position: absolute; bottom: 2px; right: 2px;
+      font-size: 8px; line-height: 1; color: rgba(137,180,250,0.7);
+      pointer-events: none;
+    }
+
     /* ── Arc list ── */
     .arc-list {
       padding: 5px 6px;
@@ -613,6 +658,23 @@
     .color-tab-content.fill-active {
       border-radius: 6px 0 6px 6px;
     }
+    .eyedropper-btn {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 10px;
+      font-size: 0.7rem;
+      font-weight: 500;
+      color: #a6adc8;
+      background: #13131e;
+      border: 1px solid #45475a;
+      border-radius: 5px;
+      cursor: pointer;
+      width: 100%;
+      justify-content: center;
+    }
+    .eyedropper-btn:hover { background: #1e1e2e; color: #cdd6f4; }
+    .eyedropper-btn.active { background: #313244; color: #89dceb; border-color: #89dceb; }
     .hue-wheel-wrap {
       display: flex;
       justify-content: center;
@@ -1225,9 +1287,30 @@
       min-width: 0;
       border-radius: 8px;
     }
-    #object-window {
+    #left-column {
       flex: 0 0 40%;
       min-width: 80px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    #isolation-window {
+      flex: 1;
+      min-height: 60px;
+      position: relative;
+      overflow: hidden;
+      background: #05050f;
+    }
+    #h-split-handle {
+      flex: 0 0 5px;
+      background: #252537;
+      cursor: ns-resize;
+      transition: background 0.15s;
+    }
+    #h-split-handle:hover, #h-split-handle.dragging { background: #585b70; }
+    #object-window {
+      flex: 1;
+      min-height: 60px;
       position: relative;
       overflow: hidden;
       background: #05050f;
@@ -1242,8 +1325,19 @@
     #split-handle:hover, #split-handle.dragging { background: #585b70; }
     /* ── Scene window (main display canvas) ── */
     #scene-window { flex: 1; min-width: 80px; position: relative; overflow: hidden; }
-    /* ── Object-window re-center button ── */
-    #object-recenter-btn {
+    /* ── Window label badges ── */
+    #isolation-label, #object-window-label {
+      position: absolute;
+      bottom: 6px; left: 8px;
+      font-size: 9px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #45475a;
+      pointer-events: none;
+      user-select: none;
+    }
+    /* ── Re-center buttons (both windows) ── */
+    #object-recenter-btn, #isolation-recenter-btn {
       position: absolute;
       top: 8px; right: 8px;
       width: 26px; height: 26px;
@@ -1260,9 +1354,9 @@
       transition: background 0.15s, border-color 0.15s, color 0.15s;
       backdrop-filter: blur(3px);
     }
-    #object-recenter-btn.visible { display: flex; }
-    #object-recenter-btn:hover { background: rgba(49, 50, 68, 0.92); border-color: #89b4fa; color: #f5f7ff; }
-    #object-recenter-btn svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    #object-recenter-btn.visible, #isolation-recenter-btn.visible { display: flex; }
+    #object-recenter-btn:hover, #isolation-recenter-btn:hover { background: rgba(49, 50, 68, 0.92); border-color: #89b4fa; color: #f5f7ff; }
+    #object-recenter-btn svg, #isolation-recenter-btn svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
     /* ── Canvas ── */
     #scene-window { flex: 1; position: relative; overflow: hidden; }
     #canvas-text-editor {
@@ -1326,6 +1420,7 @@
       </button>
     </div>
     <div id="object-tiles-wrapper">
+      <div id="tiles-breadcrumb"></div>
       <div id="tiles-more-above"></div>
       <div id="object-tiles"></div>
       <div id="tiles-more"></div>
@@ -1418,14 +1513,28 @@
 </div>
 
 <div id="view-area">
-  <div id="object-window">
-    <canvas id="object-canvas"></canvas>
-    <button id="object-recenter-btn" title="Re-center view" aria-label="Re-center view">
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <circle cx="12" cy="12" r="2.5"></circle>
-        <path d="M12 3v4M12 17v4M3 12h4M17 12h4"></path>
-      </svg>
-    </button>
+  <div id="left-column">
+    <div id="isolation-window">
+      <canvas id="isolation-canvas"></canvas>
+      <button id="isolation-recenter-btn" title="Re-center view" aria-label="Re-center view">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="12" r="2.5"></circle>
+          <path d="M12 3v4M12 17v4M3 12h4M17 12h4"></path>
+        </svg>
+      </button>
+      <div id="isolation-label">Isolation</div>
+    </div>
+    <div id="h-split-handle"></div>
+    <div id="object-window">
+      <canvas id="object-canvas"></canvas>
+      <button id="object-recenter-btn" title="Re-center view" aria-label="Re-center view">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="12" r="2.5"></circle>
+          <path d="M12 3v4M12 17v4M3 12h4M17 12h4"></path>
+        </svg>
+      </button>
+      <div id="object-window-label">Context</div>
+    </div>
   </div>
   <div id="split-handle"></div>
   <div id="scene-window">
@@ -1456,6 +1565,15 @@ let objDragging = false, objDragStartX, objDragStartY, objDragOriginX, objDragOr
 let splitDragging = false, splitDragStartX = 0, splitDragStartWidth = 0;
 let isObjViewport = false;
 
+// ── Isolation window (third canvas) ──
+const isolCanvas = document.getElementById('isolation-canvas');
+const isolCtx = isolCanvas.getContext('2d');
+let isolOriginX = 0, isolOriginY = 0, isolScale = 60;
+let isolDragging = false, isolDragStartX, isolDragStartY, isolDragOriginX, isolDragOriginY;
+let hSplitDragging = false, hSplitDragStartY = 0, hSplitDragStartHeight = 0;
+let isIsolViewport = false;
+let isolationAnimIds = new Set();
+
 // Temporarily swap canvas, ctx, and transform to the object window so all
 // drawing helpers (drawGrid, toCanvas, etc.) render into the correct target.
 function withObjViewport(fn) {
@@ -1464,6 +1582,14 @@ function withObjViewport(fn) {
   isObjViewport = true;
   try { return fn(); }
   finally { canvas = sC; ctx = sCt; originX = sX; originY = sY; scale = sSc; isObjViewport = false; }
+}
+
+function withIsolViewport(fn) {
+  const [sC, sCt, sX, sY, sSc, sObj, sIsol] = [canvas, ctx, originX, originY, scale, isObjViewport, isIsolViewport];
+  canvas = isolCanvas; ctx = isolCtx; originX = isolOriginX; originY = isolOriginY; scale = isolScale;
+  isObjViewport = false; isIsolViewport = true;
+  try { return fn(); }
+  finally { canvas = sC; ctx = sCt; originX = sX; originY = sY; scale = sSc; isObjViewport = sObj; isIsolViewport = sIsol; }
 }
 
 const CANVAS_TOOL_COLOR = '#e1e8ff';
@@ -1532,6 +1658,8 @@ function saveProject() {
   try {
     localStorage.setItem(PROJECT_KEY, JSON.stringify({
       animations: snapshotAnimations(),
+      groups: snapshotGroups(),
+      groupNameCounter,
       viewport: { originX, originY, scale },
       animColorIdx,
       fillStyleVersion: PROJECT_FILL_STYLE_VERSION,
@@ -1543,7 +1671,7 @@ function loadProject() {
   try {
     const saved = localStorage.getItem(PROJECT_KEY);
     if (!saved) return false;
-    const { animations: snap, viewport, animColorIdx: ci, fillStyleVersion } = JSON.parse(saved);
+    const { animations: snap, groups: savedGroups, groupNameCounter: savedCounter, viewport, animColorIdx: ci, fillStyleVersion } = JSON.parse(saved);
     if (viewport) {
       if (typeof viewport.originX === 'number') originX = viewport.originX;
       if (typeof viewport.originY === 'number') originY = viewport.originY;
@@ -1552,7 +1680,12 @@ function loadProject() {
     if (typeof ci === 'number') animColorIdx = ci;
     if (snap) {
       const legacyRadialIsCircular = !fillStyleVersion || fillStyleVersion < PROJECT_FILL_STYLE_VERSION;
-      restoreSnapshot(normalizeProjectSnapshotFillStyles(snap, legacyRadialIsCircular));
+      const state = {
+        anims: normalizeProjectSnapshotFillStyles(snap, legacyRadialIsCircular),
+        groups: savedGroups ?? [],
+        groupNameCounter: savedCounter ?? 0,
+      };
+      restoreSnapshot(state);
       if (legacyRadialIsCircular) setTimeout(saveProject, 0);
     }
     return true;
@@ -1671,6 +1804,7 @@ function resize() {
     originY = mainCanvas.height / 2;
   }
   resizeObjCanvas();
+  resizeIsolCanvas();
   draw();
 }
 
@@ -1681,6 +1815,15 @@ function resizeObjCanvas() {
   objCanvas.height = wrap.clientHeight * devicePixelRatio;
   objCanvas.style.width  = wrap.clientWidth  + 'px';
   objCanvas.style.height = wrap.clientHeight + 'px';
+}
+
+function resizeIsolCanvas() {
+  const wrap = isolCanvas.parentElement;
+  if (!wrap) return;
+  isolCanvas.width  = wrap.clientWidth  * devicePixelRatio;
+  isolCanvas.height = wrap.clientHeight * devicePixelRatio;
+  isolCanvas.style.width  = wrap.clientWidth  + 'px';
+  isolCanvas.style.height = wrap.clientHeight + 'px';
 }
 
 window.addEventListener('resize', resize);
@@ -2926,6 +3069,7 @@ function commitLineConnectorChoice(choiceIdx = 0, shouldRender = true) {
   const pending = lineConnectorChoice;
   if (!pending?.anim) return false;
   const choice = pending.choices[choiceIdx] || pending.choices[0];
+  pushUndo();
   clearLineConnectorChoice();
   addDisconnectedPolylineConnector(pending.anim, pending.end, choice.seg);
   if (shouldRender) {
@@ -2979,16 +3123,23 @@ let editModeAnimId  = null;
 let selectedGroupId = null;
 let sceneIndicatorAnimId = null; // last single-object selection made via the scene window
 let suppressNextFitObjWindow = false; // set before obj-window selection calls to skip re-fit
+let suppressSelectionOverlays = false; // set during drawObjectWindow to skip drawing selection UI
 let objWindowInteracting = false;    // set before obj-window selection calls to skip sceneIndicator update
 let multiSelectedIds = new Set();
 let groupSelectionMode = false;
 let groupCandidateIds = new Set();
+let groupGroupCandidateIds = new Set(); // group IDs selected for nesting
 let groupSelectionGuideShear = null;
+let groups = []; // {id, name, parentGroupId}[]
+let groupNameCounter = 0;
+let tilesDrillPath = []; // stack of groupIds for drill-down navigation
 let multiSelectionGuideShear = null;
 let objectTileDrag = null; // {animId, animIds, fromIndex, insertionIndex} | null
 let suppressTileClickUntil = 0;
 let openColorMenuAnimId = null;
 let colorEditTarget = 'outline';
+let eyedropperTarget = null; // 'outline' | 'fill' | null
+let eyedropperAnimId = null;
 let canvasTextEditAnimId = null;
 let canvasTextEditor = null;
 let activeTextEditUndoAnimId = null;
@@ -3076,7 +3227,7 @@ function updateUndoRedoButtons() {
 }
 
 function pushUndo(preSnapshot) {
-  undoStack.push(preSnapshot !== undefined ? preSnapshot : snapshotAnimations());
+  undoStack.push(preSnapshot !== undefined ? preSnapshot : snapshotState());
   if (undoStack.length > MAX_UNDO) undoStack.shift();
   redoStack = [];
   updateUndoRedoButtons();
@@ -3084,10 +3235,17 @@ function pushUndo(preSnapshot) {
 }
 
 function restoreSnapshot(snap) {
+  const animSnap = Array.isArray(snap) ? snap : snap.anims;
+  const groupSnap = Array.isArray(snap) ? [] : (snap.groups ?? []);
+  const savedCounter = Array.isArray(snap) ? 0 : (snap.groupNameCounter ?? 0);
+  const snapSelectedId = Array.isArray(snap) ? null : (snap.selectedId ?? null);
+  const snapEditModeId = Array.isArray(snap) ? null : (snap.editModeAnimId ?? null);
+  const snapGroupId   = Array.isArray(snap) ? null : (snap.selectedGroupId ?? null);
   selectedId = null; editModeAnimId = null; selectedGroupId = null;
   clearMultiSelection();
   groupSelectionMode = false;
   groupCandidateIds = new Set();
+  groupGroupCandidateIds = new Set();
   groupSelectionGuideShear = null;
   eccentricitySliderActiveKey = null;
   openColorMenuAnimId = null;
@@ -3099,7 +3257,10 @@ function restoreSnapshot(snap) {
   frameDrag = null;
   frameHover = null;
   clearLineConnectorChoice();
-  animations = snap.map(s => {
+  groups = groupSnap.map(g => ({ id: g.id, name: g.name, parentGroupId: g.parentGroupId ?? null }));
+  groupNameCounter = savedCounter;
+  tilesDrillPath = [];
+  animations = animSnap.map(s => {
     const anim = {
       id: s.id, letter: s.letter, color: s.color, kind: s.kind || 'freeform',
       groupId: s.groupId ?? null,
@@ -3140,11 +3301,14 @@ function restoreSnapshot(snap) {
     return anim;
   });
   cleanupSingletonGroups();
+  if (snapSelectedId !== null && animations.some(a => a.id === snapSelectedId)) selectedId = snapSelectedId;
+  if (snapEditModeId !== null && animations.some(a => a.id === snapEditModeId)) editModeAnimId = snapEditModeId;
+  if (snapGroupId   !== null && groups.some(g => g.id === snapGroupId))         selectedGroupId = snapGroupId;
   renderAnimList(); draw();
 }
 
-function undo() { if (!undoStack.length) return; redoStack.push(snapshotAnimations()); restoreSnapshot(undoStack.pop()); updateUndoRedoButtons(); saveProject(); }
-function redo() { if (!redoStack.length) return; undoStack.push(snapshotAnimations()); restoreSnapshot(redoStack.pop()); updateUndoRedoButtons(); saveProject(); }
+function undo() { if (!undoStack.length) return; redoStack.push(snapshotState()); restoreSnapshot(undoStack.pop()); updateUndoRedoButtons(); saveProject(); }
+function redo() { if (!redoStack.length) return; undoStack.push(snapshotState()); restoreSnapshot(redoStack.pop()); updateUndoRedoButtons(); saveProject(); }
 
 function isTypingTarget(el) {
   if (!el) return false;
@@ -3177,25 +3341,124 @@ function groupMemberIds(groupId) {
 }
 
 function cleanupSingletonGroups() {
-  const counts = new Map();
+  const childCount = new Map();
   animations.forEach(a => {
-    if (a.groupId != null) counts.set(a.groupId, (counts.get(a.groupId) || 0) + 1);
+    if (a.groupId != null) childCount.set(a.groupId, (childCount.get(a.groupId) || 0) + 1);
+  });
+  groups.forEach(g => {
+    if (g.parentGroupId != null) childCount.set(g.parentGroupId, (childCount.get(g.parentGroupId) || 0) + 1);
   });
   animations.forEach(a => {
     if (a.groupId == null) return;
-    if ((counts.get(a.groupId) || 0) < 2) {
+    if ((childCount.get(a.groupId) || 0) < 2) {
       if (selectedGroupId === a.groupId) selectedGroupId = null;
-      a.groupId = null;
+      tilesDrillPath = tilesDrillPath.filter(id => id !== a.groupId);
+      groupGroupCandidateIds.delete(a.groupId);
+      const g = groups.find(grp => grp.id === a.groupId);
+      a.groupId = g?.parentGroupId ?? null;
     }
   });
   if (selectedGroupId != null && !groupMembers(selectedGroupId).length) selectedGroupId = null;
   groupCandidateIds = new Set([...groupCandidateIds].filter(id => animations.some(a => a.id === id)));
   multiSelectedIds = new Set([...multiSelectedIds].filter(id => animations.some(a => a.id === id)));
   if (multiSelectedIds.size < 2) multiSelectionGuideShear = null;
+  const validGroupIds = new Set();
+  animations.forEach(a => { if (a.groupId != null) validGroupIds.add(a.groupId); });
+  groups.forEach(g => { if (g.parentGroupId != null) validGroupIds.add(g.parentGroupId); });
+  groups = groups.filter(g => validGroupIds.has(g.id));
 }
 
 function objectGroupId(anim) {
   return anim?.groupId ?? null;
+}
+
+function currentDrillGroupId() {
+  return tilesDrillPath.length > 0 ? tilesDrillPath[tilesDrillPath.length - 1] : null;
+}
+
+function childGroups(parentId) {
+  return groups.filter(g => (g.parentGroupId ?? null) === (parentId ?? null));
+}
+
+function allDescendantAnims(groupId) {
+  const result = [];
+  const visit = gid => {
+    animations.filter(a => a.groupId === gid).forEach(a => result.push(a));
+    childGroups(gid).forEach(g => visit(g.id));
+  };
+  visit(groupId);
+  return result;
+}
+
+function isAnimDescendantOf(anim, groupId) {
+  let gid = anim.groupId ?? null;
+  while (gid !== null) {
+    if (gid === groupId) return true;
+    const g = groups.find(grp => grp.id === gid);
+    gid = g?.parentGroupId ?? null;
+  }
+  return false;
+}
+
+function outermostGroupId(anim) {
+  let gid = anim?.groupId ?? null;
+  if (gid === null) return null;
+  while (true) {
+    const g = groups.find(grp => grp.id === gid);
+    if (!g || (g.parentGroupId ?? null) === null) return gid;
+    gid = g.parentGroupId;
+  }
+}
+
+function directChildItems(groupId) {
+  const childGroupList = childGroups(groupId);
+  const childAnimList = animations.filter(a => (a.groupId ?? null) === (groupId ?? null) && !a.inPlacementMode);
+  const groupZOrder = gid => {
+    for (let i = 0; i < animations.length; i++) {
+      if (isAnimDescendantOf(animations[i], gid)) return i;
+    }
+    return Infinity;
+  };
+  const items = [
+    ...childGroupList.map(g => ({ type: 'group', item: g, pos: groupZOrder(g.id) })),
+    ...childAnimList.map(a => ({ type: 'anim', item: a, pos: animations.indexOf(a) })),
+  ];
+  items.sort((a, b) => a.pos - b.pos);
+  return items;
+}
+
+function getDrillPrefix() {
+  if (tilesDrillPath.length === 0) return '';
+  let prefix = '';
+  let parentId = null;
+  for (const gid of tilesDrillPath) {
+    const items = directChildItems(parentId);
+    const idx = items.findIndex(it => it.type === 'group' && it.item.id === gid);
+    prefix += (idx + 1) + '.';
+    parentId = gid;
+  }
+  return prefix;
+}
+
+function selectFromScene(anim) {
+  if (!anim) return;
+  tilesDrillPath = [];
+  const gid = outermostGroupId(anim);
+  if (gid !== null) selectGroup(gid);
+  else drillSelectObject(anim);
+}
+
+function groupName(groupId) {
+  return groups.find(g => g.id === groupId)?.name ?? '';
+}
+function nextGroupName() {
+  return '';
+}
+function snapshotGroups() {
+  return groups.map(g => ({ id: g.id, name: g.name, parentGroupId: g.parentGroupId ?? null }));
+}
+function snapshotState() {
+  return { anims: snapshotAnimations(), groups: snapshotGroups(), groupNameCounter, selectedId, editModeAnimId, selectedGroupId };
 }
 
 function selectedObjectAnim() {
@@ -3289,13 +3552,14 @@ function selectTemporaryMultiSelection(ids) {
     a.expandedArcs = new Set();
     a.expandedAnchors = new Set();
   });
-  fitObjWindow();
+  fitObjWindow(); fitIsolationWindow();
   return true;
 }
 
 function clearGroupMode() {
   groupSelectionMode = false;
   groupCandidateIds = new Set();
+  groupGroupCandidateIds = new Set();
   groupSelectionGuideShear = null;
 }
 
@@ -3313,7 +3577,7 @@ function selectGroup(groupId) {
     a.expandedArcs = new Set();
     a.expandedAnchors = new Set();
   });
-  fitObjWindow();
+  fitObjWindow(); fitIsolationWindow();
 }
 
 function drillSelectObject(anim) {
@@ -3382,28 +3646,37 @@ function toggleGroupCandidate(anim) {
 }
 
 function createGroupFromCandidates() {
-  let ids = [...groupCandidateIds];
-  if (ids.length < 2) return false;
-  const selectedSet = new Set(ids);
+  const childGroupIds = [...groupGroupCandidateIds];
+  // Expand anim candidates: if a selected anim is in a group, include all group members
+  const selectedSet = new Set(groupCandidateIds);
   animations.forEach(a => {
     if (a.groupId != null && selectedSet.has(a.id)) {
       groupMembers(a.groupId).forEach(member => selectedSet.add(member.id));
     }
   });
-  ids = [...selectedSet];
-  const ordered = animations.filter(a => selectedSet.has(a.id));
-  if (ordered.length < 2) return false;
+  const selectedAnims = animations.filter(a => selectedSet.has(a.id));
+  if (selectedAnims.length + childGroupIds.length < 2) return false;
   pushUndo();
-  const firstIndex = animations.findIndex(a => selectedSet.has(a.id));
-  const remaining = animations.filter(a => !selectedSet.has(a.id));
-  const insertAt = Math.max(0, firstIndex);
-  const groupId = Date.now() + Math.random();
-  ordered.forEach(a => { a.groupId = groupId; });
-  animations = remaining.slice(0, insertAt).concat(ordered, remaining.slice(insertAt));
+  const parentGroupId = currentDrillGroupId();
+  const newGroupId = Date.now() + Math.random();
+  groups.push({ id: newGroupId, name: nextGroupName(), parentGroupId });
+  // Re-parent selected child groups
+  childGroupIds.forEach(gid => {
+    const g = groups.find(grp => grp.id === gid);
+    if (g) g.parentGroupId = newGroupId;
+  });
+  // Re-assign selected animations
+  if (selectedAnims.length > 0) {
+    const firstIndex = animations.findIndex(a => selectedSet.has(a.id));
+    const remaining = animations.filter(a => !selectedSet.has(a.id));
+    const insertAt = Math.max(0, firstIndex);
+    selectedAnims.forEach(a => { a.groupId = newGroupId; });
+    animations = remaining.slice(0, insertAt).concat(selectedAnims, remaining.slice(insertAt));
+  }
   cleanupSingletonGroups();
   renumberAnimationsByStackOrder();
   clearGroupMode();
-  selectGroup(groupId);
+  selectGroup(newGroupId);
   saveProject();
   renderAnimList(); draw(); updateCursor();
   return true;
@@ -3411,9 +3684,14 @@ function createGroupFromCandidates() {
 
 function ungroup(groupId) {
   const members = groupMembers(groupId);
-  if (!members.length) return false;
+  const g = groups.find(grp => grp.id === groupId);
+  const parentId = g?.parentGroupId ?? null;
+  if (!members.length && !childGroups(groupId).length) return false;
   pushUndo();
-  members.forEach(a => { a.groupId = null; });
+  members.forEach(a => { a.groupId = parentId; });
+  childGroups(groupId).forEach(cg => { cg.parentGroupId = parentId; });
+  groups = groups.filter(grp => grp.id !== groupId);
+  tilesDrillPath = tilesDrillPath.filter(id => id !== groupId);
   selectedGroupId = null;
   clearGroupMode();
   renderAnimList(); draw(); updateCursor();
@@ -3422,10 +3700,17 @@ function ungroup(groupId) {
 }
 
 function deleteGroup(groupId) {
-  const ids = groupMemberIds(groupId);
-  if (!ids.size) return;
+  const descendantAnims = allDescendantAnims(groupId);
+  if (!descendantAnims.length && !childGroups(groupId).length) return;
   pushUndo();
-  animations = animations.filter(a => !ids.has(a.id));
+  const animIds = new Set(descendantAnims.map(a => a.id));
+  animations = animations.filter(a => !animIds.has(a.id));
+  const toRemove = new Set();
+  const collectGroups = gid => { toRemove.add(gid); childGroups(gid).forEach(g => collectGroups(g.id)); };
+  collectGroups(groupId);
+  groups = groups.filter(g => !toRemove.has(g.id));
+  tilesDrillPath = tilesDrillPath.filter(id => !toRemove.has(id));
+  toRemove.forEach(id => groupGroupCandidateIds.delete(id));
   selectedGroupId = null;
   selectedId = null;
   editModeAnimId = null;
@@ -3648,6 +3933,7 @@ document.addEventListener('keydown', e => {
   if (isTypingTarget(document.activeElement)) return;
   if (e.key === 'Escape') {
     e.preventDefault();
+    if (eyedropperTarget !== null) { deactivateEyedropper(); renderAnimList(); return; }
     const placing = animations.find(a => a.inPlacementMode);
     if (placing) {
       if (isPolylineAnim(placing) && lineConnectorChoice?.anim === placing) {
@@ -3786,7 +4072,7 @@ function enterEditMode(anim, activeSegs) {
   anim.expandedAnchors.clear();
   if (!anim.expandedArcs) anim.expandedArcs = new Set();
   if (anim.activeSegments.size === 0) anim.expandedArcs.clear();
-  fitObjWindow();
+  fitObjWindow(); fitIsolationWindow();
   renderAnimList();
   draw();
 }
@@ -3942,7 +4228,6 @@ function nextLetter() {
 }
 
 function addAnimation(kind = 'freeform') {
-  pushUndo();
   animations.forEach(a => {
     a.expanded = false;
     a.expandedArcs = new Set();
@@ -4370,7 +4655,42 @@ const SCISSORS_CURSOR = (() => {
   return `url("data:image/svg+xml;base64,${btoa(svg)}") 12 12, crosshair`;
 })();
 
+const EYEDROPPER_CURSOR = (() => {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M3 21l1.5-4.5L15.5 6l3 3L8 20.5z" fill="#ffffff" stroke="#000000" stroke-width="1.5" stroke-linejoin="round"/><path d="M18.5 6l1.5-1.5c.8-.8.8-2.2 0-3s-2.2-.8-3 0L15.5 3" fill="none" stroke="#000000" stroke-width="2" stroke-linecap="round"/><circle cx="3" cy="21" r="2" fill="#000000"/></svg>`;
+  return `url("data:image/svg+xml;base64,${btoa(svg)}") 3 21, crosshair`;
+})();
+
+function deactivateEyedropper() {
+  eyedropperTarget = null;
+  eyedropperAnimId = null;
+  updateCursor();
+}
+
+function applyEyedropperColor(hex) {
+  const anim = animations.find(a => a.id === eyedropperAnimId);
+  if (!anim) { deactivateEyedropper(); return; }
+  pushUndo();
+  if (eyedropperTarget === 'fill') {
+    anim.fillColor = hex;
+    if (!anim.fillStyle) anim.fillStyle = 'solid';
+    anim.fillOpacity = 1;
+  } else {
+    anim.color = hex;
+    anim.outlineOpacity = 1;
+  }
+  openColorMenuAnimId = eyedropperAnimId;
+  colorEditTarget = eyedropperTarget;
+  deactivateEyedropper();
+  renderAnimList(); draw();
+}
+
 function updateCursor() {
+  if (eyedropperTarget !== null) {
+    canvas.style.cursor = EYEDROPPER_CURSOR;
+    objCanvas.style.cursor = EYEDROPPER_CURSOR;
+    isolCanvas.style.cursor = EYEDROPPER_CURSOR;
+    return;
+  }
   const placing = animations.some(a => a.inPlacementMode);
   if (placing) {
     canvas.style.cursor = lineConnectorChoice
@@ -4380,6 +4700,7 @@ function updateCursor() {
     const onTarget = segmentHover?.anim === splitArcMode.anim && segmentHover?.segIdx === splitArcMode.segIdx;
     canvas.style.cursor = 'default';
     objCanvas.style.cursor = onTarget ? SCISSORS_CURSOR : 'not-allowed';
+    isolCanvas.style.cursor = onTarget ? SCISSORS_CURSOR : 'not-allowed';
     return;
   } else if (resizeDrag) {
     const c = resizeCursorForHandle(resizeDrag.handle);
@@ -4407,6 +4728,8 @@ function updateCursor() {
   }
   objCanvas.style.cursor = (resizeDrag?.onObjCanvas || rotateDrag?.onObjCanvas || anchorDrag?.onObjCanvas ||
     handleDrag?.onObjCanvas || curveDrag?.onObjCanvas || eccDrag?.onObjCanvas || objDragging) ? 'grabbing' : 'crosshair';
+  isolCanvas.style.cursor = (resizeDrag?.onIsolCanvas || rotateDrag?.onIsolCanvas || anchorDrag?.onIsolCanvas ||
+    handleDrag?.onIsolCanvas || curveDrag?.onIsolCanvas || eccDrag?.onIsolCanvas || isolDragging) ? 'grabbing' : 'crosshair';
 }
 
 function queryAnchorHover(mathX, mathY, thresholdPx = 7 * devicePixelRatio) {
@@ -5261,16 +5584,19 @@ function hitTestCurve(cx, cy) {
 function primitivePlacementClickHandler(anim, snapped) {
   if (!anim || !isPrimitiveAnim(anim)) return;
   if (anim.anchors.length === 0) {
+    pushUndo();
     anim.anchors.push(snapped);
     renderAnimList(); draw(); updateCursor();
     return;
   }
+  pushUndo();
   anim.anchors[1] = snapped;
   finalizePrimitivePlacement(anim);
 }
 
 function textPlacementClickHandler(anim, snapped) {
   if (!anim || !isTextAnim(anim)) return;
+  pushUndo();
   anim.anchors = [snapped];
   anim.segments = [];
   anim.inPlacementMode = false;
@@ -5341,6 +5667,7 @@ function disconnectedPolylinePlacementClickHandler(anim, snapped, mathX, mathY) 
   const target = nearIdx >= 0 ? cloneCx(anch[nearIdx]) : cloneCx(snapped);
 
   if (!polylineHasOpenDisconnectedStart(anim)) {
+    pushUndo();
     addDisconnectedPolylineStart(anim, target);
     renderAnimList(); draw(); updateCursor();
     return;
@@ -5360,6 +5687,7 @@ function disconnectedPolylinePlacementClickHandler(anim, snapped, mathX, mathY) 
     return;
   }
 
+  pushUndo();
   addDisconnectedPolylineConnector(anim, target, makeStraightSegment(start, target));
   renderAnimList(); draw(); updateCursor();
 }
@@ -5379,6 +5707,7 @@ function polylinePlacementClickHandler(anim, snapped, mathX, mathY) {
   const nearIdx = nearestPlacementAnchorIndex(anim, mathX, mathY, undefined, snapped);
 
   if (n === 0) {
+    pushUndo();
     anch.push(snapped);
     anim.anchorLocked.push(false);
     renderAnimList(); draw(); updateCursor();
@@ -5394,11 +5723,13 @@ function polylinePlacementClickHandler(anim, snapped, mathX, mathY) {
     }
     if (nearIdx >= 0 && anch.length >= 3) {
       const oppositeIdx = anim.extensionForward ? 0 : anch.length - 1;
+      pushUndo();
       insertPolylineExtensionAnchor(anim, anch[nearIdx]);
       if (nearIdx === oppositeIdx) anim.closed = true;
       renderAnimList(); draw(); updateCursor();
       return;
     }
+    pushUndo();
     insertPolylineExtensionAnchor(anim, snapped);
     renderAnimList(); draw(); updateCursor();
     return;
@@ -5409,6 +5740,7 @@ function polylinePlacementClickHandler(anim, snapped, mathX, mathY) {
       finalizePolylinePlacement(anim);
       return;
     }
+    pushUndo();
     addPolylineSegment(anim, snapped);
     renderAnimList(); draw(); updateCursor();
     return;
@@ -5422,11 +5754,13 @@ function polylinePlacementClickHandler(anim, snapped, mathX, mathY) {
       finalizePolylinePlacement(anim);
       return;
     }
+    pushUndo();
     addPolylineSegment(anim, target);
     if (nearIdx === 0 && n >= 3) anim.closed = true;
     renderAnimList(); draw(); updateCursor(); return;
   }
 
+  pushUndo();
   addPolylineSegment(anim, snapped);
   renderAnimList(); draw(); updateCursor();
 }
@@ -5437,9 +5771,10 @@ function placementClickHandler(anim, snapped, mathX, mathY) {
   const isExtension = anim.extensionAnchorIdx != null;
   const nearIdx = nearestPlacementAnchorIndex(anim, mathX, mathY, undefined, snapped);
 
-  if (n === 0) { anch.push(snapped); anim.anchorLocked.push(true); renderAnimList(); draw(); return; }
+  if (n === 0) { pushUndo(); anch.push(snapped); anim.anchorLocked.push(true); renderAnimList(); draw(); return; }
   if (n === 1) {
     if (nearIdx === 0) { finalizePlacement(anim); return; }
+    pushUndo();
     anch.push(snapped); anim.anchorLocked.push(true);
     rebuildFreshPlacementSegments(anim);
     renderAnimList(); draw(); return;
@@ -5455,6 +5790,7 @@ function placementClickHandler(anim, snapped, mathX, mathY) {
     const seg = built.seg;
     const aPos = anim.extensionInsertAt;
     const sPos = anim.extensionForward ? aPos - 1 : aPos;
+    pushUndo();
     anch.splice(aPos, 0, target); anim.anchorLocked.splice(aPos, 0, true);
     segs.splice(sPos, 0, seg);
     if (anim.extensionForward) anim.extensionInsertAt++;
@@ -5476,12 +5812,22 @@ function placementClickHandler(anim, snapped, mathX, mathY) {
     }
   }
 
+  pushUndo();
   anch.push(target); anim.anchorLocked.push(true);
   rebuildFreshPlacementSegments(anim);
   renderAnimList(); draw(); return;
 }
 
 canvas.addEventListener('mousedown', e => {
+  if (eyedropperTarget !== null && e.button === 0) {
+    e.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    const px = Math.round((e.clientX - rect.left) * devicePixelRatio);
+    const py = Math.round((e.clientY - rect.top)  * devicePixelRatio);
+    const pixel = ctx.getImageData(px, py, 1, 1).data;
+    applyEyedropperColor('#' + [pixel[0], pixel[1], pixel[2]].map(v => v.toString(16).padStart(2, '0')).join(''));
+    return;
+  }
   if (openColorMenuAnimId !== null) { openColorMenuAnimId = null; renderAnimList(); }
   const rect = canvas.getBoundingClientRect();
   const cx = (e.clientX - rect.left) * devicePixelRatio;
@@ -5606,8 +5952,7 @@ canvas.addEventListener('mousedown', e => {
       return;
     }
     if (objectGroupId(hitAnim) != null && selectedId !== hitAnim.id) {
-      if ((isGroupSelectionActive() && selectedGroupId === objectGroupId(hitAnim)) || focusedGroupMemberGroupId() === objectGroupId(hitAnim)) drillSelectObject(hitAnim);
-      else selectGroup(objectGroupId(hitAnim));
+      selectFromScene(hitAnim);
       renderAnimList(); draw(); updateCursor();
       return;
     }
@@ -5652,7 +5997,7 @@ canvas.addEventListener('mousedown', e => {
     } else if (isMultiSelectionActive() && multiSelectedIds.has(fillHit.id)) {
       drillSelectObject(fillHit);
     } else {
-      selectObjectOrGroup(fillHit);
+      selectFromScene(fillHit);
     }
     renderAnimList(); draw(); updateCursor();
     return;
@@ -5685,24 +6030,37 @@ window.addEventListener('mousemove', e => {
     const totalW = viewArea.getBoundingClientRect().width;
     if (totalW >= 1) {
       const newW = Math.max(80, Math.min(totalW - 85, splitDragStartWidth + (e.clientX - splitDragStartX)));
-      document.getElementById('object-window').style.flex = `0 0 ${newW}px`;
-      resizeObjCanvas(); resize();
+      document.getElementById('left-column').style.flex = `0 0 ${newW}px`;
+      resizeObjCanvas(); resizeIsolCanvas(); resize();
     }
     return;
   }
 
-  const isObjDrag = objDragging || resizeDrag?.onObjCanvas || rotateDrag?.onObjCanvas ||
-                    handleDrag?.onObjCanvas || anchorDrag?.onObjCanvas ||
-                    curveDrag?.onObjCanvas || eccDrag?.onObjCanvas;
+  if (hSplitDragging) {
+    const leftCol = document.getElementById('left-column');
+    const totalH = leftCol.getBoundingClientRect().height;
+    if (totalH >= 1) {
+      const newH = Math.max(60, Math.min(totalH - 65, hSplitDragStartHeight + (e.clientY - hSplitDragStartY)));
+      document.getElementById('isolation-window').style.flex = `0 0 ${newH}px`;
+      resizeObjCanvas(); resizeIsolCanvas();
+    }
+    return;
+  }
 
-  const rect = (isObjDrag ? objCanvas : canvas).getBoundingClientRect();
+  const isIsolDrag = isolDragging || resizeDrag?.onIsolCanvas || rotateDrag?.onIsolCanvas ||
+                     handleDrag?.onIsolCanvas || anchorDrag?.onIsolCanvas ||
+                     curveDrag?.onIsolCanvas || eccDrag?.onIsolCanvas;
+
+  const activeCanvas = isIsolDrag ? isolCanvas : canvas;
+  const rect = activeCanvas.getBoundingClientRect();
   const cx = (e.clientX - rect.left) * devicePixelRatio;
   const cy = (e.clientY - rect.top)  * devicePixelRatio;
-  const [mathX, mathY] = isObjDrag ? toObjMath(cx, cy) : toMath(cx, cy);
+  const [mathX, mathY] = isIsolDrag ? [(cx - isolOriginX) / isolScale, (isolOriginY - cy) / isolScale]
+                       : toMath(cx, cy);
 
-  if (objDragging) {
-    objOriginX = objDragOriginX + (e.clientX * devicePixelRatio - objDragStartX);
-    objOriginY = objDragOriginY + (e.clientY * devicePixelRatio - objDragStartY);
+  if (isolDragging) {
+    isolOriginX = isolDragOriginX + (e.clientX * devicePixelRatio - isolDragStartX);
+    isolOriginY = isolDragOriginY + (e.clientY * devicePixelRatio - isolDragStartY);
     draw(); return;
   }
 
@@ -5822,7 +6180,7 @@ window.addEventListener('mousemove', e => {
     // 200 CSS pixels perpendicular to chord = full 0-100% eccentricity range.
     // perpSign ensures dragging toward the bowing side always increases eccentricity.
     const deltaPerp = perpSign * ((mathX - startMathX) * perpRe + (mathY - startMathY) * perpIm);
-    const sensitivity = (eccDrag.onObjCanvas ? objScale : scale) / (2 * devicePixelRatio);
+    const sensitivity = (eccDrag.onIsolCanvas ? isolScale : eccDrag.onObjCanvas ? objScale : scale) / (2 * devicePixelRatio);
     const newPct = Math.max(0, Math.min(100, Math.round(startEccPct + deltaPerp * sensitivity)));
     seg.eccentricity = percentToEccentricity(newPct);
     recompileSegment(anim, segIdx);
@@ -5843,26 +6201,26 @@ window.addEventListener('mousemove', e => {
 
   // Hover detection
   if (currentMode === 'animations') {
-    const objBB = objCanvas.getBoundingClientRect();
-    const overObj = e.clientX >= objBB.left && e.clientX <= objBB.right &&
-                    e.clientY >= objBB.top  && e.clientY <= objBB.bottom;
+    const isolBB = isolCanvas.getBoundingClientRect();
+    const overIsol = e.clientX >= isolBB.left && e.clientX <= isolBB.right &&
+                     e.clientY >= isolBB.top  && e.clientY <= isolBB.bottom;
 
     let newSideActionHover = null, newResizeHover = null, newFrameHover = null;
     let newPlusHover = null, newLockHover = null, newAnchorHover = null;
     let newHandleHover = null, newRotationHover = null, newSegmentHover = null;
 
-    if (overObj) {
-      const oCx = (e.clientX - objBB.left) * devicePixelRatio;
-      const oCy = (e.clientY - objBB.top)  * devicePixelRatio;
-      const [oMx, oMy] = toObjMath(oCx, oCy);
-      withObjViewport(() => {
-        newResizeHover   = queryResizeHandleHover(oCx, oCy);
-        newPlusHover     = newResizeHover ? null : queryPlusHover(oCx, oCy);
-        newLockHover     = (newResizeHover || newPlusHover) ? null : queryLockHover(oCx, oCy);
-        newAnchorHover   = (newResizeHover || newPlusHover || newLockHover) ? null : queryAnchorHover(oMx, oMy);
-        newHandleHover   = (newResizeHover || newPlusHover || newAnchorHover || newLockHover) ? null : queryHandleHover(oMx, oMy);
-        newRotationHover = (newResizeHover || newPlusHover || newLockHover || newAnchorHover || newHandleHover) ? null : queryRotationWheelHover(oCx, oCy);
-        newSegmentHover  = (newResizeHover || newPlusHover || newRotationHover || newAnchorHover || newHandleHover || newLockHover) ? null : querySegmentHover(oCx, oCy);
+    if (overIsol) {
+      const iCx = (e.clientX - isolBB.left) * devicePixelRatio;
+      const iCy = (e.clientY - isolBB.top)  * devicePixelRatio;
+      const [iMx, iMy] = [(iCx - isolOriginX) / isolScale, (isolOriginY - iCy) / isolScale];
+      withIsolViewport(() => {
+        newResizeHover   = queryResizeHandleHover(iCx, iCy);
+        newPlusHover     = newResizeHover ? null : queryPlusHover(iCx, iCy);
+        newLockHover     = (newResizeHover || newPlusHover) ? null : queryLockHover(iCx, iCy);
+        newAnchorHover   = (newResizeHover || newPlusHover || newLockHover) ? null : queryAnchorHover(iMx, iMy);
+        newHandleHover   = (newResizeHover || newPlusHover || newAnchorHover || newLockHover) ? null : queryHandleHover(iMx, iMy);
+        newRotationHover = (newResizeHover || newPlusHover || newLockHover || newAnchorHover || newHandleHover) ? null : queryRotationWheelHover(iCx, iCy);
+        newSegmentHover  = (newResizeHover || newPlusHover || newRotationHover || newAnchorHover || newHandleHover || newLockHover) ? null : querySegmentHover(iCx, iCy);
       });
     } else {
       newSideActionHover = querySideActionButtonHover(cx, cy);
@@ -5900,6 +6258,8 @@ window.addEventListener('mousemove', e => {
 
 window.addEventListener('mouseup', e => {
   if (splitDragging) { splitDragging = false; document.getElementById('split-handle').classList.remove('dragging'); return; }
+  if (hSplitDragging) { hSplitDragging = false; document.getElementById('h-split-handle').classList.remove('dragging'); return; }
+  if (isolDragging) { isolDragging = false; updateCursor(); return; }
   if (objDragging) { objDragging = false; updateCursor(); return; }
   if (resizeDrag) {
     resizeDrag = null;
@@ -5923,6 +6283,7 @@ window.addEventListener('mouseup', e => {
     if (!isDrag) {
       // Tiny click on background: clear the current selection.
       rubberBand = null;
+      tilesDrillPath = [];
       if (editModeAnimId !== null) exitEditMode();
       selectedId = null;
       selectedGroupId = null;
@@ -5952,6 +6313,7 @@ window.addEventListener('mouseup', e => {
       } else if (hits.length === 1) {
         drillSelectObject(hits[0]);
       } else {
+        tilesDrillPath = [];
         selectedId = null;
         selectedGroupId = null;
         sceneIndicatorAnimId = null;
@@ -6071,22 +6433,16 @@ canvas.addEventListener('wheel', e => {
 // ── Object window event handlers ──
 
 objCanvas.addEventListener('mousedown', e => {
-  if (currentMode !== 'animations') return;
-  if (!getObjWindowAnims().length) return;
-
-  const objRect = objCanvas.getBoundingClientRect();
-  const cx = (e.clientX - objRect.left) * devicePixelRatio;
-  const cy = (e.clientY - objRect.top) * devicePixelRatio;
-
-  if (e.button === 2 || e.button === 1) {
-    objDragging = true;
-    objDragStartX = e.clientX * devicePixelRatio;
-    objDragStartY = e.clientY * devicePixelRatio;
-    objDragOriginX = objOriginX;
-    objDragOriginY = objOriginY;
-    if (e.button === 1) e.preventDefault();
+  e.preventDefault();
+  if (eyedropperTarget !== null && e.button === 0) {
+    const objRect = objCanvas.getBoundingClientRect();
+    const px = Math.round((e.clientX - objRect.left) * devicePixelRatio);
+    const py = Math.round((e.clientY - objRect.top)  * devicePixelRatio);
+    const pixel = objCanvas.getContext('2d').getImageData(px, py, 1, 1).data;
+    applyEyedropperColor('#' + [pixel[0], pixel[1], pixel[2]].map(v => v.toString(16).padStart(2, '0')).join(''));
     return;
   }
+  return; // context window is read-only
   if (e.button !== 0) return;
 
   mouseDownClientX = e.clientX;
@@ -6340,21 +6696,318 @@ objCanvas.addEventListener('mousedown', e => {
   }
 });
 
-objCanvas.addEventListener('wheel', e => {
+objCanvas.addEventListener('wheel', e => { e.preventDefault(); }, { passive: false });
+objCanvas.addEventListener('contextmenu', e => { e.preventDefault(); });
+
+// ── Isolation window event handlers ──
+
+isolCanvas.addEventListener('mousedown', e => {
+  if (currentMode !== 'animations') return;
+
+  const isolRect = isolCanvas.getBoundingClientRect();
+  const cx = (e.clientX - isolRect.left) * devicePixelRatio;
+  const cy = (e.clientY - isolRect.top) * devicePixelRatio;
+
+  if (eyedropperTarget !== null && e.button === 0) {
+    e.preventDefault();
+    const px = Math.round(cx), py = Math.round(cy);
+    const pixel = isolCanvas.getContext('2d').getImageData(px, py, 1, 1).data;
+    applyEyedropperColor('#' + [pixel[0], pixel[1], pixel[2]].map(v => v.toString(16).padStart(2, '0')).join(''));
+    return;
+  }
+
+  if (!getIsolationAnims().length) return;
+
+  if (e.button === 2 || e.button === 1) {
+    isolDragging = true;
+    isolDragStartX = e.clientX * devicePixelRatio;
+    isolDragStartY = e.clientY * devicePixelRatio;
+    isolDragOriginX = isolOriginX;
+    isolDragOriginY = isolOriginY;
+    if (e.button === 1) e.preventDefault();
+    return;
+  }
+  if (e.button !== 0) return;
+
+  mouseDownClientX = e.clientX;
+  mouseDownClientY = e.clientY;
+
+  let isolSideAction = null;
+  withIsolViewport(() => {
+    const [mathX, mathY] = toMath(cx, cy);
+
+    const sideAction = querySideActionButtonHover(cx, cy);
+    if (sideAction) {
+      e.preventDefault();
+      isolSideAction = sideAction;
+      return;
+    }
+
+    if (splitArcMode !== null) {
+      e.preventDefault();
+      const hover = querySegmentHover(cx, cy);
+      if (hover && hover.anim === splitArcMode.anim && hover.segIdx === splitArcMode.segIdx && typeof hover.u === 'number') {
+        pushUndo();
+        const { anim, segIdx } = splitArcMode;
+        splitArcMode = null;
+        splitSegmentAtT(anim, segIdx, hover.u);
+        saveProject();
+        renderAnimList(); draw();
+      } else {
+        splitArcMode = null;
+        renderAnimList(); draw();
+      }
+      return;
+    }
+
+    const resizeHit = queryResizeHandleHover(cx, cy);
+    if (resizeHit) {
+      e.preventDefault();
+      pushUndo();
+      if (resizeHit.anim) {
+        const frame = selectionFrameMetrics(resizeHit.anim);
+        if (frame) resizeDrag = {
+          ...cloneTransformState(resizeHit.anim),
+          handle: resizeHit.handle,
+          startMathX: mathX, startMathY: mathY,
+          origBounds: frameMathBounds(frame),
+          onIsolCanvas: true,
+        };
+      } else if (resizeHit.groupId != null) {
+        const f = groupSelectionFrameMetrics(resizeHit.groupId);
+        if (f) resizeDrag = {
+          groupId: resizeHit.groupId,
+          handle: resizeHit.handle,
+          startMathX: mathX, startMathY: mathY,
+          origBounds: frameMathBounds(f),
+          origStates: groupMembers(resizeHit.groupId).map(cloneTransformState),
+          onIsolCanvas: true,
+        };
+      } else if (resizeHit.multi) {
+        const f = multiSelectionFrameMetrics();
+        if (f) resizeDrag = {
+          multi: true,
+          handle: resizeHit.handle,
+          startMathX: mathX, startMathY: mathY,
+          origBounds: frameMathBounds(f),
+          origStates: multiSelectionMembers().map(cloneTransformState),
+          onIsolCanvas: true,
+        };
+      }
+      updateCursor(); draw(); return;
+    }
+
+    const rotateHit = queryRotationWheelHover(cx, cy);
+    if (rotateHit) {
+      e.preventDefault();
+      pushUndo();
+      if (rotateHit.anim) {
+        const wheel = selectionRotationWheel(rotateHit.anim);
+        if (wheel) {
+          const [cRe, cIm] = toMath(wheel.cx, wheel.cy);
+          const center = new Cx(cRe, cIm);
+          rotateDrag = {
+            ...cloneTransformState(rotateHit.anim),
+            center, startAngle: Math.atan2(mathY - cIm, mathX - cRe),
+            onIsolCanvas: true,
+          };
+        }
+      } else if (rotateHit.groupId != null) {
+        const wheel = groupSelectionRotationWheel(rotateHit.groupId);
+        if (wheel) {
+          const [cRe, cIm] = toMath(wheel.cx, wheel.cy);
+          const center = new Cx(cRe, cIm);
+          rotateDrag = {
+            groupId: rotateHit.groupId,
+            center, startAngle: Math.atan2(mathY - cIm, mathX - cRe),
+            origStates: groupMembers(rotateHit.groupId).map(cloneTransformState),
+            onIsolCanvas: true,
+          };
+        }
+      } else if (rotateHit.multi) {
+        const wheel = multiSelectionRotationWheel();
+        if (wheel) {
+          const [cRe, cIm] = toMath(wheel.cx, wheel.cy);
+          const center = new Cx(cRe, cIm);
+          rotateDrag = {
+            multi: true,
+            center, startAngle: Math.atan2(mathY - cIm, mathX - cRe),
+            origStates: multiSelectionMembers().map(cloneTransformState),
+            onIsolCanvas: true,
+          };
+        }
+      }
+      updateCursor(); draw(); return;
+    }
+
+    const plusHit = queryPlusHover(cx, cy);
+    if (plusHit) {
+      e.preventDefault();
+      startExtendedPlacement(plusHit.anim, plusHit.anchorIdx, plusHit.forward);
+      return;
+    }
+
+    const lockHit = queryLockHover(cx, cy);
+    if (lockHit) {
+      e.preventDefault();
+      pushUndo();
+      setAnchorLocked(lockHit.anim, lockHit.anchorIdx, !isAnchorLocked(lockHit.anim, lockHit.anchorIdx));
+      renderAnimList(); draw(); return;
+    }
+
+    const anchorHit = queryAnchorHover(mathX, mathY);
+    if (anchorHit) {
+      e.preventDefault();
+      pushUndo();
+      const { anim, anchorIdx } = anchorHit;
+      const origAnchor = cloneCx(anim.anchors[anchorIdx]);
+      const origH0 = anim.segments[anchorIdx] ? cloneCx(anim.segments[anchorIdx].h0) : null;
+      const origH1 = anchorIdx > 0 && anim.segments[anchorIdx - 1] ? cloneCx(anim.segments[anchorIdx - 1].h1) : null;
+      let linkedIdx = null, linkedOrigH0 = null, linkedOrigH1 = null;
+      const loopRange = findLoopRange(anim);
+      if (loopRange) {
+        if (anchorIdx === loopRange.loopStart) {
+          linkedIdx = loopRange.loopEnd;
+          linkedOrigH0 = anim.segments[linkedIdx] ? cloneCx(anim.segments[linkedIdx].h0) : null;
+          linkedOrigH1 = linkedIdx > 0 && anim.segments[linkedIdx - 1] ? cloneCx(anim.segments[linkedIdx - 1].h1) : null;
+        } else if (anchorIdx === loopRange.loopEnd) {
+          linkedIdx = loopRange.loopStart;
+          linkedOrigH0 = anim.segments[linkedIdx] ? cloneCx(anim.segments[linkedIdx].h0) : null;
+          linkedOrigH1 = linkedIdx > 0 && anim.segments[linkedIdx - 1] ? cloneCx(anim.segments[linkedIdx - 1].h1) : null;
+        }
+      }
+      anchorDrag = {
+        anim, anchorIdx, startMathX: mathX, startMathY: mathY,
+        origAnchor, origH0, origH1, linkedIdx, linkedOrigH0, linkedOrigH1,
+        onIsolCanvas: true,
+      };
+      updateCursor(); draw(); return;
+    }
+
+    const handleHit = queryHandleHover(mathX, mathY);
+    if (handleHit) {
+      e.preventDefault();
+      pushUndo();
+      const { anim, segIdx, side } = handleHit;
+      handleDrag = { anim, segIdx, side, anchorIdx: side === 'h0' ? segIdx : segIdx + 1, onIsolCanvas: true };
+      updateCursor(); draw(); return;
+    }
+
+    const segHit = querySegmentHover(cx, cy);
+    if (segHit && editModeAnimId === segHit.anim.id) {
+      e.preventDefault();
+      const { anim: hitAnim, segIdx: hitSegIdx } = segHit;
+
+      if (isTextAnim(hitAnim)) {
+        pushUndo();
+        curveDrag = {
+          anim: hitAnim, text: true,
+          startMathX: mathX, startMathY: mathY,
+          origAnchors: hitAnim.anchors.map(cloneCx),
+          origSegs: [],
+          onIsolCanvas: true,
+        };
+        hitAnim.selectionGuideShear = null;
+        hitAnim.expanded = true;
+        hitAnim.activeSegments = new Set();
+        hitAnim.expandedArcs = new Set();
+        hitAnim.expandedAnchors = new Set();
+        updateCursor(); draw(); return;
+      }
+
+      hitAnim.activeSegments = new Set([hitSegIdx]);
+      hitAnim.selectionGuideShear = null;
+      resizeHover = null; rotateHover = null; frameHover = null;
+      hitAnim.expanded = true;
+      hitAnim.expandedArcs = new Set([hitSegIdx]);
+      hitAnim.expandedAnchors = new Set();
+      animations.forEach(a => {
+        if (a.id !== hitAnim.id) { a.expanded = false; a.expandedArcs = new Set(); a.expandedAnchors = new Set(); }
+      });
+
+      const a0 = hitAnim.anchors[hitSegIdx];
+      const a1 = hitAnim.anchors[hitSegIdx + 1];
+      let perpRe = 0, perpIm = 1;
+      if (a0 && a1) {
+        const cRe = a1.re - a0.re, cIm = a1.im - a0.im;
+        const cLen = Math.hypot(cRe, cIm);
+        if (cLen > 1e-9) { perpRe = -cIm / cLen; perpIm = cRe / cLen; }
+      }
+      const hitSeg = hitAnim.segments[hitSegIdx];
+      const startEccPct = hitSeg ? eccentricityToPercent(hitSeg.eccentricity) : 50;
+      let perpSign = 1;
+      if (hitSeg?.compiled && a0 && a1) {
+        const chordMidRe = (a0.re + a1.re) / 2, chordMidIm = (a0.im + a1.im) / 2;
+        const mid = hitSeg.compiled(0, 0.5, {});
+        if (mid && mid.ok()) {
+          const proj = (mid.re - chordMidRe) * perpRe + (mid.im - chordMidIm) * perpIm;
+          if (Math.abs(proj) > 1e-6) {
+            perpSign = proj > 0 ? 1 : -1;
+          } else if (hitSeg.h0 && hitSeg.h1) {
+            const hProj = ((hitSeg.h0.re + hitSeg.h1.re) / 2 - chordMidRe) * perpRe +
+                          ((hitSeg.h0.im + hitSeg.h1.im) / 2 - chordMidIm) * perpIm;
+            perpSign = hProj < 0 ? -1 : 1;
+          }
+        }
+      }
+      eccDrag = {
+        anim: hitAnim, segIdx: hitSegIdx,
+        perpRe, perpIm, perpSign,
+        startMathX: mathX, startMathY: mathY,
+        startEccPct, undoPushed: false,
+        onIsolCanvas: true,
+      };
+      renderAnimList(); scrollToShowExpanded(hitAnim.id);
+      updateCursor(); draw(); return;
+    }
+
+    const otherHit = querySegmentHover(cx, cy);
+    if (otherHit) {
+      e.preventDefault();
+      suppressNextFitObjWindow = true;
+      objWindowInteracting = true;
+      enterEditMode(otherHit.anim, new Set());
+      return;
+    }
+  });
+
+  if (isolSideAction) {
+    // Execute outside withIsolViewport so placement uses the main canvas viewport,
+    // preventing the new object from landing on the scene window's side-action buttons.
+    if (isolSideAction.groupId != null) createGroupSideActionCopy(isolSideAction.groupId, isolSideAction.kind);
+    else if (isolSideAction.multi) createMultiSelectionSideActionCopy(isolSideAction.kind);
+    else createSideActionCopy(isolSideAction.anim, isolSideAction.kind);
+    renderAnimList(); draw(); updateCursor(); return;
+  }
+  if (!e.defaultPrevented) {
+    if (editModeAnimId !== null) exitEditMode();
+    selectedId = null;
+    selectedGroupId = null;
+    sceneIndicatorAnimId = null;
+    clearMultiSelection();
+    clearGroupMode();
+    clearSelectionShearGuides();
+    sideActionHover = null;
+    animations.forEach(a => { a.expanded = false; a.expandedArcs = new Set(); a.expandedAnchors = new Set(); });
+    renderAnimList(); draw();
+  }
+});
+
+isolCanvas.addEventListener('wheel', e => {
   e.preventDefault();
   const factor = e.deltaY < 0 ? 1.1 : 0.9;
   const mx = e.offsetX * devicePixelRatio;
   const my = e.offsetY * devicePixelRatio;
-  objOriginX = mx + (objOriginX - mx) * factor;
-  objOriginY = my + (objOriginY - my) * factor;
-  objScale *= factor;
+  isolOriginX = mx + (isolOriginX - mx) * factor;
+  isolOriginY = my + (isolOriginY - my) * factor;
+  isolScale *= factor;
   draw();
 }, { passive: false });
 
-objCanvas.addEventListener('contextmenu', e => { e.preventDefault(); });
-objCanvas.addEventListener('auxclick', e => { if (e.button === 2) e.preventDefault(); });
+isolCanvas.addEventListener('contextmenu', e => { e.preventDefault(); });
+isolCanvas.addEventListener('auxclick', e => { if (e.button === 2) e.preventDefault(); });
 
-objCanvas.addEventListener('mouseleave', () => {
+isolCanvas.addEventListener('mouseleave', () => {
   if (anchorHover || handleHover || segmentHover || resizeHover || rotateHover || plusHover || lockHover) {
     anchorHover = null; handleHover = null; segmentHover = null;
     resizeHover = null; rotateHover = null; plusHover = null; lockHover = null;
@@ -6367,12 +7020,26 @@ document.getElementById('object-recenter-btn').addEventListener('click', () => {
   draw();
 });
 
+document.getElementById('isolation-recenter-btn').addEventListener('click', () => {
+  fitIsolationWindow();
+  draw();
+});
+
 document.getElementById('split-handle').addEventListener('mousedown', e => {
   if (e.button !== 0) return;
   splitDragging = true;
   splitDragStartX = e.clientX;
-  splitDragStartWidth = document.getElementById('object-window').getBoundingClientRect().width;
+  splitDragStartWidth = document.getElementById('left-column').getBoundingClientRect().width;
   document.getElementById('split-handle').classList.add('dragging');
+  e.preventDefault();
+});
+
+document.getElementById('h-split-handle').addEventListener('mousedown', e => {
+  if (e.button !== 0) return;
+  hSplitDragging = true;
+  hSplitDragStartY = e.clientY;
+  hSplitDragStartHeight = document.getElementById('isolation-window').getBoundingClientRect().height;
+  document.getElementById('h-split-handle').classList.add('dragging');
   e.preventDefault();
 });
 
@@ -6381,7 +7048,7 @@ document.addEventListener('click', e => {
     setGlobalSettingsOpen(false);
   }
   const path = e.composedPath ? e.composedPath() : [];
-  const inUI = path.some(el => el.id === 'scene-window' || el.id === 'object-window' || el.id === 'view-area' || el.id === 'sidebar');
+  const inUI = path.some(el => el.id === 'scene-window' || el.id === 'object-window' || el.id === 'isolation-window' || el.id === 'left-column' || el.id === 'view-area' || el.id === 'sidebar');
   if (inUI) return;
   if (openColorMenuAnimId !== null) { openColorMenuAnimId = null; renderAnimList(); }
   const placing = animations.find(a => a.inPlacementMode);
@@ -6753,7 +7420,9 @@ function drawHigherLayerBlockerMask(renderCtx, blocker) {
 function higherLayerBlockersFor(anim) {
   const idx = animations.indexOf(anim);
   if (idx < 0) return [];
-  return animations.slice(idx + 1).filter(blocker => blocker.visible && !blocker.inPlacementMode);
+  const higher = animations.slice(idx + 1).filter(b => b.visible && !b.inPlacementMode);
+  if (isIsolViewport) return higher.filter(b => isolationAnimIds.has(b.id));
+  return higher;
 }
 
 function canvasPixelIndex(x, y, width) {
@@ -6856,29 +7525,39 @@ function floodOpenFillMask(anim, candidateCanvas, barrierCanvas) {
   const queued = new Uint8Array(width * height);
   const queue = [];
   const seedCount = seedOpenFillFromCurve(queue, queued, anim, width, height, candidateData, barrierData);
-  if (seedCount === 0 && !barrierMaskHasPixels(barrierData))
+  if (seedCount === 0)
     seedOpenFillFallback(queue, queued, width, height, candidateData, barrierData);
 
   const reachable = new Uint8Array(width * height);
   let head = 0;
-  while (head < queue.length) {
-    const idx = queue[head++];
-    if (reachable[idx] || !maskAllowsFill(candidateData, barrierData, idx)) continue;
-    reachable[idx] = 1;
-    const x = idx % width;
-    const y = Math.floor(idx / width);
-    const neighbors = [
-      x > 0 ? idx - 1 : -1,
-      x + 1 < width ? idx + 1 : -1,
-      y > 0 ? idx - width : -1,
-      y + 1 < height ? idx + width : -1,
-    ];
-    for (const next of neighbors) {
-      if (next < 0 || queued[next]) continue;
-      if (!maskAllowsFill(candidateData, barrierData, next)) continue;
-      queued[next] = 1;
-      queue.push(next);
+  const drainQueue = () => {
+    while (head < queue.length) {
+      const idx = queue[head++];
+      if (reachable[idx] || !maskAllowsFill(candidateData, barrierData, idx)) continue;
+      reachable[idx] = 1;
+      const x = idx % width;
+      const y = Math.floor(idx / width);
+      const neighbors = [
+        x > 0 ? idx - 1 : -1,
+        x + 1 < width ? idx + 1 : -1,
+        y > 0 ? idx - width : -1,
+        y + 1 < height ? idx + width : -1,
+      ];
+      for (const next of neighbors) {
+        if (next < 0 || queued[next]) continue;
+        if (!maskAllowsFill(candidateData, barrierData, next)) continue;
+        queued[next] = 1;
+        queue.push(next);
+      }
     }
+  };
+  drainQueue();
+  // Fill sub-regions separated from initial seeds by barrier strokes
+  for (let i = 0; i < width * height; i++) {
+    if (reachable[i] || queued[i] || !maskAllowsFill(candidateData, barrierData, i)) continue;
+    queued[i] = 1;
+    queue.push(i);
+    drainQueue();
   }
 
   const maskCanvas = document.createElement('canvas');
@@ -8739,8 +9418,10 @@ function drawSelectionCrossbeams(anim, frame) {
 }
 
 function drawSelectedObjectBounds(anim) {
+  if (suppressSelectionOverlays) return;
   const groupCandidate = groupSelectionMode && groupCandidateIds.has(anim.id);
-  const isActive = isObjViewport
+  const isAuxViewport = isObjViewport || isIsolViewport;
+  const isActive = isAuxViewport
     ? (selectedId === anim.id || editModeAnimId === anim.id)
     : sceneIndicatorAnimId === anim.id;
   if (!isActive && !groupCandidate) return;
@@ -8776,7 +9457,7 @@ function drawSelectedObjectBounds(anim) {
     return;
   }
 
-  if (!isObjViewport) { ctx.restore(); return; }
+  if (!isObjViewport && !isIsolViewport) { ctx.restore(); return; }
 
   if (!arcSelected) {
     ctx.shadowBlur = 0;
@@ -8816,6 +9497,7 @@ function drawSelectedObjectBounds(anim) {
 }
 
 function drawSelectedGroupBounds() {
+  if (suppressSelectionOverlays) return;
   if (!isGroupSelectionActive()) return;
   const frame = groupSelectionFrameMetrics(selectedGroupId);
   if (!frame) return;
@@ -8880,6 +9562,7 @@ function drawSelectedGroupBounds() {
 }
 
 function drawSelectedMultiSelectionBounds() {
+  if (suppressSelectionOverlays) return;
   if (!isMultiSelectionActive()) return;
   const frame = multiSelectionFrameMetrics();
   if (!frame) return;
@@ -9999,13 +10682,32 @@ function appendColorExpansion(parent, anim) {
     }, !fillEnabled, { colorTrack: opacitySliderTrack(opacityPreviewColor) });
   }
 
+  // ── Eyedropper ──
+  const dropperBtn = document.createElement('button');
+  const isDropperActive = eyedropperTarget === colorEditTarget && eyedropperAnimId === anim.id;
+  dropperBtn.className = 'eyedropper-btn' + (isDropperActive ? ' active' : '');
+  dropperBtn.title = isDropperActive ? 'Click a canvas to sample color (Escape to cancel)' : 'Pick color from canvas';
+  dropperBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21l1.5-4.5L15.5 6l3 3L8 20.5z"/><path d="M18.5 6l1.5-1.5c.8-.8.8-2.2 0-3s-2.2-.8-3 0L15.5 3"/></svg>${isDropperActive ? ' Sampling…' : ' Sample color'}`;
+  dropperBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    if (isDropperActive) {
+      deactivateEyedropper();
+    } else {
+      eyedropperTarget = colorEditTarget;
+      eyedropperAnimId = anim.id;
+      updateCursor();
+    }
+    renderAnimList();
+  });
+  panel.appendChild(dropperBtn);
+
   root.appendChild(panel);
   parent.appendChild(root);
 }
 
-function renderAnimThumbnail(anim, canvasEl) {
+function renderAnimThumbnail(anim, canvasEl, size = 48) {
   const dpr = window.devicePixelRatio || 1;
-  const PX = 48 * dpr;
+  const PX = size * dpr;
   canvasEl.width = PX; canvasEl.height = PX;
   const tctx = canvasEl.getContext('2d');
   tctx.clearRect(0, 0, PX, PX);
@@ -10220,16 +10922,17 @@ function setObjectTileDragVisual(animIds, dragging) {
 
 function objectTileInsertionIndexFromEvent(e) {
   const tilesEl = document.getElementById('object-tiles');
-  let wrap = e.target.closest && e.target.closest('.obj-tile-wrap[data-index]');
-  const wraps = [...tilesEl.querySelectorAll('.obj-tile-wrap[data-index]')];
+  // Include both animation tiles (data-index) and group tiles (data-group-id)
+  let wrap = e.target.closest && e.target.closest('.obj-tile-wrap');
+  const allWraps = [...tilesEl.querySelectorAll('.obj-tile-wrap')];
   if (!wrap || !tilesEl.contains(wrap)) {
-    if (!wraps.length) return animations.length;
-    const firstRect = wraps[0].getBoundingClientRect();
-    const lastRect = wraps[wraps.length - 1].getBoundingClientRect();
+    if (!allWraps.length) return animations.length;
+    const firstRect = allWraps[0].getBoundingClientRect();
+    const lastRect = allWraps[allWraps.length - 1].getBoundingClientRect();
     if (e.clientY < firstRect.top) return 0;
     if (e.clientY > lastRect.bottom) return animations.length;
-    let best = wraps[0], bestDist = Infinity;
-    for (const candidate of wraps) {
+    let best = allWraps[0], bestDist = Infinity;
+    for (const candidate of allWraps) {
       const rect = candidate.getBoundingClientRect();
       const cx = rect.left + rect.width * 0.5;
       const cy = rect.top + rect.height * 0.5;
@@ -10238,10 +10941,18 @@ function objectTileInsertionIndexFromEvent(e) {
     }
     wrap = best;
   }
-  const idx = parseInt(wrap.dataset.index, 10);
-  if (!isFinite(idx)) return animations.length;
   const rect = wrap.getBoundingClientRect();
   const after = e.clientX >= rect.left + rect.width * 0.5;
+  if (wrap.dataset.groupId) {
+    // Group tile — insertion goes before or after all descendant animations
+    const gid = parseFloat(wrap.dataset.groupId);
+    const indices = allDescendantAnims(gid)
+      .map(a => animations.indexOf(a)).filter(i => i >= 0);
+    if (!indices.length) return after ? animations.length : 0;
+    return after ? Math.max(...indices) + 1 : Math.min(...indices);
+  }
+  const idx = parseInt(wrap.dataset.index, 10);
+  if (!isFinite(idx)) return animations.length;
   const anim = animations[idx];
   const gid = objectGroupId(anim);
   const movingIds = new Set(objectTileDrag?.animIds || []);
@@ -10262,9 +10973,18 @@ function clearObjectTileDropCues() {
 
 function updateObjectTileDropCue(insertionIndex) {
   clearObjectTileDropCues();
-  const wraps = [...document.querySelectorAll('#object-tiles .obj-tile-wrap[data-index]')];
-  if (!wraps.length) return;
-  const idx = clamp(Math.round(insertionIndex), 0, wraps.length);
+  const allWraps = [...document.querySelectorAll('#object-tiles .obj-tile-wrap')];
+  if (!allWraps.length) return;
+  // Build the animation-index range each tile represents
+  const ranges = allWraps.map(wrap => {
+    if (wrap.dataset.groupId) {
+      const gid = parseFloat(wrap.dataset.groupId);
+      const idxs = allDescendantAnims(gid).map(a => animations.indexOf(a)).filter(i => i >= 0);
+      return { wrap, first: idxs.length ? Math.min(...idxs) : Infinity, last: idxs.length ? Math.max(...idxs) : -1 };
+    }
+    const idx = parseInt(wrap.dataset.index, 10);
+    return { wrap, first: idx, last: idx };
+  });
   if (objectTileDrag?.animIds) {
     const movingIds = new Set(objectTileDrag.animIds);
     const movingIndices = animations
@@ -10273,11 +10993,13 @@ function updateObjectTileDropCue(insertionIndex) {
     if (movingIndices.length) {
       const first = Math.min(...movingIndices);
       const last = Math.max(...movingIndices);
-      if (idx >= first && idx <= last + 1) return;
+      if (insertionIndex >= first && insertionIndex <= last + 1) return;
     }
   }
-  if (idx >= wraps.length) wraps[wraps.length - 1].classList.add('drop-after');
-  else wraps[idx].classList.add('drop-before');
+  for (const { wrap, first } of ranges) {
+    if (insertionIndex <= first) { wrap.classList.add('drop-before'); return; }
+  }
+  allWraps[allWraps.length - 1].classList.add('drop-after');
 }
 
 function moveAnimationInStack(fromIndex, insertionIndex, sourceAnimIds = null) {
@@ -10340,6 +11062,42 @@ function handleObjectTileDrop(e) {
   moveAnimationInStack(fromIndex, insertionIndex, drag.animIds);
 }
 
+function renderGroupMosaicThumbnail(groupId, canvasEl, size = 48) {
+  const dpr = window.devicePixelRatio || 1;
+  const PX = size * dpr;
+  canvasEl.width = PX; canvasEl.height = PX;
+  const tctx = canvasEl.getContext('2d');
+  tctx.fillStyle = '#1e1e2e';
+  tctx.fillRect(0, 0, PX, PX);
+  const leaves = allDescendantAnims(groupId).filter(a => a.visible && !a.inPlacementMode);
+  if (!leaves.length) {
+    tctx.strokeStyle = '#585b70';
+    tctx.lineWidth = dpr;
+    tctx.strokeRect(PX * 0.2, PX * 0.2, PX * 0.6, PX * 0.6);
+    return;
+  }
+  const bounds = animsMathBounds(leaves);
+  if (!bounds) return;
+  const mw = Math.max(bounds.maxX - bounds.minX, 0.01);
+  const mh = Math.max(bounds.maxY - bounds.minY, 0.01);
+  const thumbScale = Math.min(PX / (mw * 1.1), PX / (mh * 1.1));
+  const cx = (bounds.minX + bounds.maxX) / 2;
+  const cy = (bounds.minY + bounds.maxY) / 2;
+  const thumbOriginX = PX / 2 - cx * thumbScale;
+  const thumbOriginY = PX / 2 + cy * thumbScale;
+  const [sC, sCt, sOX, sOY, sSc, sIsObj, sSelId, sEditId] =
+    [canvas, ctx, originX, originY, scale, isObjViewport, selectedId, editModeAnimId];
+  canvas = canvasEl; ctx = tctx;
+  originX = thumbOriginX; originY = thumbOriginY; scale = thumbScale;
+  isObjViewport = false; selectedId = null; editModeAnimId = null;
+  try {
+    for (const anim of leaves) drawCommittedAnimation(anim);
+  } finally {
+    canvas = sC; ctx = sCt; originX = sOX; originY = sOY; scale = sSc;
+    isObjViewport = sIsObj; selectedId = sSelId; editModeAnimId = sEditId;
+  }
+}
+
 function renderGroupTileBackdrops(tilesEl) {
   tilesEl.querySelectorAll('.obj-group-backdrop').forEach(el => el.remove());
   const wraps = [...tilesEl.querySelectorAll('.obj-tile-wrap[data-index]')];
@@ -10397,13 +11155,35 @@ function renderGroupDetail(detailEl, groupId) {
   header.className = 'detail-header';
   const leftGroup = document.createElement('div');
   leftGroup.className = 'detail-header-left';
-  const numSpan = document.createElement('span');
-  numSpan.className = 'detail-num';
-  numSpan.textContent = 'Group';
-  const label = document.createElement('span');
-  label.style.cssText = 'font-size:0.78rem;color:#a6adc8;';
-  label.textContent = `${members.length} objects`;
-  leftGroup.append(numSpan, label);
+  const currentName = groupName(groupId);
+  const nameSpan = document.createElement('span');
+  nameSpan.className = 'detail-num' + (currentName ? '' : ' group-name-placeholder');
+  nameSpan.textContent = currentName || 'Add name…';
+  nameSpan.title = 'Click to name this group';
+  nameSpan.style.cursor = 'pointer';
+  nameSpan.addEventListener('click', () => {
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = groupName(groupId);
+    input.placeholder = 'Group name…';
+    input.style.cssText = 'font:inherit;background:transparent;border:none;border-bottom:1px solid #89b4fa;outline:none;color:#cdd6f4;width:120px;';
+    nameSpan.replaceWith(input);
+    input.focus();
+    input.select();
+    let cancelled = false;
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { input.blur(); }
+      else if (e.key === 'Escape') { cancelled = true; input.blur(); }
+    });
+    input.addEventListener('blur', () => {
+      if (cancelled) { renderAnimList(); return; }
+      const newName = input.value.trim();
+      const g = groups.find(grp => grp.id === groupId);
+      if (g && g.name !== newName) { pushUndo(); g.name = newName; }
+      renderAnimList();
+    });
+  });
+  leftGroup.append(nameSpan);
 
   const rightGroup = document.createElement('div');
   rightGroup.className = 'detail-header-right';
@@ -10428,11 +11208,26 @@ function renderGroupDetail(detailEl, groupId) {
   header.append(leftGroup, rightGroup);
   detailEl.appendChild(header);
 
-  const body = document.createElement('div');
-  body.style.padding = '6px 8px';
-  appendReadOnlyRow(body, 'Objects', members.map(a => objectLabel(a)).join(', '));
-  appendReadOnlyRow(body, 'Layer span', `${animations.indexOf(members[0]) + 1} - ${animations.indexOf(members[members.length - 1]) + 1}`);
-  detailEl.appendChild(body);
+  const tilesContainer = document.createElement('div');
+  tilesContainer.className = 'detail-group-tiles';
+  for (const member of members) {
+    const tile = document.createElement('button');
+    tile.className = 'detail-group-tile';
+    const isSelected = selectedId === member.id || editModeAnimId === member.id;
+    if (isSelected) tile.classList.add('selected');
+    const thumbCanvas = document.createElement('canvas');
+    thumbCanvas.draggable = false;
+    tile.appendChild(thumbCanvas);
+    renderAnimThumbnail(member, thumbCanvas, 64);
+    tile.addEventListener('click', e => {
+      e.stopPropagation();
+      openColorMenuAnimId = null;
+      enterEditMode(member, new Set());
+      renderAnimList(); draw(); updateCursor();
+    });
+    tilesContainer.appendChild(tile);
+  }
+  detailEl.appendChild(tilesContainer);
   updateToolPanel();
 }
 
@@ -10454,7 +11249,7 @@ function updateGroupObjectsButton() {
   }
 
   if (groupSelectionMode) {
-    if (groupCandidateIds.size >= 2) {
+    if (groupCandidateIds.size + groupGroupCandidateIds.size >= 2) {
       btn.textContent = 'Group';
       btn.classList.add('is-ready');
     } else {
@@ -10471,7 +11266,6 @@ function updateGroupObjectsButton() {
 function renderAnimList() {
   // ── Tiles ──
   const tilesEl = document.getElementById('object-tiles');
-  const detailGroupId = isGroupSelectionActive() ? selectedGroupId : null;
   const detailAnim = animations.find(a => a.id === selectedId) ||
                      animations.find(a => a.id === editModeAnimId);
   tilesEl.innerHTML = '';
@@ -10485,117 +11279,223 @@ function renderAnimList() {
     updateTilesMoreIndicator();
     updateGroupObjectsButton();
   } else {
-  if (animations.length === 0) {
+  // ── Breadcrumb ──
+  const breadcrumbEl = document.getElementById('tiles-breadcrumb');
+  breadcrumbEl.innerHTML = '';
+  if (tilesDrillPath.length > 0) {
+    breadcrumbEl.style.display = 'flex';
+    const backBtn = document.createElement('button');
+    backBtn.textContent = '←';
+    backBtn.title = 'Go up one level';
+    backBtn.addEventListener('click', () => {
+      tilesDrillPath = tilesDrillPath.slice(0, -1);
+      if (tilesDrillPath.length === 0) { clearObjectSelectionState(); selectedGroupId = null; }
+      fitObjWindow(); fitIsolationWindow();
+      renderAnimList(); draw(); updateCursor();
+    });
+    breadcrumbEl.appendChild(backBtn);
+    tilesDrillPath.forEach((gid, i) => {
+      const sep = document.createElement('span');
+      sep.className = 'tiles-breadcrumb-sep';
+      sep.textContent = '›';
+      breadcrumbEl.appendChild(sep);
+      const nameBtn = document.createElement('button');
+      nameBtn.textContent = groupName(gid) || '…';
+      nameBtn.addEventListener('click', () => {
+        tilesDrillPath = tilesDrillPath.slice(0, i + 1);
+        fitObjWindow(); fitIsolationWindow();
+        renderAnimList(); draw(); updateCursor();
+      });
+      breadcrumbEl.appendChild(nameBtn);
+    });
+  } else {
+    breadcrumbEl.style.display = 'none';
+  }
+
+  // ── Drill-down tiles ──
+  const drillGroupId = currentDrillGroupId();
+  const displayItems = directChildItems(drillGroupId);
+  const tilePrefix = getDrillPrefix();
+  // Always show placement-mode objects at the top level
+  if (drillGroupId === null) {
+    animations.filter(a => a.inPlacementMode).forEach(a => {
+      if (!displayItems.some(it => it.type === 'anim' && it.item.id === a.id))
+        displayItems.unshift({ type: 'anim', item: a, pos: -1 });
+    });
+  }
+
+  if (displayItems.length === 0 && drillGroupId === null) {
     const hint = document.createElement('p');
     hint.className = 'placement-hint';
     hint.style.gridColumn = '1 / -1';
     hint.textContent = 'To get started, select a tool (above).';
     tilesEl.appendChild(hint);
   }
-  animations.forEach((anim, idx) => {
-    if (!anim.activeSegments) anim.activeSegments = new Set();
-    if (!anim.expandedArcs) anim.expandedArcs = new Set();
-    if (!anim.expandedAnchors) anim.expandedAnchors = new Set();
-    const isMultiSelected = isMultiSelectionActive() && multiSelectedIds.has(anim.id);
-    const isSelected = selectedId === anim.id || editModeAnimId === anim.id || isMultiSelected;
+
+  displayItems.forEach(({ type, item }, tileIdx) => {
+    const tileLabel = tilePrefix + (tileIdx + 1);
     const wrap = document.createElement('div');
-    const grouped = objectGroupId(anim) != null;
-    const groupSelected = isGroupSelectionActive() && objectGroupId(anim) === selectedGroupId;
-    const groupCandidate = groupSelectionMode && groupCandidateIds.has(anim.id);
-    wrap.className = 'obj-tile-wrap'
-      + (grouped ? ' grouped' : '')
-      + (groupSelected ? ' group-selected' : '')
-      + (groupCandidate ? ' group-candidate' : '');
-    wrap.draggable = !anim.inPlacementMode;
-    wrap.dataset.animId = anim.id;
-    wrap.dataset.index = idx;
-    const label = document.createElement('div');
-    label.className = 'obj-tile-label';
-    label.textContent = idx + 1;
-    const tile = document.createElement('button');
-    tile.className = 'obj-tile' + (!anim.visible ? ' obj-tile-hidden' : '');
-    tile.title = objectLabel(anim);
-    tile.dataset.animId = anim.id;
-    if (isSelected) { tile.style.borderColor = '#cdd6f4'; tile.style.borderWidth = '2px'; }
-    const thumbCanvas = document.createElement('canvas');
-    thumbCanvas.draggable = false;
-    tile.appendChild(thumbCanvas);
-    renderAnimThumbnail(anim, thumbCanvas);
-    wrap.addEventListener('dragstart', e => {
-      if (anim.inPlacementMode) { e.preventDefault(); return; }
-      const block = objectTileBlockForIndex(idx);
-      objectTileDrag = {
-        animId: anim.id,
-        animIds: block?.animIds || [anim.id],
-        fromIndex: block?.fromIndex ?? idx,
-        insertionIndex: idx,
-      };
-      suppressTileClickUntil = Date.now() + 250;
-      if (e.dataTransfer) {
-        e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/plain', String(anim.id));
-      }
-      requestAnimationFrame(() => setObjectTileDragVisual(objectTileDrag?.animIds || [anim.id], true));
-    });
-    wrap.addEventListener('dragend', () => {
-      const dragIds = objectTileDrag?.animIds || [anim.id];
-      objectTileDrag = null;
-      suppressTileClickUntil = Date.now() + 250;
-      setObjectTileDragVisual(dragIds, false);
-      clearObjectTileDropCues();
-    });
-    tile.addEventListener('click', () => {
-      if (Date.now() < suppressTileClickUntil) return;
-      openColorMenuAnimId = null;
-      if (anim.inPlacementMode) { selectedId = anim.id; renderAnimList(); return; }
-      if (groupSelectionMode) {
-        toggleGroupCandidate(anim);
+    if (type === 'group') {
+      const g = item;
+      const isGroupSel = isGroupSelectionActive() && selectedGroupId === g.id;
+      const isGroupCandidate = groupSelectionMode && groupGroupCandidateIds.has(g.id);
+      wrap.className = 'obj-tile-wrap' + (isGroupSel ? ' group-selected' : '') + (isGroupCandidate ? ' group-candidate' : '');
+      wrap.dataset.groupId = g.id;
+      wrap.draggable = drillGroupId === null;
+      const labelEl = document.createElement('div');
+      labelEl.className = 'obj-tile-label';
+      labelEl.textContent = tileLabel;
+      const tile = document.createElement('button');
+      tile.className = 'obj-tile obj-group-mosaic-tile';
+      if (isGroupSel) { tile.style.borderColor = '#cdd6f4'; tile.style.borderWidth = '2px'; }
+      const thumbCanvas = document.createElement('canvas');
+      thumbCanvas.draggable = false;
+      tile.appendChild(thumbCanvas);
+      renderGroupMosaicThumbnail(g.id, thumbCanvas);
+      const icon = document.createElement('span');
+      icon.className = 'obj-group-mosaic-icon';
+      icon.textContent = '⊞';
+      tile.appendChild(icon);
+      tile.addEventListener('click', () => {
+        if (Date.now() < suppressTileClickUntil) return;
+        openColorMenuAnimId = null;
+        if (groupSelectionMode) {
+          if (groupGroupCandidateIds.has(g.id)) groupGroupCandidateIds.delete(g.id);
+          else groupGroupCandidateIds.add(g.id);
+          renderAnimList(); updateGroupObjectsButton();
+          return;
+        }
+        tilesDrillPath.push(g.id);
+        clearObjectSelectionState();
+        selectedGroupId = g.id;
+        fitObjWindow(); fitIsolationWindow();
         renderAnimList(); draw(); updateCursor();
-        return;
+      });
+      if (drillGroupId === null) {
+        wrap.addEventListener('dragstart', e => {
+          const descendants = allDescendantAnims(g.id);
+          if (!descendants.length) { e.preventDefault(); return; }
+          const animIds = descendants.map(a => a.id);
+          const indices = descendants.map(a => animations.indexOf(a)).filter(i => i >= 0);
+          const fromIndex = indices.length ? Math.min(...indices) : 0;
+          const primaryAnim = animations[fromIndex];
+          objectTileDrag = {
+            animId: primaryAnim?.id ?? descendants[0].id,
+            animIds,
+            fromIndex,
+            insertionIndex: fromIndex,
+          };
+          suppressTileClickUntil = Date.now() + 250;
+          if (e.dataTransfer) {
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', String(g.id));
+          }
+          requestAnimationFrame(() => wrap.classList.add('dragging'));
+        });
+        wrap.addEventListener('dragend', () => {
+          const dragIds = objectTileDrag?.animIds;
+          objectTileDrag = null;
+          suppressTileClickUntil = Date.now() + 250;
+          wrap.classList.remove('dragging');
+          if (dragIds) setObjectTileDragVisual(dragIds, false);
+          clearObjectTileDropCues();
+        });
       }
-      if (isMultiSelectionActive() && multiSelectedIds.has(anim.id)) {
+      wrap.append(labelEl, tile);
+    } else {
+      const anim = item;
+      const idx = animations.indexOf(anim);
+      if (!anim.activeSegments) anim.activeSegments = new Set();
+      if (!anim.expandedArcs) anim.expandedArcs = new Set();
+      if (!anim.expandedAnchors) anim.expandedAnchors = new Set();
+      const isMultiSelected = isMultiSelectionActive() && multiSelectedIds.has(anim.id);
+      const isSelected = selectedId === anim.id || editModeAnimId === anim.id || isMultiSelected;
+      const groupCandidate = groupSelectionMode && groupCandidateIds.has(anim.id);
+      wrap.className = 'obj-tile-wrap' + (groupCandidate ? ' group-candidate' : '');
+      wrap.draggable = drillGroupId === null && !anim.inPlacementMode;
+      wrap.dataset.animId = anim.id;
+      wrap.dataset.index = idx;
+      const label = document.createElement('div');
+      label.className = 'obj-tile-label';
+      label.textContent = tileLabel;
+      const tile = document.createElement('button');
+      tile.className = 'obj-tile' + (!anim.visible ? ' obj-tile-hidden' : '');
+      tile.title = objectLabel(anim);
+      tile.dataset.animId = anim.id;
+      if (isSelected) { tile.style.borderColor = '#cdd6f4'; tile.style.borderWidth = '2px'; }
+      const thumbCanvas = document.createElement('canvas');
+      thumbCanvas.draggable = false;
+      tile.appendChild(thumbCanvas);
+      renderAnimThumbnail(anim, thumbCanvas);
+      if (drillGroupId === null) {
+        wrap.addEventListener('dragstart', e => {
+          if (anim.inPlacementMode) { e.preventDefault(); return; }
+          const block = objectTileBlockForIndex(idx);
+          objectTileDrag = {
+            animId: anim.id,
+            animIds: block?.animIds || [anim.id],
+            fromIndex: block?.fromIndex ?? idx,
+            insertionIndex: idx,
+          };
+          suppressTileClickUntil = Date.now() + 250;
+          if (e.dataTransfer) {
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', String(anim.id));
+          }
+          requestAnimationFrame(() => setObjectTileDragVisual(objectTileDrag?.animIds || [anim.id], true));
+        });
+        wrap.addEventListener('dragend', () => {
+          const dragIds = objectTileDrag?.animIds || [anim.id];
+          objectTileDrag = null;
+          suppressTileClickUntil = Date.now() + 250;
+          setObjectTileDragVisual(dragIds, false);
+          clearObjectTileDropCues();
+        });
+      }
+      tile.addEventListener('click', () => {
+        if (Date.now() < suppressTileClickUntil) return;
+        openColorMenuAnimId = null;
+        if (anim.inPlacementMode) { selectedId = anim.id; renderAnimList(); return; }
+        if (groupSelectionMode) {
+          toggleGroupCandidate(anim);
+          renderAnimList(); draw(); updateCursor();
+          return;
+        }
+        if (isMultiSelectionActive() && multiSelectedIds.has(anim.id)) {
+          drillSelectObject(anim);
+          renderAnimList(); draw(); updateCursor();
+          return;
+        }
+        const alreadySelected = selectedId === anim.id || editModeAnimId === anim.id;
+        if (alreadySelected) {
+          if (anim.activeSegments && anim.activeSegments.size > 0) {
+            anim.activeSegments = new Set();
+            anim.expandedArcs = new Set();
+          } else {
+            selectedId = null;
+            exitEditMode();
+          }
+          renderAnimList(); draw(); updateCursor();
+          return;
+        }
         drillSelectObject(anim);
         renderAnimList(); draw(); updateCursor();
-        return;
-      }
-      if (objectGroupId(anim) != null && selectedId !== anim.id) {
-        if ((isGroupSelectionActive() && selectedGroupId === objectGroupId(anim)) || focusedGroupMemberGroupId() === objectGroupId(anim)) drillSelectObject(anim);
-        else selectGroup(objectGroupId(anim));
-        renderAnimList(); draw(); updateCursor();
-        return;
-      }
-      const alreadySelected = selectedId === anim.id || editModeAnimId === anim.id;
-      if (alreadySelected) {
-        if (anim.activeSegments && anim.activeSegments.size > 0) {
-          // Arc selected → drop to object-level selection, stay in edit mode
-          anim.activeSegments = new Set();
-          anim.expandedArcs = new Set();
-        } else {
-          // Object selected, no arc → deselect entirely
-          selectedId = null;
-          exitEditMode();
-        }
-        renderAnimList(); draw(); updateCursor();
-        return;
-      }
-      selectObjectOrGroup(anim);
-      renderAnimList(); draw(); updateCursor();
-    });
-    wrap.append(label, tile);
+      });
+      wrap.append(label, tile);
+    }
     tilesEl.appendChild(wrap);
   });
-  // Set tile area height to show 1–8 rows based on object count
-  const _tileCount = animations.length;
-  const _tileRows = _tileCount === 0 ? 1 : (detailAnim || detailGroupId ? 1 : Math.min(8, Math.ceil(_tileCount / 5)));
+
+  const _tileCount = displayItems.length;
+  const _tileRows = _tileCount === 0 ? 1 : Math.min(8, Math.ceil(_tileCount / 5));
   _tilesVisibleRows = _tileRows;
   tilesEl.style.height = (_tileRows * 67 + Math.max(0, _tileRows - 1) * 5 + 10) + 'px';
-  renderGroupTileBackdrops(tilesEl);
-  // Auto-scroll so the selected tile is always visible
-  const _focusId = selectedId ?? editModeAnimId ?? groupMembers(detailGroupId)[0]?.id ?? multiSelectionMembers()[0]?.id;
-  const _selIdx = animations.findIndex(a => a.id === _focusId);
-  if (_selIdx >= 0) {
+  if (drillGroupId === null) renderGroupTileBackdrops(tilesEl);
+  const _focusId = selectedId ?? editModeAnimId ?? multiSelectionMembers()[0]?.id;
+  const _selItemIdx = displayItems.findIndex(it => it.type === 'anim' && it.item.id === _focusId);
+  if (_selItemIdx >= 0) {
     const _rowH = 72;
-    const _selRow = Math.floor(_selIdx / 5);
+    const _selRow = Math.floor(_selItemIdx / 5);
     const _firstVis = Math.floor(tilesEl.scrollTop / _rowH);
     const _lastVis = _firstVis + (_tileRows - 1);
     if (_selRow < _firstVis) tilesEl.scrollTop = _selRow * _rowH;
@@ -10610,11 +11510,6 @@ function renderAnimList() {
   detailEl.innerHTML = '';
   detailEl.removeAttribute('data-anim-id');
   detailEl.removeAttribute('data-group-id');
-
-  if (detailGroupId != null) {
-    renderGroupDetail(detailEl, detailGroupId);
-    return;
-  }
 
   const anim = detailAnim;
   if (!anim) { updateToolPanel(); setView('tiles'); return; }
@@ -10635,7 +11530,9 @@ function renderAnimList() {
   leftGroup.className = 'detail-header-left';
   const numSpan = document.createElement('span');
   numSpan.className = 'detail-num';
-  numSpan.textContent = animations.indexOf(anim) + 1;
+  const _detailItems = directChildItems(currentDrillGroupId());
+  const _detailIdx = _detailItems.findIndex(it => it.type === 'anim' && it.item.id === anim.id);
+  numSpan.textContent = _detailIdx >= 0 ? getDrillPrefix() + (_detailIdx + 1) : animations.indexOf(anim) + 1;
   const thumbDiv = document.createElement('div');
   thumbDiv.className = 'detail-thumb';
   const thumbCanvas = document.createElement('canvas');
@@ -11300,7 +12197,7 @@ function updateTilesMoreIndicator() {
     belowEl.style.display = 'none';
     return;
   }
-  const count = animations.length;
+  const count = directChildItems(currentDrillGroupId()).length;
   if (count <= _tilesVisibleRows * 5) { aboveEl.style.display = 'none'; belowEl.style.display = 'none'; return; }
   const rowH = 72; // 67px tile-wrap + 5px gap
   const rowsScrolled = Math.round(tilesEl.scrollTop / rowH);
@@ -11472,6 +12369,22 @@ updateUndoRedoButtons();
 globalSettingsMenu.addEventListener('click', e => e.stopPropagation());
 defaultColorPickerEl.addEventListener('click', e => e.stopPropagation());
 
+// Clicking dead space in the sidebar (gaps between panels) deselects the current object/group.
+document.getElementById('sidebar').addEventListener('mousedown', e => {
+  const deadIds = new Set(['sidebar', 'animations-panel', 'object-tiles', 'object-tiles-wrapper', 'object-detail']);
+  if (!deadIds.has(e.target.id)) return;
+  tilesDrillPath = [];
+  if (editModeAnimId !== null) exitEditMode();
+  selectedId = null;
+  selectedGroupId = null;
+  sceneIndicatorAnimId = null;
+  clearMultiSelection();
+  clearGroupMode();
+  clearSelectionShearGuides();
+  sideActionHover = null;
+  renderAnimList(); draw(); updateCursor();
+});
+
 defaultColorTriggerBtn.addEventListener('click', e => {
   e.stopPropagation();
   setDefaultColorPickerOpen(!defaultColorPickerOpen);
@@ -11526,12 +12439,15 @@ function draw() {
     drawAnimations();
     positionCanvasTextEditor();
   }
-  if (currentMode === 'animations') drawObjectWindow();
+  if (currentMode === 'animations') { drawObjectWindow(); drawIsolationWindow(); }
 }
 
 // ── Object window helpers ──
 
 function getObjWindowAnims() {
+  if (tilesDrillPath.length > 0 && editModeAnimId === null && selectedId === null) {
+    return allDescendantAnims(currentDrillGroupId()).filter(a => a.visible && !a.inPlacementMode);
+  }
   if (multiSelectedIds.size > 0) {
     return [...multiSelectedIds].map(id => animations.find(a => a.id === id)).filter(Boolean);
   }
@@ -11590,11 +12506,68 @@ function drawObjectWindow() {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     if (!hasSelection) return;
     drawGrid();
+    suppressSelectionOverlays = true;
     for (const anim of animations) {
       if (anim.visible && !anim.inPlacementMode) drawCommittedAnimation(anim);
     }
+    suppressSelectionOverlays = false;
   });
   document.getElementById('object-recenter-btn').classList.toggle('visible', hasSelection);
+}
+
+function getIsolationAnims() {
+  const animId = editModeAnimId ?? selectedId;
+  if (animId !== null) {
+    const a = animations.find(x => x.id === animId);
+    return a ? [a] : [];
+  }
+  if (selectedGroupId !== null) {
+    return allDescendantAnims(selectedGroupId).filter(a => a.visible && !a.inPlacementMode);
+  }
+  if (multiSelectedIds.size > 0) {
+    return [...multiSelectedIds].map(id => animations.find(a => a.id === id)).filter(Boolean);
+  }
+  return [];
+}
+
+function fitIsolationWindow() {
+  const anims = getIsolationAnims();
+  if (!anims.length || !isolCanvas.width || !isolCanvas.height) return;
+  const bounds = animsMathBounds(anims);
+  if (!bounds) return;
+  const W = isolCanvas.width, H = isolCanvas.height;
+  const dpr = devicePixelRatio;
+  const mw = Math.max(bounds.maxX - bounds.minX, 0.5);
+  const mh = Math.max(bounds.maxY - bounds.minY, 0.5);
+  // Reserve right-side space for side-action buttons (7 gap + 38 width + 8 frame extend = 53 px)
+  const btnRight = 53 * dpr;
+  const newScale = Math.min((W - btnRight) / (mw * 1.1), H / (mh * 1.1));
+  const cx = (bounds.minX + bounds.maxX) / 2;
+  const cy = (bounds.minY + bounds.maxY) / 2;
+  // Shift center left by half the button clearance so buttons don't clip the right edge
+  isolOriginX = W / 2 - cx * newScale - btnRight / 2;
+  isolOriginY = H / 2 + cy * newScale;
+  isolScale = newScale;
+  document.getElementById('isolation-recenter-btn').classList.toggle('visible', anims.length > 0);
+}
+
+function drawIsolationWindow() {
+  if (!isolCanvas.width || !isolCanvas.height) return;
+  const anims = getIsolationAnims();
+  isolationAnimIds = new Set(anims.map(a => a.id));
+  withIsolViewport(() => {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#05050f';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    if (!anims.length) return;
+    drawGrid();
+    for (const anim of anims) {
+      if (anim.visible && !anim.inPlacementMode) drawCommittedAnimation(anim);
+    }
+    drawSelectedGroupBounds();
+    drawSelectedMultiSelectionBounds();
+  });
+  document.getElementById('isolation-recenter-btn').classList.toggle('visible', anims.length > 0);
 }
 
 
@@ -11631,7 +12604,7 @@ document.getElementById('group-objects-btn').addEventListener('click', e => {
     return;
   }
   if (groupSelectionMode) {
-    if (groupCandidateIds.size >= 2) createGroupFromCandidates();
+    if (groupCandidateIds.size + groupGroupCandidateIds.size >= 2) createGroupFromCandidates();
     return;
   }
   if (animations.filter(a => !a.inPlacementMode).length < 2) return;
@@ -11641,6 +12614,7 @@ document.getElementById('group-objects-btn').addEventListener('click', e => {
   clearMultiSelection();
   groupSelectionMode = true;
   groupCandidateIds = new Set();
+  groupGroupCandidateIds = new Set();
   openColorMenuAnimId = null;
   animations.forEach(a => {
     a.expanded = false;
