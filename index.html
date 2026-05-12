@@ -5933,7 +5933,69 @@ canvas.addEventListener('mousedown', e => {
     updateCursor(); draw(); return;
   }
 
-  // Shape editing (resize, rotate, anchors, handles, ecc) lives in the object window.
+  // ── Resize / shear ──
+  const resizeHit = queryResizeHandleHover(cx, cy);
+  if (resizeHit) {
+    e.preventDefault();
+    pushUndo();
+    if (resizeHit.anim) {
+      const frame = selectionFrameMetrics(resizeHit.anim);
+      if (frame) resizeDrag = {
+        ...cloneTransformState(resizeHit.anim),
+        handle: resizeHit.handle,
+        startMathX: mathX, startMathY: mathY,
+        origBounds: frameMathBounds(frame),
+      };
+    } else if (resizeHit.groupId != null) {
+      const f = groupSelectionFrameMetrics(resizeHit.groupId);
+      if (f) resizeDrag = {
+        groupId: resizeHit.groupId,
+        handle: resizeHit.handle,
+        startMathX: mathX, startMathY: mathY,
+        origBounds: frameMathBounds(f),
+        origStates: groupMembers(resizeHit.groupId).map(cloneTransformState),
+      };
+    } else if (resizeHit.multi) {
+      const f = multiSelectionFrameMetrics();
+      if (f) resizeDrag = {
+        multi: true,
+        handle: resizeHit.handle,
+        startMathX: mathX, startMathY: mathY,
+        origBounds: frameMathBounds(f),
+        origStates: multiSelectionMembers().map(cloneTransformState),
+      };
+    }
+    updateCursor(); draw(); return;
+  }
+
+  // ── Anchor drag ──
+  const anchorHit = anchorHover ?? queryAnchorHover(mathX, mathY);
+  if (anchorHit) {
+    e.preventDefault();
+    pushUndo();
+    const { anim: aHitAnim, anchorIdx } = anchorHit;
+    const origAnchor = cloneCx(aHitAnim.anchors[anchorIdx]);
+    const origH0 = aHitAnim.segments[anchorIdx] ? cloneCx(aHitAnim.segments[anchorIdx].h0) : null;
+    const origH1 = anchorIdx > 0 && aHitAnim.segments[anchorIdx - 1] ? cloneCx(aHitAnim.segments[anchorIdx - 1].h1) : null;
+    let linkedIdx = null, linkedOrigH0 = null, linkedOrigH1 = null;
+    const loopRange = findLoopRange(aHitAnim);
+    if (loopRange) {
+      if (anchorIdx === loopRange.loopStart) {
+        linkedIdx = loopRange.loopEnd;
+        linkedOrigH0 = aHitAnim.segments[linkedIdx] ? cloneCx(aHitAnim.segments[linkedIdx].h0) : null;
+        linkedOrigH1 = linkedIdx > 0 && aHitAnim.segments[linkedIdx - 1] ? cloneCx(aHitAnim.segments[linkedIdx - 1].h1) : null;
+      } else if (anchorIdx === loopRange.loopEnd) {
+        linkedIdx = loopRange.loopStart;
+        linkedOrigH0 = aHitAnim.segments[linkedIdx] ? cloneCx(aHitAnim.segments[linkedIdx].h0) : null;
+        linkedOrigH1 = linkedIdx > 0 && aHitAnim.segments[linkedIdx - 1] ? cloneCx(aHitAnim.segments[linkedIdx - 1].h1) : null;
+      }
+    }
+    anchorDrag = {
+      anim: aHitAnim, anchorIdx, startMathX: mathX, startMathY: mathY,
+      origAnchor, origH0, origH1, linkedIdx, linkedOrigH0, linkedOrigH1,
+    };
+    updateCursor(); draw(); return;
+  }
 
   // ── Segment hover ──
   const effectiveSegHover = segmentHover ?? querySegmentHover(cx, cy);
@@ -6229,9 +6291,8 @@ window.addEventListener('mousemove', e => {
       newPlusHover    = (newSideActionHover || newResizeHover || newFrameHover) ? null : queryPlusHover(cx, cy);
       newLockHover    = (newSideActionHover || newResizeHover || newFrameHover || newPlusHover) ? null : queryLockHover(cx, cy);
       newAnchorHover  = (newSideActionHover || newResizeHover || newFrameHover || newPlusHover || newLockHover) ? null : queryAnchorHover(mathX, mathY);
-      newHandleHover  = (newSideActionHover || newResizeHover || newFrameHover || newPlusHover || newAnchorHover || newLockHover) ? null : queryHandleHover(mathX, mathY);
-      newRotationHover = (newSideActionHover || newResizeHover || newFrameHover || newPlusHover || newLockHover || newAnchorHover || newHandleHover) ? null : queryRotationWheelHover(cx, cy);
-      newSegmentHover = (newSideActionHover || newResizeHover || newFrameHover || newPlusHover || newRotationHover || newAnchorHover || newHandleHover || newLockHover) ? null : querySegmentHover(cx, cy);
+      // No handle hover or rotation hover from scene window (handles and rotation are isolation-only)
+      newSegmentHover = (newSideActionHover || newResizeHover || newFrameHover || newPlusHover || newAnchorHover || newLockHover) ? null : querySegmentHover(cx, cy);
     }
 
     const sideActionChanged = (newSideActionHover?.anim !== sideActionHover?.anim) || (newSideActionHover?.groupId !== sideActionHover?.groupId) || (newSideActionHover?.multi !== sideActionHover?.multi) || (newSideActionHover?.kind !== sideActionHover?.kind);
@@ -9457,15 +9518,13 @@ function drawSelectedObjectBounds(anim) {
     return;
   }
 
-  if (!isObjViewport && !isIsolViewport) { ctx.restore(); return; }
-
   if (!arcSelected) {
     ctx.shadowBlur = 0;
     ctx.lineWidth = 1 * dpr;
     ctx.globalAlpha = 0.32;
     drawSelectionCrossbeams(anim, frame);
 
-    {
+    if (isObjViewport || isIsolViewport) {
       const wheel = selectionRotationWheel(anim);
       const wheelActive = rotateDrag?.anim === anim || rotateHover?.anim === anim;
       if (wheel && wheel.r > 0) {
@@ -9478,18 +9537,18 @@ function drawSelectedObjectBounds(anim) {
         ctx.arc(wheel.cx, wheel.cy, wheel.r, 0, Math.PI * 2);
         ctx.stroke();
       }
-
-      ctx.shadowBlur = 0;
-      ctx.strokeStyle = (resizeDrag?.anim === anim || resizeHover?.anim === anim) ? CANVAS_BUTTON_COLOR : CANVAS_BUTTON_IDLE_COLOR;
-      ctx.beginPath();
-      for (const seg of selectionResizeSegments(anim)) {
-        ctx.moveTo(seg.from[0], seg.from[1]);
-        ctx.lineTo(seg.to[0], seg.to[1]);
-      }
-      ctx.lineWidth = 1.8 * dpr;
-      ctx.globalAlpha = (resizeDrag?.anim === anim || resizeHover?.anim === anim) ? 0.62 : 0.52;
-      ctx.stroke();
     }
+
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = (resizeDrag?.anim === anim || resizeHover?.anim === anim) ? CANVAS_BUTTON_COLOR : CANVAS_BUTTON_IDLE_COLOR;
+    ctx.beginPath();
+    for (const seg of selectionResizeSegments(anim)) {
+      ctx.moveTo(seg.from[0], seg.from[1]);
+      ctx.lineTo(seg.to[0], seg.to[1]);
+    }
+    ctx.lineWidth = 1.8 * dpr;
+    ctx.globalAlpha = (resizeDrag?.anim === anim || resizeHover?.anim === anim) ? 0.62 : 0.52;
+    ctx.stroke();
   }
   ctx.shadowBlur = 0;
   drawSelectionSideActionButtons(anim);
@@ -9529,17 +9588,19 @@ function drawSelectedGroupBounds() {
   ctx.globalAlpha = 0.32;
   drawSelectionCrossbeams({ selectionGuideShear: groupSelectionGuideShear }, frame);
 
-  const wheel = groupSelectionRotationWheel(selectedGroupId);
-  const wheelActive = rotateDrag?.groupId === selectedGroupId || rotateHover?.groupId === selectedGroupId;
-  if (wheel && wheel.r > 0) {
-    ctx.strokeStyle = wheelActive ? CANVAS_TOOL_COLOR : CANVAS_CONTROL_IDLE_COLOR;
-    ctx.lineWidth = (wheelActive ? 2.4 : 1.0) * dpr;
-    ctx.globalAlpha = wheelActive ? 0.62 : 0.48;
-    ctx.shadowBlur = wheelActive ? 6 * dpr : 0;
-    ctx.shadowColor = CANVAS_TOOL_COLOR;
-    ctx.beginPath();
-    ctx.arc(wheel.cx, wheel.cy, wheel.r, 0, Math.PI * 2);
-    ctx.stroke();
+  if (isObjViewport || isIsolViewport) {
+    const wheel = groupSelectionRotationWheel(selectedGroupId);
+    const wheelActive = rotateDrag?.groupId === selectedGroupId || rotateHover?.groupId === selectedGroupId;
+    if (wheel && wheel.r > 0) {
+      ctx.strokeStyle = wheelActive ? CANVAS_TOOL_COLOR : CANVAS_CONTROL_IDLE_COLOR;
+      ctx.lineWidth = (wheelActive ? 2.4 : 1.0) * dpr;
+      ctx.globalAlpha = wheelActive ? 0.62 : 0.48;
+      ctx.shadowBlur = wheelActive ? 6 * dpr : 0;
+      ctx.shadowColor = CANVAS_TOOL_COLOR;
+      ctx.beginPath();
+      ctx.arc(wheel.cx, wheel.cy, wheel.r, 0, Math.PI * 2);
+      ctx.stroke();
+    }
   }
 
   ctx.shadowBlur = 0;
@@ -9594,17 +9655,19 @@ function drawSelectedMultiSelectionBounds() {
   ctx.globalAlpha = 0.32;
   drawSelectionCrossbeams({ selectionGuideShear: multiSelectionGuideShear }, frame);
 
-  const wheel = multiSelectionRotationWheel();
-  const wheelActive = rotateDrag?.multi || rotateHover?.multi;
-  if (wheel && wheel.r > 0) {
-    ctx.strokeStyle = wheelActive ? CANVAS_TOOL_COLOR : CANVAS_CONTROL_IDLE_COLOR;
-    ctx.lineWidth = (wheelActive ? 2.4 : 1.0) * dpr;
-    ctx.globalAlpha = wheelActive ? 0.62 : 0.48;
-    ctx.shadowBlur = wheelActive ? 6 * dpr : 0;
-    ctx.shadowColor = CANVAS_TOOL_COLOR;
-    ctx.beginPath();
-    ctx.arc(wheel.cx, wheel.cy, wheel.r, 0, Math.PI * 2);
-    ctx.stroke();
+  if (isObjViewport || isIsolViewport) {
+    const wheel = multiSelectionRotationWheel();
+    const wheelActive = rotateDrag?.multi || rotateHover?.multi;
+    if (wheel && wheel.r > 0) {
+      ctx.strokeStyle = wheelActive ? CANVAS_TOOL_COLOR : CANVAS_CONTROL_IDLE_COLOR;
+      ctx.lineWidth = (wheelActive ? 2.4 : 1.0) * dpr;
+      ctx.globalAlpha = wheelActive ? 0.62 : 0.48;
+      ctx.shadowBlur = wheelActive ? 6 * dpr : 0;
+      ctx.shadowColor = CANVAS_TOOL_COLOR;
+      ctx.beginPath();
+      ctx.arc(wheel.cx, wheel.cy, wheel.r, 0, Math.PI * 2);
+      ctx.stroke();
+    }
   }
 
   ctx.shadowBlur = 0;
