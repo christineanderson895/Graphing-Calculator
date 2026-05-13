@@ -124,27 +124,64 @@
     /* Object tiles */
     #object-tiles-wrapper {
       flex-shrink: 0;
-      margin: 6px 8px 0;
+      height: 92px;
+      margin: 0 0 8px;
       border: 2px solid #6c7086;
-      border-radius: 6px;
+      border-radius: 8px;
+      background: #11111b;
       display: flex;
       flex-direction: column;
       overflow: hidden;
+      position: relative;
       transition: opacity 0.15s ease;
+    }
+    #object-tiles-wrapper::before,
+    #object-tiles-wrapper::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 28px;
+      pointer-events: none;
+      z-index: 5;
+      opacity: 0;
+      transition: opacity 0.16s ease;
+    }
+    #object-tiles-wrapper::before {
+      left: 0;
+      background: linear-gradient(90deg, #11111b 0%, rgba(17, 17, 27, 0) 100%);
+    }
+    #object-tiles-wrapper::after {
+      right: 0;
+      background: linear-gradient(270deg, #11111b 0%, rgba(17, 17, 27, 0) 100%);
+    }
+    #object-tiles-wrapper.can-scroll-left::before,
+    #object-tiles-wrapper.can-scroll-right::after {
+      opacity: 1;
     }
     #object-tiles {
       flex-shrink: 0;
-      padding: 5px 0;
-      display: grid;
-      grid-template-columns: repeat(5, 48px);
-      justify-content: center;
-      gap: 5px;
-      overflow-y: scroll;
-      scrollbar-width: none;
+      height: 100%;
+      padding: 7px 14px 9px;
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 8px;
+      overflow-x: auto;
+      overflow-y: hidden;
+      scrollbar-width: thin;
+      scrollbar-color: #45475a #11111b;
       position: relative;
       isolation: isolate;
     }
-    #object-tiles::-webkit-scrollbar { display: none; }
+    #object-tiles::-webkit-scrollbar { height: 8px; }
+    #object-tiles::-webkit-scrollbar-track { background: #11111b; }
+    #object-tiles::-webkit-scrollbar-thumb {
+      background: #45475a;
+      border: 2px solid #11111b;
+      border-radius: 999px;
+    }
+    #object-tiles::-webkit-scrollbar-thumb:hover { background: #6c7086; }
     #group-objects-btn {
       margin: 0 8px 7px;
       min-height: 30px;
@@ -173,6 +210,26 @@
       cursor: default;
       opacity: 0.72;
     }
+    .group-objects-btn-inner {
+      display: block;
+      width: calc(100% - 16px);
+      margin: 4px 8px 8px;
+      min-height: 28px;
+      border: 1px solid #6c7086;
+      border-radius: 6px;
+      background: #313244;
+      color: #a6adc8;
+      cursor: pointer;
+      font-size: 0.74rem;
+      line-height: 1.2;
+      padding: 5px 9px;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+    }
+    .group-objects-btn-inner:hover {
+      background: #45475a;
+      border-color: #f38ba8;
+      color: #cdd6f4;
+    }
     #tiles-more-above {
       flex-shrink: 0;
       text-align: center;
@@ -194,11 +251,12 @@
       border-top: 1px solid #313244;
     }
     .obj-tile-wrap {
-      display: flex; flex-direction: column; align-items: center; gap: 3px;
+      display: block;
       position: relative;
       z-index: 2;
       border-radius: 7px;
       user-select: none;
+      flex: 0 0 auto;
     }
     .obj-tile-wrap[draggable="true"] .obj-tile { cursor: grab; }
     .obj-tile-wrap.dragging {
@@ -209,13 +267,14 @@
     .obj-tile-wrap.drop-after::after {
       content: '';
       position: absolute;
-      top: 15px;
-      bottom: 0;
+      top: 4px;
+      bottom: 4px;
       width: 3px;
       border-radius: 999px;
       background: #89b4fa;
       box-shadow: 0 0 8px rgba(137, 180, 250, 0.75);
       pointer-events: none;
+      z-index: 6;
     }
     .obj-tile-wrap.drop-before::before { left: -4px; }
     .obj-tile-wrap.drop-after::after { right: -4px; }
@@ -243,26 +302,49 @@
       box-shadow: 0 0 0 2px rgba(203, 166, 247, 0.6);
     }
     .obj-tile-wrap.group-selected .obj-tile {
-      border-color: #45475a;
-      box-shadow: none;
+      border-color: #cdd6f4;
+      box-shadow: 0 0 0 1px rgba(205, 214, 244, 0.28);
     }
     .obj-tile-label {
-      font-family: monospace; font-size: 1.0rem; font-weight: 600;
-      color: #cdd6f4; line-height: 1;
+      position: absolute;
+      top: 3px;
+      left: 4px;
+      z-index: 3;
+      font-family: monospace;
+      font-size: 0.58rem;
+      font-weight: 600;
+      color: rgba(205, 214, 244, 0.58);
+      line-height: 1;
+      pointer-events: none;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.75);
     }
     .obj-tile {
-      width: 48px; height: 48px;
+      width: 72px; height: 72px;
       box-sizing: border-box;
       border-radius: 6px;
       border: 1.5px solid #45475a;
       background: #1e1e2e;
       cursor: pointer;
       padding: 0; overflow: hidden; display: block;
+      position: relative;
       transition: border-color 0.12s, background 0.12s;
     }
     .obj-tile:hover { border-color: #6c7086; }
+    .obj-tile.selected {
+      border-color: #cdd6f4;
+      border-width: 2px;
+      box-shadow: 0 0 0 1px rgba(205, 214, 244, 0.22);
+    }
     .obj-tile.obj-tile-hidden { opacity: 0.45; }
     .obj-tile canvas { display: block; width: 100%; height: 100%; }
+    .obj-tray-partition {
+      flex: 0 0 2px;
+      align-self: stretch;
+      width: 2px;
+      margin: 4px 3px;
+      background: #6c7086;
+      border-radius: 999px;
+    }
     #object-tiles.line-tool-options-host {
       display: flex;
       align-items: center;
@@ -352,7 +434,7 @@
       width: 64px; height: 64px;
       box-sizing: border-box;
       border-radius: 6px;
-      border: 2px solid #313244;
+      border: 2px solid #45475a;
       background: #1e1e2e;
       cursor: pointer;
       overflow: hidden;
@@ -363,7 +445,7 @@
     .detail-group-tile canvas { display: block; width: 100%; height: 100%; }
     .detail-group-tile:hover { border-color: #585b70; }
     .detail-group-tile.selected { border-color: #cdd6f4; border-width: 2px; }
-    .group-name-placeholder { color: #585b70; font-weight: 400; font-size: 0.85rem; }
+    .group-name-placeholder { color: #a6adc8; font-weight: 600; }
     #tiles-breadcrumb {
       display: none;
       align-items: center;
@@ -736,6 +818,32 @@
       padding-top: 4px;
       border-top: 1px solid #313244;
     }
+    .gradient-stop-tab-bar {
+      display: flex;
+      gap: 2px;
+      margin-top: 4px;
+    }
+    .gradient-stop-tab {
+      flex: 1;
+      padding: 4px 10px;
+      font-size: 0.72rem;
+      background: #313244;
+      color: #6c7086;
+      border: 1px solid #45475a;
+      border-bottom: none;
+      border-radius: 5px 5px 0 0;
+      cursor: pointer;
+      position: relative;
+      top: 1px;
+      transition: background 0.1s, color 0.1s;
+    }
+    .gradient-stop-tab.active {
+      background: #181825;
+      color: #cdd6f4;
+      border-color: #6c7086;
+      z-index: 1;
+    }
+    .gradient-stop-tab:not(.active):hover { background: #45475a; color: #a6adc8; }
     .fill-style-btn {
       height: 24px;
       border: 1px solid #45475a;
@@ -1305,6 +1413,13 @@
       min-width: 0;
       border-radius: 8px;
     }
+    #scene-column {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
     #left-column {
       flex: 0 0 40%;
       min-width: 20px;
@@ -1346,7 +1461,7 @@
       display: none;
     }
     /* ── Scene window (main display canvas) ── */
-    #scene-window { flex: 1; min-width: 80px; position: relative; overflow: hidden; }
+    #scene-window { flex: 1; min-width: 80px; min-height: 0; position: relative; overflow: hidden; }
     /* ── Window label badges ── */
     #isolation-label, #object-window-label {
       position: absolute;
@@ -1380,7 +1495,7 @@
     #object-recenter-btn:hover, #isolation-recenter-btn:hover { background: rgba(49, 50, 68, 0.92); border-color: #89b4fa; color: #f5f7ff; }
     #object-recenter-btn svg, #isolation-recenter-btn svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
     /* ── Canvas ── */
-    #scene-window { flex: 1; position: relative; overflow: hidden; }
+    #scene-window { flex: 1; min-height: 0; position: relative; overflow: hidden; }
     #canvas-text-editor {
       position: absolute;
       z-index: 60;
@@ -1440,12 +1555,6 @@
       <button class="tool-btn" data-tool="text" title="Text" aria-label="Text">
         <span class="tool-text-icon" aria-hidden="true">T</span>
       </button>
-    </div>
-    <div id="object-tiles-wrapper">
-      <div id="tiles-breadcrumb"></div>
-      <div id="tiles-more-above"></div>
-      <div id="object-tiles"></div>
-      <div id="tiles-more"></div>
     </div>
     <button id="group-objects-btn" type="button">Group Objects</button>
     <div id="object-detail"></div>
@@ -1559,8 +1668,16 @@
     </div>
   </div>
   <div id="split-handle"></div>
-  <div id="scene-window">
-    <canvas id="graph"></canvas>
+  <div id="scene-column">
+    <div id="object-tiles-wrapper">
+      <div id="tiles-breadcrumb"></div>
+      <div id="tiles-more-above"></div>
+      <div id="object-tiles"></div>
+      <div id="tiles-more"></div>
+    </div>
+    <div id="scene-window">
+      <canvas id="graph"></canvas>
+    </div>
   </div>
 </div>
 
@@ -3170,7 +3287,8 @@ let objectTileDrag = null; // {animId, animIds, fromIndex, insertionIndex} | nul
 let suppressTileClickUntil = 0;
 let openColorMenuAnimId = null;
 let colorEditTarget = 'outline';
-let eyedropperTarget = null; // 'outline' | 'fill' | null
+let gradientColorTab = 1; // 1 or 2, active sub-tab when editing gradient fill
+let eyedropperTarget = null; // 'outline' | 'fill' | 'gradientTo' | null
 let eyedropperAnimId = null;
 let canvasTextEditAnimId = null;
 let canvasTextEditor = null;
@@ -3187,13 +3305,14 @@ let eccDrag    = null;  // {anim, segIdx, perpRe, perpIm, anchor0re, anchor0im, 
 let frameDrag  = null;  // {anim, startMathX, startMathY, origAnchors, origSegs}
 let resizeDrag = null;  // {anim, handle, mode, startMath, origBounds, origAnchors, origSegs}
 let rotateDrag = null;  // {anim, center, startAngle, origRotation, origAnchors, origSegs}
+let rotationModeTarget = null; // {animId}|{groupId}|{multi:true}|null
 let frameHover = null;  // anim | null
 let segmentHover = null; // {anim, segIdx} | null
 let anchorHover  = null; // {anim, anchorIdx} | null
 let handleHover  = null; // {anim, segIdx, side} | null
 let resizeHover  = null; // {anim, handle} | null
 let rotateHover  = null; // {anim} | null
-let sideActionHover = null; // {anim, kind:'duplicate'|'reflect'} | null
+let sideActionHover = null; // {anim|groupId|multi, kind:'duplicate'|'reflect'|'rotate'} | null
 let plusHover    = null; // {anim, end:'A0'|'A2'} | null
 let lockHover    = null; // {anim, anchorIdx} | null — interior anchor lock toggle
 let rubberBand   = null; // {startX,startY,curX,curY,ctrl} | null — drag-region selection
@@ -3294,7 +3413,7 @@ function restoreSnapshot(snap) {
   frameDrag = null;
   frameHover = null;
   clearLineConnectorChoice();
-  groups = groupSnap.map(g => ({ id: g.id, name: g.name, parentGroupId: g.parentGroupId ?? null }));
+  groups = groupSnap.map(g => ({ id: g.id, name: g.name, parentGroupId: g.parentGroupId ?? null, hidden: g.hidden ?? false }));
   groupNameCounter = savedCounter;
   tilesDrillPath = [];
   animations = animSnap.map(s => {
@@ -3344,7 +3463,10 @@ function restoreSnapshot(snap) {
   cleanupSingletonGroups();
   if (snapSelectedId !== null && animations.some(a => a.id === snapSelectedId)) selectedId = snapSelectedId;
   if (snapEditModeId !== null && animations.some(a => a.id === snapEditModeId)) editModeAnimId = snapEditModeId;
-  if (snapGroupId   !== null && groups.some(g => g.id === snapGroupId))         selectedGroupId = snapGroupId;
+  if (snapGroupId   !== null && groups.some(g => g.id === snapGroupId)) {
+    selectedGroupId = snapGroupId;
+    tilesDrillPath = groupPathFromRoot(snapGroupId);
+  }
   renderAnimList(); draw();
 }
 
@@ -3399,7 +3521,7 @@ function cleanupSingletonGroups() {
       a.groupId = g?.parentGroupId ?? null;
     }
   });
-  if (selectedGroupId != null && !groupMembers(selectedGroupId).length) selectedGroupId = null;
+  if (selectedGroupId != null && !allDescendantAnims(selectedGroupId).length) selectedGroupId = null;
   groupCandidateIds = new Set([...groupCandidateIds].filter(id => animations.some(a => a.id === id)));
   multiSelectedIds = new Set([...multiSelectedIds].filter(id => animations.some(a => a.id === id)));
   if (multiSelectedIds.size < 2) multiSelectionGuideShear = null;
@@ -3421,6 +3543,20 @@ function childGroups(parentId) {
   return groups.filter(g => (g.parentGroupId ?? null) === (parentId ?? null));
 }
 
+function groupPathFromRoot(groupId) {
+  const path = [];
+  const seen = new Set();
+  let gid = groupId;
+  while (gid !== null && !seen.has(gid)) {
+    seen.add(gid);
+    const g = groups.find(grp => grp.id === gid);
+    if (!g) break;
+    path.unshift(gid);
+    gid = g.parentGroupId ?? null;
+  }
+  return path;
+}
+
 function allDescendantAnims(groupId) {
   const result = [];
   const visit = gid => {
@@ -3431,6 +3567,25 @@ function allDescendantAnims(groupId) {
   return result;
 }
 
+function isGroupEffectivelyHidden(groupId) {
+  let gid = groupId;
+  const seen = new Set();
+  while (gid != null && !seen.has(gid)) {
+    seen.add(gid);
+    const g = groups.find(grp => grp.id === gid);
+    if (!g) break;
+    if (g.hidden) return true;
+    gid = g.parentGroupId ?? null;
+  }
+  return false;
+}
+
+function isAnimEffectivelyVisible(anim) {
+  if (!anim || !anim.visible) return false;
+  const gid = anim.groupId ?? null;
+  return gid == null || !isGroupEffectivelyHidden(gid);
+}
+
 function isAnimDescendantOf(anim, groupId) {
   let gid = anim.groupId ?? null;
   while (gid !== null) {
@@ -3439,6 +3594,47 @@ function isAnimDescendantOf(anim, groupId) {
     gid = g?.parentGroupId ?? null;
   }
   return false;
+}
+
+function childGroupOnPathToAnim(parentGroupId, anim) {
+  let gid = anim?.groupId ?? null;
+  while (gid !== null) {
+    const g = groups.find(grp => grp.id === gid);
+    const nextParentId = g?.parentGroupId ?? null;
+    if (nextParentId === parentGroupId) return gid;
+    gid = nextParentId;
+  }
+  return null;
+}
+
+function drillIntoSelectedGroupAtAnim(anim) {
+  if (!isGroupSelectionActive() || !isAnimDescendantOf(anim, selectedGroupId)) return false;
+  const nextGroupId = childGroupOnPathToAnim(selectedGroupId, anim);
+  if (nextGroupId != null) selectGroup(nextGroupId);
+  else drillSelectObject(anim);
+  return true;
+}
+
+function queryDirectChildGroupBoundsHit(parentGroupId, cx, cy) {
+  const candidates = childGroups(parentGroupId).map(g => {
+    const z = Math.max(-1, ...allDescendantAnims(g.id).map(a => animations.indexOf(a)));
+    return { group: g, z };
+  }).sort((a, b) => a.z - b.z);
+  for (let i = candidates.length - 1; i >= 0; i--) {
+    const bounds = groupCanvasBounds(candidates[i].group.id);
+    if (canvasBoundsContainsPoint(bounds, cx, cy)) return candidates[i].group.id;
+  }
+  return null;
+}
+
+function drillIntoSelectedGroupAtPoint(cx, cy, anim = null) {
+  if (!isGroupSelectionActive()) return false;
+  const childGroupId = queryDirectChildGroupBoundsHit(selectedGroupId, cx, cy);
+  if (childGroupId != null) {
+    selectGroup(childGroupId);
+    return true;
+  }
+  return anim ? drillIntoSelectedGroupAtAnim(anim) : false;
 }
 
 function outermostGroupId(anim) {
@@ -3492,11 +3688,27 @@ function selectFromScene(anim) {
 function groupName(groupId) {
   return groups.find(g => g.id === groupId)?.name ?? '';
 }
+function groupHierarchicalNumber(groupId) {
+  const parts = [];
+  let gid = groupId;
+  const seen = new Set();
+  while (gid != null && !seen.has(gid)) {
+    seen.add(gid);
+    const g = groups.find(grp => grp.id === gid);
+    if (!g) break;
+    const siblings = directChildItems(g.parentGroupId ?? null);
+    const idx = siblings.findIndex(it => it.type === 'group' && it.item.id === gid);
+    if (idx < 0) break;
+    parts.unshift(idx + 1);
+    gid = g.parentGroupId ?? null;
+  }
+  return parts.join('.');
+}
 function nextGroupName() {
   return '';
 }
 function snapshotGroups() {
-  return groups.map(g => ({ id: g.id, name: g.name, parentGroupId: g.parentGroupId ?? null }));
+  return groups.map(g => ({ id: g.id, name: g.name, parentGroupId: g.parentGroupId ?? null, hidden: g.hidden ?? false }));
 }
 function snapshotState() {
   return { anims: snapshotAnimations(), groups: snapshotGroups(), groupNameCounter, selectedId, editModeAnimId, selectedGroupId };
@@ -3526,10 +3738,11 @@ function focusedGroupMemberGroupId() {
 
 function frontEditingAnim() {
   const anim = selectedObjectAnim();
-  return anim && anim.visible && !anim.inPlacementMode ? anim : null;
+  return anim && isAnimEffectivelyVisible(anim) && !anim.inPlacementMode ? anim : null;
 }
 
 function clearObjectSelectionState() {
+  clearRotationMode();
   selectedId = null;
   editModeAnimId = null;
   sceneIndicatorAnimId = null;
@@ -3554,8 +3767,70 @@ function clearSelectionHovers() {
   lockHover = null;
 }
 
+function clearRotationMode() {
+  rotationModeTarget = null;
+  rotateHover = null;
+}
+
+function rotationModeTargetFromHit(hit) {
+  if (!hit) return null;
+  if (hit.anim) return { animId: hit.anim.id };
+  if (hit.groupId != null) return { groupId: hit.groupId };
+  if (hit.multi) return { multi: true };
+  return null;
+}
+
+function sameRotationModeTarget(a, b) {
+  if (!a || !b) return false;
+  if (a.animId != null || b.animId != null) return a.animId === b.animId;
+  if (a.groupId != null || b.groupId != null) return a.groupId === b.groupId;
+  return !!a.multi && !!b.multi;
+}
+
+function isRotationModeActiveForAnim(anim) {
+  return !!anim &&
+         rotationModeTarget?.animId === anim.id &&
+         (selectedId === anim.id || editModeAnimId === anim.id);
+}
+
+function isRotationModeActiveForGroup(groupId) {
+  return groupId != null &&
+         rotationModeTarget?.groupId === groupId &&
+         selectedGroupId === groupId &&
+         selectedId == null &&
+         editModeAnimId == null;
+}
+
+function isRotationModeActiveForMultiSelection() {
+  return !!rotationModeTarget?.multi && isMultiSelectionActive();
+}
+
+function isRotationModeActiveForHit(hit) {
+  if (!hit) return false;
+  if (hit.anim) return isRotationModeActiveForAnim(hit.anim);
+  if (hit.groupId != null) return isRotationModeActiveForGroup(hit.groupId);
+  if (hit.multi) return isRotationModeActiveForMultiSelection();
+  return false;
+}
+
+function isRotationModeActive() {
+  if (!rotationModeTarget) return false;
+  if (rotationModeTarget.animId != null) {
+    return selectedId === rotationModeTarget.animId || editModeAnimId === rotationModeTarget.animId;
+  }
+  if (rotationModeTarget.groupId != null) {
+    return isRotationModeActiveForGroup(rotationModeTarget.groupId) &&
+           allDescendantAnims(rotationModeTarget.groupId).length > 0;
+  }
+  return isRotationModeActiveForMultiSelection();
+}
+
+function syncRotationModeTarget() {
+  if (rotationModeTarget && !isRotationModeActive()) clearRotationMode();
+}
+
 function isGroupSelectionActive() {
-  return selectedGroupId != null && !selectedObjectAnim() && groupMembers(selectedGroupId).length > 0;
+  return selectedGroupId != null && !selectedObjectAnim() && allDescendantAnims(selectedGroupId).length > 0;
 }
 
 function clearMultiSelection() {
@@ -3610,6 +3885,7 @@ function selectGroup(groupId) {
   clearMultiSelection();
   clearGroupMode();
   selectedGroupId = groupId;
+  tilesDrillPath = groupPathFromRoot(groupId);
   clearObjectSelectionState();
   clearSelectionHovers();
   animations.forEach(a => {
@@ -3624,6 +3900,7 @@ function selectGroup(groupId) {
 function drillSelectObject(anim) {
   if (!anim) return;
   selectedGroupId = null;
+  tilesDrillPath = objectGroupId(anim) != null ? groupPathFromRoot(objectGroupId(anim)) : [];
   clearMultiSelection();
   clearGroupMode();
   clearSelectionHovers();
@@ -3921,7 +4198,7 @@ function clearAnimationInteractionState(id) {
   if (rotateHover?.anim?.id === id) rotateHover = null;
   if (sideActionHover?.anim?.id === id) sideActionHover = null;
   if (groupCandidateIds.has(id)) groupCandidateIds.delete(id);
-  if (selectedGroupId != null && groupMembers(selectedGroupId).some(a => a.id === id)) selectedGroupId = null;
+  if (selectedGroupId != null && allDescendantAnims(selectedGroupId).some(a => a.id === id)) selectedGroupId = null;
   if (multiSelectedIds.has(id)) {
     multiSelectedIds.delete(id);
     multiSelectionGuideShear = null;
@@ -4035,10 +4312,10 @@ document.addEventListener('keydown', e => {
   if (e.ctrlKey && !e.shiftKey && e.key === 'z') { e.preventDefault(); undo(); }
   if ((e.ctrlKey && e.key === 'y') || (e.ctrlKey && e.shiftKey && (e.key === 'z' || e.key === 'Z'))) { e.preventDefault(); redo(); }
   if (e.ctrlKey && (e.key === 'd' || e.key === 'D')) { e.preventDefault(); duplicateAnimation(); }
-  if (e.key === 'ArrowLeft')  { e.preventDefault(); originX -= scale; draw(); }
-  if (e.key === 'ArrowRight') { e.preventDefault(); originX += scale; draw(); }
-  if (e.key === 'ArrowUp')    { e.preventDefault(); originY -= scale; draw(); }
-  if (e.key === 'ArrowDown')  { e.preventDefault(); originY += scale; draw(); }
+  if (e.key === 'ArrowLeft')  { e.preventDefault(); originX += scale; draw(); }
+  if (e.key === 'ArrowRight') { e.preventDefault(); originX -= scale; draw(); }
+  if (e.key === 'ArrowUp')    { e.preventDefault(); originY += scale; draw(); }
+  if (e.key === 'ArrowDown')  { e.preventDefault(); originY -= scale; draw(); }
 });
 
 
@@ -4096,6 +4373,7 @@ function swingOppositeHandle(anim, anchorIdx, movedWasOutgoing) {
 
 function enterEditMode(anim, activeSegs) {
   const fromObj = objWindowInteracting; objWindowInteracting = false;
+  clearRotationMode();
   openColorMenuAnimId = null;
   selectedGroupId = null;
   clearMultiSelection();
@@ -4129,6 +4407,7 @@ function exitEditMode() {
   frameHover = null;
   resizeHover = null;
   resizeDrag = null;
+  clearRotationMode();
   rotateHover = null;
   rotateDrag = null;
   sideActionHover = null;
@@ -4559,7 +4838,7 @@ function createSideActionCopy(src, kind) {
 }
 
 function createGroupSideActionCopy(groupId, kind) {
-  const members = groupMembers(groupId);
+  const members = allDescendantAnims(groupId);
   if (members.length === 0) return;
   const bounds = groupMathBounds(groupId);
   const btn = groupSelectionSideActionButtons(groupId).find(b => b.kind === kind);
@@ -4713,16 +4992,24 @@ function applyEyedropperColor(hex) {
   const anim = animations.find(a => a.id === eyedropperAnimId);
   if (!anim) { deactivateEyedropper(); return; }
   pushUndo();
-  if (eyedropperTarget === 'fill') {
+  if (eyedropperTarget === 'gradientTo') {
+    anim.gradientToColor = hex;
+    openColorMenuAnimId = eyedropperAnimId;
+    colorEditTarget = 'fill';
+    gradientColorTab = 2;
+  } else if (eyedropperTarget === 'fill') {
     anim.fillColor = hex;
     if (!anim.fillStyle) anim.fillStyle = 'solid';
     anim.fillOpacity = 1;
+    openColorMenuAnimId = eyedropperAnimId;
+    colorEditTarget = 'fill';
+    gradientColorTab = 1;
   } else {
     anim.color = hex;
     anim.outlineOpacity = 1;
+    openColorMenuAnimId = eyedropperAnimId;
+    colorEditTarget = eyedropperTarget;
   }
-  openColorMenuAnimId = eyedropperAnimId;
-  colorEditTarget = eyedropperTarget;
   deactivateEyedropper();
   renderAnimList(); draw();
 }
@@ -4783,7 +5070,7 @@ function queryAnchorHover(mathX, mathY, thresholdPx = 7 * devicePixelRatio) {
   if (editModeAnimId) {
     const anim = animations.find(a => a.id === editModeAnimId);
     if (isPrimitiveAnim(anim) || isTextAnim(anim)) return null;
-    if (anim && anim.visible && !anim.inPlacementMode) {
+    if (anim && isAnimEffectivelyVisible(anim) && !anim.inPlacementMode) {
       const { anchorSet } = getActiveHandleInfo(anim);
       for (const i of anchorSet) {
         const a = anim.anchors[i];
@@ -4795,7 +5082,7 @@ function queryAnchorHover(mathX, mathY, thresholdPx = 7 * devicePixelRatio) {
     }
   } else if (isIsolViewport) {
     for (const anim of animations) {
-      if (!anim.visible || anim.inPlacementMode) continue;
+      if (!isAnimEffectivelyVisible(anim) || anim.inPlacementMode) continue;
       if (isPrimitiveAnim(anim) || isTextAnim(anim)) continue;
       for (let i = 0; i < anim.anchors.length; i++) {
         const a = anim.anchors[i];
@@ -4869,7 +5156,7 @@ function addPrimitiveFillPath(renderCtx, anim) {
 }
 
 function animHasVisibleFill(anim) {
-  return !!anim && anim.visible && !anim.inPlacementMode && canFillAnim(anim) &&
+  return !!anim && isAnimEffectivelyVisible(anim) && !anim.inPlacementMode && canFillAnim(anim) &&
          !!animFillColor(anim) && animFillOpacity(anim) > 0;
 }
 
@@ -4936,11 +5223,8 @@ function fillHitCandidate(anim, cx, cy) {
 }
 
 function queryFillHit(cx, cy) {
-  const frontAnim = frontEditingAnim();
-  if (fillHitCandidate(frontAnim, cx, cy)) return frontAnim;
   for (let i = animations.length - 1; i >= 0; i--) {
     const anim = animations[i];
-    if (anim === frontAnim) continue;
     if (fillHitCandidate(anim, cx, cy)) return anim;
   }
   return null;
@@ -4996,7 +5280,7 @@ function primitiveHitDistance(anim, cx, cy) {
 }
 
 function segmentHitCandidate(anim, cx, cy) {
-  if (!anim || !anim.visible || anim.inPlacementMode) return null;
+  if (!anim || !isAnimEffectivelyVisible(anim) || anim.inPlacementMode) return null;
   if (isPrimitiveAnim(anim)) {
     const dist = primitiveHitDistance(anim, cx, cy);
     return { dist, hit: { anim, segIdx: 0, primitive: true } };
@@ -5286,7 +5570,7 @@ function updateCanvasTextEditorFromAnim(anim) {
 }
 
 function beginCanvasTextEdit(anim, selectAll = false, rerender = true) {
-  if (!isTextAnim(anim) || !anim.visible || !anim.anchors[0]) return;
+  if (!isTextAnim(anim) || !isAnimEffectivelyVisible(anim) || !anim.anchors[0]) return;
   if (canvasTextEditAnimId !== anim.id) finishCanvasTextEdit(false);
   canvasTextEditAnimId = anim.id;
   selectedId = anim.id;
@@ -5343,7 +5627,7 @@ function positionCanvasTextEditor() {
   if (!canvasTextEditor || canvasTextEditAnimId === null || currentMode !== 'animations') return;
   const anim = animations.find(a => a.id === canvasTextEditAnimId);
   const metrics = textCanvasMetrics(anim);
-  if (!anim || !metrics || !anim.visible || !anim.anchors[0]) {
+  if (!anim || !metrics || !isAnimEffectivelyVisible(anim) || !anim.anchors[0]) {
     canvasTextEditor.style.display = 'none';
     return;
   }
@@ -5601,7 +5885,7 @@ function hitTestCurve(cx, cy) {
   const threshold = 10 * devicePixelRatio;
   let bestHit = null, bestDist = Infinity;
   for (const anim of animations) {
-    if (!anim.visible || anim.inPlacementMode) continue;
+    if (!isAnimEffectivelyVisible(anim) || anim.inPlacementMode) continue;
     if (isPrimitiveAnim(anim)) {
       const dist = primitiveHitDistance(anim, cx, cy);
       if (dist < bestDist) { bestDist = dist; bestHit = { anim, segIdx: 0, primitive: true }; }
@@ -5943,30 +6227,45 @@ canvas.addEventListener('mousedown', e => {
     return;
   }
 
-  // Canvas side buttons: duplicate / reflect
+  // Canvas side buttons: duplicate / reflect / rotate
   const sideAction = querySideActionButtonHover(cx, cy);
   if (sideAction) {
     e.preventDefault();
-    if (sideAction.groupId != null) createGroupSideActionCopy(sideAction.groupId, sideAction.kind);
-    else if (sideAction.multi) createMultiSelectionSideActionCopy(sideAction.kind);
-    else createSideActionCopy(sideAction.anim, sideAction.kind);
+    handleSideActionButtonPress(sideAction);
     return;
   }
 
-  if (isGroupSelectionActive()) {
-    const memberFrame = queryGroupMemberFrameBorderHover(selectedGroupId, cx, cy);
-    if (memberFrame) {
-      e.preventDefault();
-      beginObjectFrameDrag(memberFrame, mathX, mathY);
-      renderAnimList(); draw(); updateCursor();
-      return;
+  const activeRotateHit = (rotateHover && isRotationModeActiveForHit(rotateHover)) ? rotateHover : queryRotationWheelHover(cx, cy);
+  if (activeRotateHit) {
+    e.preventDefault();
+    if (beginRotationDragFromHit(activeRotateHit, mathX, mathY)) {
+      updateCursor(); draw();
     }
-    const memberHit = querySegmentHover(cx, cy);
-    if (memberHit && objectGroupId(memberHit.anim) === selectedGroupId) {
-      e.preventDefault();
-      drillSelectObject(memberHit.anim);
-      renderAnimList(); draw(); updateCursor();
-      return;
+    return;
+  }
+  if (isRotationModeActive()) clearRotationMode();
+
+  if (isGroupSelectionActive()) {
+    const overSelectedGroupControl = queryFrameBorderHover(cx, cy) || queryResizeHandleHover(cx, cy);
+    if (!overSelectedGroupControl) {
+      if (drillIntoSelectedGroupAtPoint(cx, cy)) {
+        e.preventDefault();
+        renderAnimList(); draw(); updateCursor();
+        return;
+      }
+      const memberFrame = queryGroupMemberFrameBorderHover(selectedGroupId, cx, cy);
+      if (memberFrame) {
+        e.preventDefault();
+        beginObjectFrameDrag(memberFrame, mathX, mathY);
+        renderAnimList(); draw(); updateCursor();
+        return;
+      }
+      const memberHit = querySegmentHover(cx, cy);
+      if (memberHit && drillIntoSelectedGroupAtPoint(cx, cy, memberHit.anim)) {
+        e.preventDefault();
+        renderAnimList(); draw(); updateCursor();
+        return;
+      }
     }
   }
 
@@ -5978,7 +6277,7 @@ canvas.addEventListener('mousedown', e => {
       frameDrag = {
         groupId: fb.groupId,
         startMathX: mathX, startMathY: mathY,
-        origStates: groupMembers(fb.groupId).map(cloneTransformState),
+        origStates: allDescendantAnims(fb.groupId).map(cloneTransformState),
       };
       selectGroup(fb.groupId);
     } else if (fb.multi) {
@@ -6022,7 +6321,7 @@ canvas.addEventListener('mousedown', e => {
         handle: resizeHit.handle,
         startMathX: mathX, startMathY: mathY,
         origBounds: frameMathBounds(f),
-        origStates: groupMembers(resizeHit.groupId).map(cloneTransformState),
+        origStates: allDescendantAnims(resizeHit.groupId).map(cloneTransformState),
       };
     } else if (resizeHit.multi) {
       const f = multiSelectionFrameMetrics();
@@ -6038,7 +6337,7 @@ canvas.addEventListener('mousedown', e => {
   }
 
   // ── Rotation wheel ──
-  const rotateHit = rotateHover ?? queryRotationWheelHover(cx, cy);
+  const rotateHit = (rotateHover && isRotationModeActiveForHit(rotateHover)) ? rotateHover : queryRotationWheelHover(cx, cy);
   if (rotateHit) {
     e.preventDefault();
     pushUndo();
@@ -6060,7 +6359,7 @@ canvas.addEventListener('mousedown', e => {
           groupId: rotateHit.groupId,
           center: new Cx(cRe, cIm),
           startAngle: Math.atan2(mathY - cIm, mathX - cRe),
-          origStates: groupMembers(rotateHit.groupId).map(cloneTransformState),
+          origStates: allDescendantAnims(rotateHit.groupId).map(cloneTransformState),
         };
       }
     } else if (rotateHit.multi) {
@@ -6193,6 +6492,11 @@ canvas.addEventListener('mousedown', e => {
     e.preventDefault();
     if (groupSelectionMode) {
       toggleGroupCandidate(fillHit);
+    } else if (isGroupSelectionActive() && drillIntoSelectedGroupAtPoint(cx, cy, fillHit)) {
+      // Selection handled by drillIntoSelectedGroupAtPoint.
+    } else if (objectGroupId(fillHit) != null &&
+               focusedGroupMemberGroupId() === objectGroupId(fillHit)) {
+      drillSelectObject(fillHit);
     } else if (isMultiSelectionActive() && multiSelectedIds.has(fillHit.id)) {
       drillSelectObject(fillHit);
     } else {
@@ -6412,23 +6716,24 @@ window.addEventListener('mousemove', e => {
       const iCy = (e.clientY - isolBB.top)  * devicePixelRatio;
       const [iMx, iMy] = [(iCx - isolOriginX) / isolScale, (isolOriginY - iCy) / isolScale];
       withIsolViewport(() => {
-        newResizeHover   = queryResizeHandleHover(iCx, iCy);
-        newPlusHover     = newResizeHover ? null : queryPlusHover(iCx, iCy);
-        newLockHover     = (newResizeHover || newPlusHover) ? null : queryLockHover(iCx, iCy);
-        newAnchorHover   = (newResizeHover || newPlusHover || newLockHover) ? null : queryAnchorHover(iMx, iMy);
-        newHandleHover   = (newResizeHover || newPlusHover || newAnchorHover || newLockHover) ? null : queryHandleHover(iMx, iMy);
-        newRotationHover = (newResizeHover || newPlusHover || newLockHover || newAnchorHover || newHandleHover) ? null : queryRotationWheelHover(iCx, iCy);
-        newSegmentHover  = (newResizeHover || newPlusHover || newRotationHover || newAnchorHover || newHandleHover || newLockHover) ? null : querySegmentHover(iCx, iCy);
+        newSideActionHover = querySideActionButtonHover(iCx, iCy);
+        newRotationHover = newSideActionHover ? null : queryRotationWheelHover(iCx, iCy);
+        newResizeHover   = (newSideActionHover || newRotationHover) ? null : queryResizeHandleHover(iCx, iCy);
+        newPlusHover     = (newSideActionHover || newRotationHover || newResizeHover) ? null : queryPlusHover(iCx, iCy);
+        newLockHover     = (newSideActionHover || newRotationHover || newResizeHover || newPlusHover) ? null : queryLockHover(iCx, iCy);
+        newAnchorHover   = (newSideActionHover || newRotationHover || newResizeHover || newPlusHover || newLockHover) ? null : queryAnchorHover(iMx, iMy);
+        newHandleHover   = (newSideActionHover || newRotationHover || newResizeHover || newPlusHover || newAnchorHover || newLockHover) ? null : queryHandleHover(iMx, iMy);
+        newSegmentHover  = (newSideActionHover || newRotationHover || newResizeHover || newPlusHover || newAnchorHover || newHandleHover || newLockHover) ? null : querySegmentHover(iCx, iCy);
       });
     } else {
       newSideActionHover = querySideActionButtonHover(cx, cy);
-      newResizeHover  = newSideActionHover ? null : queryResizeHandleHover(cx, cy);
-      newFrameHover   = (newSideActionHover || newResizeHover) ? null : queryFrameBorderHover(cx, cy);
-      newPlusHover    = (newSideActionHover || newResizeHover || newFrameHover) ? null : queryPlusHover(cx, cy);
-      newLockHover    = (newSideActionHover || newResizeHover || newFrameHover || newPlusHover) ? null : queryLockHover(cx, cy);
-      newAnchorHover  = (newSideActionHover || newResizeHover || newFrameHover || newPlusHover || newLockHover) ? null : queryAnchorHover(mathX, mathY);
-      newHandleHover  = (newResizeHover || newPlusHover || newAnchorHover || newLockHover) ? null : queryHandleHover(mathX, mathY);
-      newRotationHover = (newResizeHover || newPlusHover || newLockHover || newAnchorHover || newHandleHover) ? null : queryRotationWheelHover(cx, cy);
+      newRotationHover = newSideActionHover ? null : queryRotationWheelHover(cx, cy);
+      newResizeHover  = (newSideActionHover || newRotationHover) ? null : queryResizeHandleHover(cx, cy);
+      newFrameHover   = (newSideActionHover || newRotationHover || newResizeHover) ? null : queryFrameBorderHover(cx, cy);
+      newPlusHover    = (newSideActionHover || newRotationHover || newResizeHover || newFrameHover) ? null : queryPlusHover(cx, cy);
+      newLockHover    = (newSideActionHover || newRotationHover || newResizeHover || newFrameHover || newPlusHover) ? null : queryLockHover(cx, cy);
+      newAnchorHover  = (newSideActionHover || newRotationHover || newResizeHover || newFrameHover || newPlusHover || newLockHover) ? null : queryAnchorHover(mathX, mathY);
+      newHandleHover  = (newSideActionHover || newRotationHover || newResizeHover || newPlusHover || newAnchorHover || newLockHover) ? null : queryHandleHover(mathX, mathY);
       newSegmentHover = (newSideActionHover || newResizeHover || newFrameHover || newPlusHover || newRotationHover || newAnchorHover || newHandleHover || newLockHover) ? null : querySegmentHover(cx, cy);
     }
 
@@ -6688,7 +6993,7 @@ objCanvas.addEventListener('mousedown', e => {
           handle: resizeHit.handle,
           startMathX: mathX, startMathY: mathY,
           origBounds: frameMathBounds(f),
-          origStates: groupMembers(resizeHit.groupId).map(cloneTransformState),
+          origStates: allDescendantAnims(resizeHit.groupId).map(cloneTransformState),
           onObjCanvas: true,
         };
       } else if (resizeHit.multi) {
@@ -6728,7 +7033,7 @@ objCanvas.addEventListener('mousedown', e => {
           rotateDrag = {
             groupId: rotateHit.groupId,
             center, startAngle: Math.atan2(mathY - cIm, mathX - cRe),
-            origStates: groupMembers(rotateHit.groupId).map(cloneTransformState),
+            origStates: allDescendantAnims(rotateHit.groupId).map(cloneTransformState),
             onObjCanvas: true,
           };
         }
@@ -6943,6 +7248,15 @@ isolCanvas.addEventListener('mousedown', e => {
       return;
     }
 
+    const activeRotateHit = (rotateHover && isRotationModeActiveForHit(rotateHover)) ? rotateHover : queryRotationWheelHover(cx, cy);
+    if (activeRotateHit) {
+      e.preventDefault();
+      beginRotationDragFromHit(activeRotateHit, mathX, mathY, { onIsolCanvas: true });
+      updateCursor(); draw();
+      return;
+    }
+    if (isRotationModeActive()) clearRotationMode();
+
     if (splitArcMode !== null) {
       e.preventDefault();
       const hover = querySegmentHover(cx, cy);
@@ -6980,7 +7294,7 @@ isolCanvas.addEventListener('mousedown', e => {
           handle: resizeHit.handle,
           startMathX: mathX, startMathY: mathY,
           origBounds: frameMathBounds(f),
-          origStates: groupMembers(resizeHit.groupId).map(cloneTransformState),
+          origStates: allDescendantAnims(resizeHit.groupId).map(cloneTransformState),
           onIsolCanvas: true,
         };
       } else if (resizeHit.multi) {
@@ -7020,7 +7334,7 @@ isolCanvas.addEventListener('mousedown', e => {
           rotateDrag = {
             groupId: rotateHit.groupId,
             center, startAngle: Math.atan2(mathY - cIm, mathX - cRe),
-            origStates: groupMembers(rotateHit.groupId).map(cloneTransformState),
+            origStates: allDescendantAnims(rotateHit.groupId).map(cloneTransformState),
             onIsolCanvas: true,
           };
         }
@@ -7172,12 +7486,9 @@ isolCanvas.addEventListener('mousedown', e => {
   });
 
   if (isolSideAction) {
-    // Execute outside withIsolViewport so placement uses the main canvas viewport,
-    // preventing the new object from landing on the scene window's side-action buttons.
-    if (isolSideAction.groupId != null) createGroupSideActionCopy(isolSideAction.groupId, isolSideAction.kind);
-    else if (isolSideAction.multi) createMultiSelectionSideActionCopy(isolSideAction.kind);
-    else createSideActionCopy(isolSideAction.anim, isolSideAction.kind);
-    renderAnimList(); draw(); updateCursor(); return;
+    // Duplicate/reflect outside withIsolViewport so copied objects land in the scene viewport.
+    handleSideActionButtonPress(isolSideAction);
+    return;
   }
   if (!e.defaultPrevented) {
     if (editModeAnimId !== null) exitEditMode();
@@ -7210,9 +7521,9 @@ isolCanvas.addEventListener('auxclick', e => { if (AUX_WINDOWS_ENABLED && e.butt
 
 isolCanvas.addEventListener('mouseleave', () => {
   if (!AUX_WINDOWS_ENABLED) return;
-  if (anchorHover || handleHover || segmentHover || resizeHover || rotateHover || plusHover || lockHover) {
+  if (anchorHover || handleHover || segmentHover || resizeHover || rotateHover || sideActionHover || plusHover || lockHover) {
     anchorHover = null; handleHover = null; segmentHover = null;
-    resizeHover = null; rotateHover = null; plusHover = null; lockHover = null;
+    resizeHover = null; rotateHover = null; sideActionHover = null; plusHover = null; lockHover = null;
     updateCursor(); draw();
   }
 });
@@ -7248,6 +7559,14 @@ document.getElementById('h-split-handle').addEventListener('mousedown', e => {
   document.getElementById('h-split-handle').classList.add('dragging');
   e.preventDefault();
 });
+
+document.addEventListener('mousedown', e => {
+  if (!rotationModeTarget) return;
+  const path = e.composedPath ? e.composedPath() : [];
+  if (path.includes(canvas) || path.includes(objCanvas) || path.includes(isolCanvas)) return;
+  clearRotationMode();
+  draw(); updateCursor();
+}, true);
 
 document.addEventListener('click', e => {
   if (globalSettingsOpen && !(e.target.closest && e.target.closest('#global-settings'))) {
@@ -8300,7 +8619,7 @@ function includeCanvasPoint(bounds, pt) {
 }
 
 function selectedObjectCanvasBounds(anim) {
-  if (!anim || !anim.visible || anim.inPlacementMode) return null;
+  if (!anim || !isAnimEffectivelyVisible(anim) || anim.inPlacementMode) return null;
 
   if (isTextAnim(anim)) {
     let bounds = null;
@@ -8424,7 +8743,7 @@ function selectedArcMathBounds(anim) {
 }
 
 function objectMathBounds(anim) {
-  if (!anim || !anim.visible || anim.inPlacementMode) return null;
+  if (!anim || !isAnimEffectivelyVisible(anim) || anim.inPlacementMode) return null;
 
   if (isTextAnim(anim)) {
     let bounds = null;
@@ -8471,6 +8790,14 @@ function unionCanvasBounds(bounds, next) {
   return bounds;
 }
 
+function canvasBoundsContainsPoint(bounds, cx, cy, pad = 0) {
+  return !!bounds &&
+         cx >= bounds.left - pad &&
+         cx <= bounds.right + pad &&
+         cy >= bounds.top - pad &&
+         cy <= bounds.bottom + pad;
+}
+
 function unionMathBounds(bounds, next) {
   if (!next) return bounds;
   if (!bounds) return { ...next };
@@ -8483,13 +8810,13 @@ function unionMathBounds(bounds, next) {
 
 function groupCanvasBounds(groupId) {
   let bounds = null;
-  for (const anim of groupMembers(groupId)) bounds = unionCanvasBounds(bounds, selectedObjectCanvasBounds(anim));
+  for (const anim of allDescendantAnims(groupId)) bounds = unionCanvasBounds(bounds, selectedObjectCanvasBounds(anim));
   return bounds;
 }
 
 function groupMathBounds(groupId) {
   let bounds = null;
-  for (const anim of groupMembers(groupId)) bounds = unionMathBounds(bounds, objectMathBounds(anim));
+  for (const anim of allDescendantAnims(groupId)) bounds = unionMathBounds(bounds, objectMathBounds(anim));
   return bounds;
 }
 
@@ -8515,7 +8842,7 @@ function canvasBoundsInsideRect(bounds, rect) {
 
 function animationsFullyInsideCanvasRect(rect) {
   return animations.filter(anim =>
-    anim.visible &&
+    isAnimEffectivelyVisible(anim) &&
     !anim.inPlacementMode &&
     canvasBoundsInsideRect(selectedObjectCanvasBounds(anim), rect)
   );
@@ -8613,6 +8940,7 @@ function sideActionButtonsForFrame(f) {
   if (!f) return [];
   const dpr = devicePixelRatio;
   const w = 38 * dpr;
+  const rotateW = 30 * dpr;
   const h = 22 * dpr;
   const gap = 5 * dpr;
   const rightEdge = f.outerX + f.outerW + f.extend;
@@ -8622,6 +8950,7 @@ function sideActionButtonsForFrame(f) {
   return [
     { kind: 'duplicate', x, y, w, h },
     { kind: 'reflect', x, y: y + h + gap, w, h },
+    { kind: 'rotate', x, y: y + (h + gap) * 2, w: rotateW, h },
   ];
 }
 
@@ -8631,7 +8960,7 @@ function pointInRect(px, py, rect) {
 
 function querySideActionButtonHover(cx, cy) {
   const anim = selectedObjectAnim();
-  if (anim && anim.visible && !anim.inPlacementMode) {
+  if (anim && isAnimEffectivelyVisible(anim) && !anim.inPlacementMode) {
     for (const btn of selectionSideActionButtons(anim)) {
       if (pointInRect(cx, cy, btn)) return { anim, kind: btn.kind };
     }
@@ -8650,6 +8979,26 @@ function querySideActionButtonHover(cx, cy) {
     return null;
   }
   return null;
+}
+
+function toggleRotationModeFromSideAction(action) {
+  const nextTarget = rotationModeTargetFromHit(action);
+  rotationModeTarget = sameRotationModeTarget(rotationModeTarget, nextTarget) ? null : nextTarget;
+  rotateHover = null;
+}
+
+function handleSideActionButtonPress(action) {
+  if (!action) return false;
+  if (action.kind === 'rotate') {
+    toggleRotationModeFromSideAction(action);
+    renderAnimList(); draw(); updateCursor();
+    return true;
+  }
+  clearRotationMode();
+  if (action.groupId != null) createGroupSideActionCopy(action.groupId, action.kind);
+  else if (action.multi) createMultiSelectionSideActionCopy(action.kind);
+  else createSideActionCopy(action.anim, action.kind);
+  return true;
 }
 
 function selectionResizeSegments(anim) {
@@ -8719,7 +9068,7 @@ function queryResizeHandleHover(cx, cy) {
 }
 
 function queryResizeHandleHoverForAnim(anim, cx, cy) {
-  if (!anim || !anim.visible || anim.inPlacementMode || isDotAnim(anim)) return null;
+  if (!anim || !isAnimEffectivelyVisible(anim) || anim.inPlacementMode || isDotAnim(anim)) return null;
   if (hasActiveArcSelection(anim)) return null;
   const threshold = 8 * devicePixelRatio;
   let best = null, bestDist = Infinity;
@@ -9144,7 +9493,7 @@ function queryFrameBorderHover(cx, cy) {
 }
 
 function queryFrameBorderHoverForAnim(anim, cx, cy) {
-  if (!anim || !anim.visible || anim.inPlacementMode || isDotAnim(anim)) return null;
+  if (!anim || !isAnimEffectivelyVisible(anim) || anim.inPlacementMode || isDotAnim(anim)) return null;
   if (hasActiveArcSelection(anim)) return null;
   if (queryResizeHandleHoverForAnim(anim, cx, cy)) return null;
   const f = selectionFrameMetrics(anim);
@@ -9176,6 +9525,7 @@ function queryRotationWheelHover(cx, cy) {
   const anim = selectedObjectAnim();
   if (anim) return queryRotationWheelHoverForAnim(anim, cx, cy);
   if (isGroupSelectionActive()) {
+    if (!isRotationModeActiveForGroup(selectedGroupId)) return null;
     const wheel = groupSelectionRotationWheel(selectedGroupId);
     if (!wheel || wheel.r < 4 * devicePixelRatio) return null;
     const threshold = 8 * devicePixelRatio;
@@ -9183,6 +9533,7 @@ function queryRotationWheelHover(cx, cy) {
     return Math.abs(d - wheel.r) <= threshold ? { groupId: selectedGroupId } : null;
   }
   if (isMultiSelectionActive()) {
+    if (!isRotationModeActiveForMultiSelection()) return null;
     const wheel = multiSelectionRotationWheel();
     if (!wheel || wheel.r < 4 * devicePixelRatio) return null;
     const threshold = 8 * devicePixelRatio;
@@ -9193,8 +9544,9 @@ function queryRotationWheelHover(cx, cy) {
 }
 
 function queryRotationWheelHoverForAnim(anim, cx, cy) {
-  if (!anim || !anim.visible || anim.inPlacementMode || isDotAnim(anim)) return null;
+  if (!anim || !isAnimEffectivelyVisible(anim) || anim.inPlacementMode || isDotAnim(anim)) return null;
   if (hasActiveArcSelection(anim)) return null;
+  if (!isRotationModeActiveForAnim(anim)) return null;
   const wheel = selectionRotationWheel(anim);
   if (!wheel || wheel.r < 4 * devicePixelRatio) return null;
   const threshold = 8 * devicePixelRatio;
@@ -9888,7 +10240,98 @@ function applyRotationDelta(drag, delta) {
   }
 }
 
-function drawSelectionSideActionButton(btn, active) {
+function beginRotationDragFromHit(rotateHit, mathX, mathY, flags = {}) {
+  if (!rotateHit || !isRotationModeActiveForHit(rotateHit)) return false;
+  let nextDrag = null;
+  if (rotateHit.anim) {
+    const wheel = selectionRotationWheel(rotateHit.anim);
+    if (wheel) {
+      const [cRe, cIm] = toMath(wheel.cx, wheel.cy);
+      nextDrag = {
+        ...cloneTransformState(rotateHit.anim),
+        center: new Cx(cRe, cIm),
+        startAngle: Math.atan2(mathY - cIm, mathX - cRe),
+        ...flags,
+      };
+    }
+  } else if (rotateHit.groupId != null) {
+    const wheel = groupSelectionRotationWheel(rotateHit.groupId);
+    if (wheel) {
+      const [cRe, cIm] = toMath(wheel.cx, wheel.cy);
+      nextDrag = {
+        groupId: rotateHit.groupId,
+        center: new Cx(cRe, cIm),
+        startAngle: Math.atan2(mathY - cIm, mathX - cRe),
+        origStates: allDescendantAnims(rotateHit.groupId).map(cloneTransformState),
+        ...flags,
+      };
+    }
+  } else if (rotateHit.multi) {
+    const wheel = multiSelectionRotationWheel();
+    if (wheel) {
+      const [cRe, cIm] = toMath(wheel.cx, wheel.cy);
+      nextDrag = {
+        multi: true,
+        center: new Cx(cRe, cIm),
+        startAngle: Math.atan2(mathY - cIm, mathX - cRe),
+        origStates: multiSelectionMembers().map(cloneTransformState),
+        ...flags,
+      };
+    }
+  }
+  if (!nextDrag) return false;
+  pushUndo();
+  rotateDrag = nextDrag;
+  return !!rotateDrag;
+}
+
+function drawRotationSideActionIcon(btn, active) {
+  const dpr = devicePixelRatio;
+  const cx = btn.x + btn.w * 0.5;
+  const cy = btn.y + btn.h * 0.5;
+  const r = Math.min(btn.w, btn.h) * 0.31;
+  const arrowLen = 3.35 * dpr;
+  const arrowSpread = 0.68;
+  const headGap = 0.19;
+
+  const drawArcArrow = (start, headAngle) => {
+    const arcEnd = headAngle - headGap;
+    const headX = cx + Math.cos(headAngle) * r;
+    const headY = cy + Math.sin(headAngle) * r;
+    const tangent = headAngle + Math.PI * 0.5;
+    const back = tangent + Math.PI;
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, start, arcEnd, false);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(headX, headY);
+    ctx.lineTo(
+      headX + arrowLen * Math.cos(back - arrowSpread),
+      headY + arrowLen * Math.sin(back - arrowSpread)
+    );
+    ctx.moveTo(headX, headY);
+    ctx.lineTo(
+      headX + arrowLen * Math.cos(back + arrowSpread),
+      headY + arrowLen * Math.sin(back + arrowSpread)
+    );
+    ctx.stroke();
+  };
+
+  ctx.save();
+  ctx.strokeStyle = active ? CANVAS_BUTTON_COLOR : CANVAS_BUTTON_IDLE_COLOR;
+  ctx.lineWidth = (active ? 1.55 : 1.2) * dpr;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.globalAlpha = active ? 0.9 : 0.72;
+
+  drawArcArrow(Math.PI * 0.10, Math.PI * 0.78);
+  drawArcArrow(Math.PI * 1.10, Math.PI * 1.78);
+  ctx.restore();
+}
+
+function drawSelectionSideActionButton(btn, active, showLabel = active) {
   const dpr = devicePixelRatio;
   const midX = btn.x + btn.w * 0.5;
   const midY = btn.y + btn.h * 0.5;
@@ -9909,29 +10352,33 @@ function drawSelectionSideActionButton(btn, active) {
   ctx.beginPath();
   ctx.moveTo(midX, btn.y + 3 * dpr);
   ctx.lineTo(midX, btn.y + btn.h - 3 * dpr);
-  ctx.stroke();
+  if (btn.kind !== 'rotate') ctx.stroke();
 
-  ctx.globalAlpha = active ? 0.9 : 0.7;
-  ctx.fillStyle = active ? CANVAS_BUTTON_COLOR : CANVAS_BUTTON_IDLE_COLOR;
-  ctx.font = `700 ${12 * dpr}px sans-serif`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('R', cellL, midY + 0.5 * dpr);
-  if (btn.kind === 'reflect') {
-    ctx.translate(cellR, midY + 0.5 * dpr);
-    ctx.scale(-1, 1);
-    ctx.fillText('R', 0, 0);
+  if (btn.kind === 'rotate') {
+    drawRotationSideActionIcon(btn, active);
   } else {
-    ctx.fillText('R', cellR, midY + 0.5 * dpr);
+    ctx.globalAlpha = active ? 0.9 : 0.7;
+    ctx.fillStyle = active ? CANVAS_BUTTON_COLOR : CANVAS_BUTTON_IDLE_COLOR;
+    ctx.font = `700 ${12 * dpr}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('R', cellL, midY + 0.5 * dpr);
+    if (btn.kind === 'reflect') {
+      ctx.translate(cellR, midY + 0.5 * dpr);
+      ctx.scale(-1, 1);
+      ctx.fillText('R', 0, 0);
+    } else {
+      ctx.fillText('R', cellR, midY + 0.5 * dpr);
+    }
   }
   ctx.restore();
 
-  if (active) drawSelectionSideActionLabel(btn);
+  if (showLabel) drawSelectionSideActionLabel(btn);
 }
 
 function drawSelectionSideActionLabel(btn) {
   const dpr = devicePixelRatio;
-  const text = btn.kind === 'reflect' ? 'Reflect' : 'Duplicate';
+  const text = btn.kind === 'reflect' ? 'Reflect' : btn.kind === 'rotate' ? 'Rotate' : 'Duplicate';
   ctx.save();
   ctx.font = `${11 * dpr}px sans-serif`;
   ctx.textAlign = 'left';
@@ -9959,8 +10406,9 @@ function drawSelectionSideActionLabel(btn) {
 
 function drawSelectionSideActionButtons(anim) {
   for (const btn of selectionSideActionButtons(anim)) {
-    const active = sideActionHover?.anim === anim && sideActionHover?.kind === btn.kind;
-    drawSelectionSideActionButton(btn, active);
+    const hovered = sideActionHover?.anim === anim && sideActionHover?.kind === btn.kind;
+    const active = hovered || (btn.kind === 'rotate' && isRotationModeActiveForAnim(anim));
+    drawSelectionSideActionButton(btn, active, hovered);
   }
 }
 
@@ -10063,11 +10511,12 @@ function drawSelectedObjectBounds(anim) {
     drawSelectionCrossbeams(anim, frame);
 
     const wheel = selectionRotationWheel(anim);
+    const wheelVisible = isRotationModeActiveForAnim(anim) || rotateDrag?.anim === anim;
     const wheelActive = rotateDrag?.anim === anim || rotateHover?.anim === anim;
-    if (wheel && wheel.r > 0) {
+    if (wheelVisible && wheel && wheel.r > 0) {
       ctx.strokeStyle = wheelActive ? CANVAS_TOOL_COLOR : CANVAS_CONTROL_IDLE_COLOR;
-      ctx.lineWidth = (wheelActive ? 2.4 : 1.0) * dpr;
-      ctx.globalAlpha = wheelActive ? 0.62 : 0.48;
+      ctx.lineWidth = (wheelActive ? 2.6 : 1.65) * dpr;
+      ctx.globalAlpha = wheelActive ? 0.66 : 0.5;
       ctx.shadowBlur = wheelActive ? 6 * dpr : 0;
       ctx.shadowColor = CANVAS_TOOL_COLOR;
       ctx.beginPath();
@@ -10125,11 +10574,12 @@ function drawSelectedGroupBounds() {
   drawSelectionCrossbeams({ selectionGuideShear: groupSelectionGuideShear }, frame);
 
   const groupWheel = groupSelectionRotationWheel(selectedGroupId);
+  const groupWheelVisible = isRotationModeActiveForGroup(selectedGroupId) || rotateDrag?.groupId === selectedGroupId;
   const groupWheelActive = rotateDrag?.groupId === selectedGroupId || rotateHover?.groupId === selectedGroupId;
-  if (groupWheel && groupWheel.r > 0) {
+  if (groupWheelVisible && groupWheel && groupWheel.r > 0) {
     ctx.strokeStyle = groupWheelActive ? CANVAS_TOOL_COLOR : CANVAS_CONTROL_IDLE_COLOR;
-    ctx.lineWidth = (groupWheelActive ? 2.4 : 1.0) * dpr;
-    ctx.globalAlpha = groupWheelActive ? 0.62 : 0.48;
+    ctx.lineWidth = (groupWheelActive ? 2.6 : 1.65) * dpr;
+    ctx.globalAlpha = groupWheelActive ? 0.66 : 0.5;
     ctx.shadowBlur = groupWheelActive ? 6 * dpr : 0;
     ctx.shadowColor = CANVAS_TOOL_COLOR;
     ctx.beginPath();
@@ -10150,8 +10600,9 @@ function drawSelectedGroupBounds() {
 
   ctx.shadowBlur = 0;
   for (const btn of groupSelectionSideActionButtons(selectedGroupId)) {
-    const active = sideActionHover?.groupId === selectedGroupId && sideActionHover?.kind === btn.kind;
-    drawSelectionSideActionButton(btn, active);
+    const hovered = sideActionHover?.groupId === selectedGroupId && sideActionHover?.kind === btn.kind;
+    const active = hovered || (btn.kind === 'rotate' && isRotationModeActiveForGroup(selectedGroupId));
+    drawSelectionSideActionButton(btn, active, hovered);
   }
   ctx.restore();
 }
@@ -10190,11 +10641,12 @@ function drawSelectedMultiSelectionBounds() {
   drawSelectionCrossbeams({ selectionGuideShear: multiSelectionGuideShear }, frame);
 
   const multiWheel = multiSelectionRotationWheel();
+  const multiWheelVisible = isRotationModeActiveForMultiSelection() || rotateDrag?.multi;
   const multiWheelActive = rotateDrag?.multi || rotateHover?.multi;
-  if (multiWheel && multiWheel.r > 0) {
+  if (multiWheelVisible && multiWheel && multiWheel.r > 0) {
     ctx.strokeStyle = multiWheelActive ? CANVAS_TOOL_COLOR : CANVAS_CONTROL_IDLE_COLOR;
-    ctx.lineWidth = (multiWheelActive ? 2.4 : 1.0) * dpr;
-    ctx.globalAlpha = multiWheelActive ? 0.62 : 0.48;
+    ctx.lineWidth = (multiWheelActive ? 2.6 : 1.65) * dpr;
+    ctx.globalAlpha = multiWheelActive ? 0.66 : 0.5;
     ctx.shadowBlur = multiWheelActive ? 6 * dpr : 0;
     ctx.shadowColor = CANVAS_TOOL_COLOR;
     ctx.beginPath();
@@ -10215,14 +10667,15 @@ function drawSelectedMultiSelectionBounds() {
 
   ctx.shadowBlur = 0;
   for (const btn of multiSelectionSideActionButtons()) {
-    const active = sideActionHover?.multi && sideActionHover?.kind === btn.kind;
-    drawSelectionSideActionButton(btn, active);
+    const hovered = sideActionHover?.multi && sideActionHover?.kind === btn.kind;
+    const active = hovered || (btn.kind === 'rotate' && isRotationModeActiveForMultiSelection());
+    drawSelectionSideActionButton(btn, active, hovered);
   }
   ctx.restore();
 }
 
 function drawCommittedAnimation(anim) {
-  if (!anim || !anim.visible || anim.inPlacementMode) return;
+  if (!anim || !isAnimEffectivelyVisible(anim) || anim.inPlacementMode) return;
   const inEditMode = (editModeAnimId === anim.id);
 
   if (isPrimitiveAnim(anim)) {
@@ -10268,7 +10721,7 @@ function drawAnimations() {
   const dpr = devicePixelRatio;
 
   // Hover glow under hovered segment
-  if (segmentHover && segmentHover.anim.visible) {
+  if (segmentHover && isAnimEffectivelyVisible(segmentHover.anim)) {
     if (isPrimitiveAnim(segmentHover.anim)) {
       drawPrimitive(segmentHover.anim, 8 * dpr, 0.22);
     } else {
@@ -10282,7 +10735,7 @@ function drawAnimations() {
 
 
   for (const anim of animations) {
-    if (!anim.visible) continue;
+    if (!isAnimEffectivelyVisible(anim) && !anim.inPlacementMode) continue;
 
     if (anim.inPlacementMode) {
       if (isTextAnim(anim)) {
@@ -11266,102 +11719,131 @@ function appendColorExpansion(parent, anim) {
   const isGradientFill = !isOutline && animFillStyle(anim) === 'gradient';
   if (isGradientFill) ensureGradientDefaults(anim);
 
-  if (isGradientFill) {
-    const fromLabel = document.createElement('div');
-    fromLabel.className = 'gradient-color-label';
-    fromLabel.textContent = 'Color 1';
-    panel.appendChild(fromLabel);
+  const DROPPER_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21l1.5-4.5L15.5 6l3 3L8 20.5z"/><path d="M18.5 6l1.5-1.5c.8-.8.8-2.2 0-3s-2.2-.8-3 0L15.5 3"/></svg>`;
+
+  function appendDropperBtn(targetPanel, targetKey) {
+    const isActive = eyedropperTarget === targetKey && eyedropperAnimId === anim.id;
+    const btn = document.createElement('button');
+    btn.className = 'eyedropper-btn' + (isActive ? ' active' : '');
+    btn.title = isActive ? 'Click a canvas to sample color (Escape to cancel)' : 'Pick color from canvas';
+    btn.innerHTML = DROPPER_SVG + (isActive ? ' Sampling…' : ' Sample color');
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      if (isActive) { deactivateEyedropper(); } else {
+        eyedropperTarget = targetKey;
+        eyedropperAnimId = anim.id;
+        updateCursor();
+      }
+      renderAnimList();
+    });
+    targetPanel.appendChild(btn);
   }
 
-  const activeColor = !isOutline ? (animFillColor(anim) || anim.color) : anim.color;
-  let opacityPreviewColor = normalizeColorString(activeColor) || activeColor;
-  let opacityControl = null;
-  appendHslColorPicker(panel, activeColor, (color, meta = {}) => {
-    if (!isOutline && fillEnabled) {
-      if (!sameColor(animFillColor(anim), color)) {
-        anim.fillColor = color;
-        if (!anim.fillStyle) anim.fillStyle = 'solid';
-      }
-    } else if (!sameColor(anim.color, color)) {
-      anim.color = color;
+  if (isGradientFill) {
+    // ── Color 1 / Color 2 sub-tabs ──
+    const stopTabBar = document.createElement('div');
+    stopTabBar.className = 'gradient-stop-tab-bar';
+    [1, 2].forEach(tab => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'gradient-stop-tab' + (gradientColorTab === tab ? ' active' : '');
+      btn.textContent = `Color ${tab}`;
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        gradientColorTab = tab;
+        openColorMenuAnimId = anim.id;
+        renderAnimList();
+      });
+      stopTabBar.appendChild(btn);
+    });
+    panel.appendChild(stopTabBar);
+
+    if (gradientColorTab === 1) {
+      const c1 = animFillColor(anim) || anim.color;
+      let c1Preview = normalizeColorString(c1) || c1;
+      let c1Opacity = null;
+      appendHslColorPicker(panel, c1, (color, meta = {}) => {
+        if (fillEnabled && !sameColor(animFillColor(anim), color)) {
+          anim.fillColor = color;
+          if (!anim.fillStyle) anim.fillStyle = 'solid';
+        }
+        saveProject();
+        if (meta.fromHueClick) renderAnimList();
+        draw();
+      }, {
+        withUndo: true,
+        fallbackHue: colorToHsl(anim.color).h,
+        onPreviewChange(hex) { c1Preview = hex; c1Opacity?.setTrack(opacitySliderTrack(hex)); },
+      });
+      c1Opacity = appendSliderRow(panel, 'Opacity', 0, 100, 1, Math.round(animFillOpacity(anim) * 100), v => `${Math.round(v)}%`, v => {
+        if (!animFillColor(anim) && fillEnabled) { anim.fillColor = c1; if (!anim.fillStyle) anim.fillStyle = 'solid'; }
+        anim.fillOpacity = clamp(parseFloat(v) / 100, 0, 1);
+        saveProject();
+      }, !fillEnabled, { colorTrack: opacitySliderTrack(c1Preview) });
+      appendDropperBtn(panel, 'fill');
+    } else {
+      const c2Init = anim.gradientToColor || animFillColor(anim) || anim.color;
+      let c2Preview = normalizeColorString(c2Init) || c2Init;
+      let c2Opacity = null;
+      appendHslColorPicker(panel, c2Init, (color, meta = {}) => {
+        if (!sameColor(anim.gradientToColor, color)) anim.gradientToColor = color;
+        saveProject();
+        if (meta.fromHueClick) renderAnimList();
+        draw();
+      }, {
+        withUndo: true,
+        fallbackHue: colorToHsl(animFillColor(anim) || anim.color).h,
+        onPreviewChange(hex) { c2Preview = hex; c2Opacity?.setTrack(opacitySliderTrack(hex)); },
+      });
+      const toOpacityVal = anim.gradientToOpacity ?? 0;
+      c2Opacity = appendSliderRow(panel, 'Opacity', 0, 100, 1, Math.round(toOpacityVal * 100), v => `${Math.round(v)}%`, v => {
+        anim.gradientToOpacity = clamp(parseFloat(v) / 100, 0, 1);
+        saveProject();
+      }, false, { colorTrack: opacitySliderTrack(c2Preview) });
+      appendDropperBtn(panel, 'gradientTo');
     }
-    saveProject();
-    if (meta.fromHueClick) renderAnimList();
-    draw();
-  }, {
-    withUndo: true,
-    fallbackHue: colorToHsl(anim.color).h,
-    onPreviewChange(hex) {
-      opacityPreviewColor = hex;
-      opacityControl?.setTrack(opacitySliderTrack(hex));
-    },
-  });
-
-  if (isOutline) {
-    opacityControl = appendSliderRow(panel, 'Opacity', 0, 100, 1, Math.round(animOutlineOpacity(anim) * 100), v => `${Math.round(v)}%`, v => {
-      anim.outlineOpacity = clamp(parseFloat(v) / 100, 0, 1);
-      saveProject();
-    }, false, { colorTrack: opacitySliderTrack(opacityPreviewColor) });
   } else {
-    opacityControl = appendSliderRow(panel, 'Opacity', 0, 100, 1, Math.round(animFillOpacity(anim) * 100), v => `${Math.round(v)}%`, v => {
-      if (!animFillColor(anim) && fillEnabled) {
-        anim.fillColor = activeColor;
-        if (!anim.fillStyle) anim.fillStyle = 'solid';
-      }
-      anim.fillOpacity = clamp(parseFloat(v) / 100, 0, 1);
-      saveProject();
-    }, !fillEnabled, { colorTrack: opacitySliderTrack(opacityPreviewColor) });
-  }
-
-  // ── Gradient second boundary color section ──
-  if (isGradientFill) {
-    const toLabel = document.createElement('div');
-    toLabel.className = 'gradient-color-label';
-    toLabel.textContent = 'Color 2';
-    panel.appendChild(toLabel);
-    const toColorInit = anim.gradientToColor || activeColor;
-    let toOpacityPreviewColor = normalizeColorString(toColorInit) || toColorInit;
-    let toOpacityControl = null;
-    appendHslColorPicker(panel, toColorInit, (color, meta = {}) => {
-      if (!sameColor(anim.gradientToColor, color)) {
-        anim.gradientToColor = color;
+    // ── Single color picker (outline or non-gradient fill) ──
+    const activeColor = !isOutline ? (animFillColor(anim) || anim.color) : anim.color;
+    let opacityPreviewColor = normalizeColorString(activeColor) || activeColor;
+    let opacityControl = null;
+    appendHslColorPicker(panel, activeColor, (color, meta = {}) => {
+      if (!isOutline && fillEnabled) {
+        if (!sameColor(animFillColor(anim), color)) {
+          anim.fillColor = color;
+          if (!anim.fillStyle) anim.fillStyle = 'solid';
+        }
+      } else if (!sameColor(anim.color, color)) {
+        anim.color = color;
       }
       saveProject();
       if (meta.fromHueClick) renderAnimList();
       draw();
     }, {
       withUndo: true,
-      fallbackHue: colorToHsl(activeColor).h,
+      fallbackHue: colorToHsl(anim.color).h,
       onPreviewChange(hex) {
-        toOpacityPreviewColor = hex;
-        toOpacityControl?.setTrack(opacitySliderTrack(hex));
+        opacityPreviewColor = hex;
+        opacityControl?.setTrack(opacitySliderTrack(hex));
       },
     });
-    const toOpacityVal = anim.gradientToOpacity ?? 0;
-    toOpacityControl = appendSliderRow(panel, 'Opacity', 0, 100, 1, Math.round(toOpacityVal * 100), v => `${Math.round(v)}%`, v => {
-      anim.gradientToOpacity = clamp(parseFloat(v) / 100, 0, 1);
-      saveProject();
-    }, false, { colorTrack: opacitySliderTrack(toOpacityPreviewColor) });
-  }
-
-  // ── Eyedropper ──
-  const dropperBtn = document.createElement('button');
-  const isDropperActive = eyedropperTarget === colorEditTarget && eyedropperAnimId === anim.id;
-  dropperBtn.className = 'eyedropper-btn' + (isDropperActive ? ' active' : '');
-  dropperBtn.title = isDropperActive ? 'Click a canvas to sample color (Escape to cancel)' : 'Pick color from canvas';
-  dropperBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21l1.5-4.5L15.5 6l3 3L8 20.5z"/><path d="M18.5 6l1.5-1.5c.8-.8.8-2.2 0-3s-2.2-.8-3 0L15.5 3"/></svg>${isDropperActive ? ' Sampling…' : ' Sample color'}`;
-  dropperBtn.addEventListener('click', e => {
-    e.stopPropagation();
-    if (isDropperActive) {
-      deactivateEyedropper();
+    if (isOutline) {
+      opacityControl = appendSliderRow(panel, 'Opacity', 0, 100, 1, Math.round(animOutlineOpacity(anim) * 100), v => `${Math.round(v)}%`, v => {
+        anim.outlineOpacity = clamp(parseFloat(v) / 100, 0, 1);
+        saveProject();
+      }, false, { colorTrack: opacitySliderTrack(opacityPreviewColor) });
     } else {
-      eyedropperTarget = colorEditTarget;
-      eyedropperAnimId = anim.id;
-      updateCursor();
+      opacityControl = appendSliderRow(panel, 'Opacity', 0, 100, 1, Math.round(animFillOpacity(anim) * 100), v => `${Math.round(v)}%`, v => {
+        if (!animFillColor(anim) && fillEnabled) {
+          anim.fillColor = activeColor;
+          if (!anim.fillStyle) anim.fillStyle = 'solid';
+        }
+        anim.fillOpacity = clamp(parseFloat(v) / 100, 0, 1);
+        saveProject();
+      }, !fillEnabled, { colorTrack: opacitySliderTrack(opacityPreviewColor) });
     }
-    renderAnimList();
-  });
-  panel.appendChild(dropperBtn);
+    appendDropperBtn(panel, colorEditTarget);
+  }
 
   root.appendChild(panel);
   parent.appendChild(root);
@@ -11562,7 +12044,7 @@ function objectTileBlockForIndex(index) {
   const anim = animations[index];
   if (!anim) return null;
   const gid = objectGroupId(anim);
-  const members = gid == null ? [anim] : groupMembers(gid);
+  const members = gid == null ? [anim] : allDescendantAnims(gid);
   const memberIds = new Set(members.map(a => a.id));
   const ordered = animations.filter(a => memberIds.has(a.id));
   const indices = ordered.map(a => animations.indexOf(a)).filter(i => i >= 0);
@@ -11724,6 +12206,127 @@ function handleObjectTileDrop(e) {
   moveAnimationInStack(fromIndex, insertionIndex, drag.animIds);
 }
 
+function objectTileInsertionIndexFromEvent(e) {
+  const tilesEl = document.getElementById('object-tiles');
+  let wrap = e.target.closest && e.target.closest('.obj-tile-wrap');
+  const allWraps = [...tilesEl.querySelectorAll('.obj-tile-wrap.tray-child')];
+  if (!wrap || !tilesEl.contains(wrap) || !wrap.classList.contains('tray-child')) {
+    if (!allWraps.length) return animations.length;
+    const firstRect = allWraps[0].getBoundingClientRect();
+    const lastRect = allWraps[allWraps.length - 1].getBoundingClientRect();
+    if (e.clientX < firstRect.left) wrap = allWraps[0];
+    else if (e.clientX > lastRect.right) wrap = allWraps[allWraps.length - 1];
+    else {
+      let best = allWraps[0], bestDist = Infinity;
+      for (const candidate of allWraps) {
+        const rect = candidate.getBoundingClientRect();
+        const cx = rect.left + rect.width * 0.5;
+        const dist = Math.abs(e.clientX - cx);
+        if (dist < bestDist) { best = candidate; bestDist = dist; }
+      }
+      wrap = best;
+    }
+  }
+  const rect = wrap.getBoundingClientRect();
+  const after = e.clientX >= rect.left + rect.width * 0.5;
+  if (wrap.dataset.groupId) {
+    const gid = parseFloat(wrap.dataset.groupId);
+    const indices = allDescendantAnims(gid)
+      .map(a => animations.indexOf(a)).filter(i => i >= 0);
+    if (!indices.length) return after ? animations.length : 0;
+    return after ? Math.max(...indices) + 1 : Math.min(...indices);
+  }
+  const idx = parseInt(wrap.dataset.index, 10);
+  if (!isFinite(idx)) return animations.length;
+  const anim = animations[idx];
+  const gid = objectGroupId(anim);
+  const movingIds = new Set(objectTileDrag?.animIds || []);
+  if (gid != null && !groupMembers(gid).some(member => movingIds.has(member.id))) {
+    const indices = animations
+      .map((candidate, candidateIdx) => objectGroupId(candidate) === gid ? candidateIdx : -1)
+      .filter(candidateIdx => candidateIdx >= 0);
+    if (indices.length) return after ? Math.max(...indices) + 1 : Math.min(...indices);
+  }
+  return clamp(idx + (after ? 1 : 0), 0, animations.length);
+}
+
+function updateObjectTileDropCue(insertionIndex) {
+  clearObjectTileDropCues();
+  const allWraps = [...document.querySelectorAll('#object-tiles .obj-tile-wrap.tray-child')];
+  if (!allWraps.length) return;
+  const ranges = allWraps.map(wrap => {
+    if (wrap.dataset.groupId) {
+      const gid = parseFloat(wrap.dataset.groupId);
+      const idxs = allDescendantAnims(gid).map(a => animations.indexOf(a)).filter(i => i >= 0);
+      return { wrap, first: idxs.length ? Math.min(...idxs) : Infinity };
+    }
+    const idx = parseInt(wrap.dataset.index, 10);
+    return { wrap, first: idx };
+  });
+  if (objectTileDrag?.animIds) {
+    const movingIds = new Set(objectTileDrag.animIds);
+    const movingIndices = animations
+      .map((anim, animIdx) => movingIds.has(anim.id) ? animIdx : -1)
+      .filter(animIdx => animIdx >= 0);
+    if (movingIndices.length) {
+      const first = Math.min(...movingIndices);
+      const last = Math.max(...movingIndices);
+      if (insertionIndex >= first && insertionIndex <= last + 1) return;
+    }
+  }
+  for (const { wrap, first } of ranges) {
+    if (insertionIndex <= first) { wrap.classList.add('drop-before'); return; }
+  }
+  allWraps[allWraps.length - 1].classList.add('drop-after');
+}
+
+function moveAnimationInStack(fromIndex, insertionIndex, sourceAnimIds = null) {
+  if (fromIndex < 0 || fromIndex >= animations.length) return false;
+  const sourceIds = new Set(sourceAnimIds && sourceAnimIds.length ? sourceAnimIds : [animations[fromIndex].id]);
+  const moving = animations.filter(anim => sourceIds.has(anim.id));
+  if (!moving.length) return false;
+  const movingIndices = animations
+    .map((anim, idx) => sourceIds.has(anim.id) ? idx : -1)
+    .filter(idx => idx >= 0);
+  const firstIndex = Math.min(...movingIndices);
+  const lastIndex = Math.max(...movingIndices);
+  let toIndex = clamp(Math.round(insertionIndex), 0, animations.length);
+  if (toIndex >= firstIndex && toIndex <= lastIndex + 1) return false;
+
+  const tilesEl = document.getElementById('object-tiles');
+  const tileScrollLeft = tilesEl ? tilesEl.scrollLeft : 0;
+  pushUndo();
+  const insertionInRemaining = animations.slice(0, toIndex).filter(anim => !sourceIds.has(anim.id)).length;
+  const remaining = animations.filter(anim => !sourceIds.has(anim.id));
+  animations = remaining.slice(0, insertionInRemaining).concat(moving, remaining.slice(insertionInRemaining));
+  renumberAnimationsByStackOrder();
+  clearObjectTileDropCues();
+  renderAnimList();
+  const nextTilesEl = document.getElementById('object-tiles');
+  if (nextTilesEl && selectedId == null && editModeAnimId == null) {
+    nextTilesEl.scrollLeft = tileScrollLeft;
+    updateTilesMoreIndicator();
+  }
+  draw();
+  updateCursor();
+  return true;
+}
+
+function handleObjectTileDragOver(e) {
+  if (!objectTileDrag) return;
+  e.preventDefault();
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+  const tilesEl = document.getElementById('object-tiles');
+  if (tilesEl) {
+    const rect = tilesEl.getBoundingClientRect();
+    const edge = 28;
+    if (e.clientX < rect.left + edge) tilesEl.scrollLeft -= 10;
+    else if (e.clientX > rect.right - edge) tilesEl.scrollLeft += 10;
+  }
+  objectTileDrag.insertionIndex = objectTileInsertionIndexFromEvent(e);
+  updateObjectTileDropCue(objectTileDrag.insertionIndex);
+}
+
 function renderGroupMosaicThumbnail(groupId, canvasEl, size = 48) {
   const dpr = window.devicePixelRatio || 1;
   const PX = size * dpr;
@@ -11808,8 +12411,8 @@ function renderGroupTileBackdrops(tilesEl) {
 }
 
 function renderGroupDetail(detailEl, groupId) {
-  const members = groupMembers(groupId);
-  if (!members.length) { selectedGroupId = null; setView('tiles'); return; }
+  const items = directChildItems(groupId);
+  if (!items.length) { selectedGroupId = null; setView('tiles'); return; }
   setView('detail');
   detailEl.dataset.groupId = String(groupId);
 
@@ -11817,17 +12420,21 @@ function renderGroupDetail(detailEl, groupId) {
   header.className = 'detail-header';
   const leftGroup = document.createElement('div');
   leftGroup.className = 'detail-header-left';
+
   const currentName = groupName(groupId);
+  const groupNumber = groupHierarchicalNumber(groupId);
+  const displayText = currentName || `Group ${groupNumber}`;
+
   const nameSpan = document.createElement('span');
   nameSpan.className = 'detail-num' + (currentName ? '' : ' group-name-placeholder');
-  nameSpan.textContent = currentName || 'Add name…';
-  nameSpan.title = 'Click to name this group';
+  nameSpan.textContent = displayText;
+  nameSpan.title = 'Click to rename this group';
   nameSpan.style.cursor = 'pointer';
   nameSpan.addEventListener('click', () => {
     const input = document.createElement('input');
     input.type = 'text';
     input.value = groupName(groupId);
-    input.placeholder = 'Group name…';
+    input.placeholder = `Group ${groupNumber}`;
     input.style.cssText = 'font:inherit;background:transparent;border:none;border-bottom:1px solid #89b4fa;outline:none;color:#cdd6f4;width:120px;';
     nameSpan.replaceWith(input);
     input.focus();
@@ -11840,8 +12447,8 @@ function renderGroupDetail(detailEl, groupId) {
     input.addEventListener('blur', () => {
       if (cancelled) { renderAnimList(); return; }
       const newName = input.value.trim();
-      const g = groups.find(grp => grp.id === groupId);
-      if (g && g.name !== newName) { pushUndo(); g.name = newName; }
+      const grp = groups.find(grp => grp.id === groupId);
+      if (grp && grp.name !== newName) { pushUndo(); grp.name = newName; saveProject(); }
       renderAnimList();
     });
   });
@@ -11849,15 +12456,21 @@ function renderGroupDetail(detailEl, groupId) {
 
   const rightGroup = document.createElement('div');
   rightGroup.className = 'detail-header-right';
-  const ungroupBtn = document.createElement('button');
-  ungroupBtn.className = 'anim-icon-btn';
-  ungroupBtn.title = 'Ungroup';
-  ungroupBtn.textContent = 'U';
-  ungroupBtn.style.fontWeight = '700';
-  ungroupBtn.addEventListener('click', e => {
+
+  const isHidden = isGroupEffectivelyHidden(groupId);
+  const visBtn = document.createElement('button');
+  visBtn.className = 'anim-icon-btn anim-vis-btn' + (isHidden ? ' is-hidden' : '');
+  visBtn.title = isHidden ? 'Show group' : 'Hide group';
+  visBtn.appendChild(makeVisibilityIcon(!isHidden));
+  visBtn.addEventListener('click', e => {
     e.stopPropagation();
-    ungroup(groupId);
+    pushUndo();
+    const grp = groups.find(grp => grp.id === groupId);
+    if (grp) grp.hidden = !grp.hidden;
+    saveProject();
+    renderAnimList(); draw();
   });
+
   const delBtn = document.createElement('button');
   delBtn.className = 'anim-icon-btn anim-delete-btn';
   delBtn.title = 'Delete group';
@@ -11866,30 +12479,57 @@ function renderGroupDetail(detailEl, groupId) {
     e.stopPropagation();
     deleteGroup(groupId);
   });
-  rightGroup.append(ungroupBtn, delBtn);
+  rightGroup.append(visBtn, delBtn);
   header.append(leftGroup, rightGroup);
   detailEl.appendChild(header);
 
   const tilesContainer = document.createElement('div');
   tilesContainer.className = 'detail-group-tiles';
-  for (const member of members) {
+  for (const { type, item } of items) {
     const tile = document.createElement('button');
     tile.className = 'detail-group-tile';
-    const isSelected = selectedId === member.id || editModeAnimId === member.id;
-    if (isSelected) tile.classList.add('selected');
     const thumbCanvas = document.createElement('canvas');
     thumbCanvas.draggable = false;
     tile.appendChild(thumbCanvas);
-    renderAnimThumbnail(member, thumbCanvas, 64);
-    tile.addEventListener('click', e => {
-      e.stopPropagation();
-      openColorMenuAnimId = null;
-      enterEditMode(member, new Set());
-      renderAnimList(); draw(); updateCursor();
-    });
+
+    if (type === 'group') {
+      const childGroup = item;
+      tile.classList.add('obj-group-mosaic-tile');
+      tile.title = groupName(childGroup.id) || 'Group';
+      renderGroupMosaicThumbnail(childGroup.id, thumbCanvas, 64);
+      const icon = document.createElement('span');
+      icon.className = 'obj-group-mosaic-icon';
+      icon.textContent = 'G';
+      tile.appendChild(icon);
+      tile.addEventListener('click', e => {
+        e.stopPropagation();
+        openColorMenuAnimId = null;
+        selectGroup(childGroup.id);
+        renderAnimList(); draw(); updateCursor();
+      });
+    } else {
+      const member = item;
+      const isSelected = selectedId === member.id || editModeAnimId === member.id;
+      if (isSelected) tile.classList.add('selected');
+      tile.title = objectLabel(member);
+      renderAnimThumbnail(member, thumbCanvas, 64);
+      tile.addEventListener('click', e => {
+        e.stopPropagation();
+        openColorMenuAnimId = null;
+        drillSelectObject(member);
+        renderAnimList(); draw(); updateCursor();
+      });
+    }
     tilesContainer.appendChild(tile);
   }
   detailEl.appendChild(tilesContainer);
+
+  const ungroupBtn = document.createElement('button');
+  ungroupBtn.className = 'group-objects-btn-inner';
+  ungroupBtn.textContent = 'Ungroup';
+  ungroupBtn.addEventListener('click', e => { e.stopPropagation(); ungroup(groupId); });
+  detailEl.appendChild(ungroupBtn);
+
   updateToolPanel();
 }
 
@@ -11900,15 +12540,9 @@ function updateGroupObjectsButton() {
   btn.disabled = false;
   const groupActive = isGroupSelectionActive();
   const objectDetailOpen = (selectedId != null || editModeAnimId != null) && !groupActive;
-  const shouldShow = !activeLineToolOptionsAnim() && (groupSelectionMode || groupActive || !objectDetailOpen);
+  const shouldShow = !activeLineToolOptionsAnim() && !groupActive && (groupSelectionMode || !objectDetailOpen);
   btn.style.display = shouldShow ? 'block' : 'none';
   if (!shouldShow) return;
-
-  if (groupActive) {
-    btn.textContent = 'Ungroup';
-    btn.classList.add('is-ungroup');
-    return;
-  }
 
   if (groupSelectionMode) {
     if (groupCandidateIds.size + groupGroupCandidateIds.size >= 2) {
@@ -11925,7 +12559,252 @@ function updateGroupObjectsButton() {
   if (animations.filter(a => !a.inPlacementMode).length < 2) btn.disabled = true;
 }
 
-function renderAnimList() {
+function activeTrayGroupPath(detailAnim) {
+  if (isGroupSelectionActive()) return groupPathFromRoot(selectedGroupId);
+  const detailGroupId = objectGroupId(detailAnim);
+  if (detailGroupId != null) return groupPathFromRoot(detailGroupId);
+  const drillGroupId = currentDrillGroupId();
+  return drillGroupId != null ? groupPathFromRoot(drillGroupId) : [];
+}
+
+function rootTileLabelForGroup(groupId) {
+  const rootId = groupPathFromRoot(groupId)[0] ?? groupId;
+  const idx = directChildItems(null).findIndex(it => it.type === 'group' && it.item.id === rootId);
+  return idx >= 0 ? String(idx + 1) : '';
+}
+
+function appendTrayPartition(tilesEl) {
+  const partition = document.createElement('div');
+  partition.className = 'obj-tray-partition';
+  partition.setAttribute('aria-hidden', 'true');
+  tilesEl.appendChild(partition);
+}
+
+function appendTrayLabel(tile, label) {
+  if (!label) return;
+  const labelEl = document.createElement('span');
+  labelEl.className = 'obj-tile-label';
+  labelEl.textContent = label;
+  tile.appendChild(labelEl);
+}
+
+function configureGroupTileDrag(wrap, groupId) {
+  wrap.draggable = true;
+  wrap.addEventListener('dragstart', e => {
+    const descendants = allDescendantAnims(groupId);
+    if (!descendants.length) { e.preventDefault(); return; }
+    const animIds = descendants.map(a => a.id);
+    const indices = descendants.map(a => animations.indexOf(a)).filter(i => i >= 0);
+    const fromIndex = indices.length ? Math.min(...indices) : 0;
+    const primaryAnim = animations[fromIndex];
+    objectTileDrag = {
+      animId: primaryAnim?.id ?? descendants[0].id,
+      animIds,
+      fromIndex,
+      insertionIndex: fromIndex,
+    };
+    suppressTileClickUntil = Date.now() + 250;
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', String(groupId));
+    }
+    requestAnimationFrame(() => wrap.classList.add('dragging'));
+  });
+  wrap.addEventListener('dragend', () => {
+    const dragIds = objectTileDrag?.animIds;
+    objectTileDrag = null;
+    suppressTileClickUntil = Date.now() + 250;
+    wrap.classList.remove('dragging');
+    if (dragIds) setObjectTileDragVisual(dragIds, false);
+    clearObjectTileDropCues();
+  });
+}
+
+function configureAnimTileDrag(wrap, anim) {
+  const idx = animations.indexOf(anim);
+  wrap.draggable = !anim.inPlacementMode;
+  wrap.addEventListener('dragstart', e => {
+    if (anim.inPlacementMode) { e.preventDefault(); return; }
+    const block = objectTileBlockForIndex(idx);
+    objectTileDrag = {
+      animId: anim.id,
+      animIds: block?.animIds || [anim.id],
+      fromIndex: block?.fromIndex ?? idx,
+      insertionIndex: idx,
+    };
+    suppressTileClickUntil = Date.now() + 250;
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', String(anim.id));
+    }
+    requestAnimationFrame(() => setObjectTileDragVisual(objectTileDrag?.animIds || [anim.id], true));
+  });
+  wrap.addEventListener('dragend', () => {
+    const dragIds = objectTileDrag?.animIds || [anim.id];
+    objectTileDrag = null;
+    suppressTileClickUntil = Date.now() + 250;
+    setObjectTileDragVisual(dragIds, false);
+    clearObjectTileDropCues();
+  });
+}
+
+function appendGroupTrayTile(tilesEl, group, { label = '', path = false, child = true } = {}) {
+  const isGroupSel = isGroupSelectionActive() && selectedGroupId === group.id;
+  const isGroupCandidate = groupSelectionMode && groupGroupCandidateIds.has(group.id);
+  const wrap = document.createElement('div');
+  wrap.className = 'obj-tile-wrap' +
+    (path ? ' tray-path' : '') +
+    (child ? ' tray-child' : '') +
+    (isGroupSel ? ' group-selected' : '') +
+    (isGroupCandidate ? ' group-candidate' : '');
+  wrap.dataset.groupId = group.id;
+
+  const tile = document.createElement('button');
+  tile.className = 'obj-tile obj-group-mosaic-tile' + (isGroupEffectivelyHidden(group.id) ? ' obj-tile-hidden' : '') + (isGroupSel ? ' selected' : '');
+  tile.title = groupName(group.id) || 'Group';
+  appendTrayLabel(tile, label);
+  const thumbCanvas = document.createElement('canvas');
+  thumbCanvas.draggable = false;
+  tile.appendChild(thumbCanvas);
+  renderGroupMosaicThumbnail(group.id, thumbCanvas);
+  const icon = document.createElement('span');
+  icon.className = 'obj-group-mosaic-icon';
+  icon.textContent = 'G';
+  tile.appendChild(icon);
+  tile.addEventListener('click', () => {
+    if (Date.now() < suppressTileClickUntil) return;
+    openColorMenuAnimId = null;
+    if (groupSelectionMode && child) {
+      if (groupGroupCandidateIds.has(group.id)) groupGroupCandidateIds.delete(group.id);
+      else groupGroupCandidateIds.add(group.id);
+      renderAnimList(); updateGroupObjectsButton();
+      return;
+    }
+    selectGroup(group.id);
+    renderAnimList(); draw(); updateCursor();
+  });
+  wrap.appendChild(tile);
+  if (child && !path) configureGroupTileDrag(wrap, group.id);
+  tilesEl.appendChild(wrap);
+  return wrap;
+}
+
+function appendAnimTrayTile(tilesEl, anim, { label = '', child = true } = {}) {
+  const idx = animations.indexOf(anim);
+  if (!anim.activeSegments) anim.activeSegments = new Set();
+  if (!anim.expandedArcs) anim.expandedArcs = new Set();
+  if (!anim.expandedAnchors) anim.expandedAnchors = new Set();
+  const isMultiSelected = isMultiSelectionActive() && multiSelectedIds.has(anim.id);
+  const isSelected = selectedId === anim.id || editModeAnimId === anim.id || isMultiSelected;
+  const groupCandidate = groupSelectionMode && groupCandidateIds.has(anim.id);
+  const wrap = document.createElement('div');
+  wrap.className = 'obj-tile-wrap tray-child' + (groupCandidate ? ' group-candidate' : '');
+  wrap.dataset.animId = anim.id;
+  wrap.dataset.index = idx;
+
+  const tile = document.createElement('button');
+  tile.className = 'obj-tile' + (!isAnimEffectivelyVisible(anim) ? ' obj-tile-hidden' : '') + (isSelected ? ' selected' : '');
+  tile.title = objectLabel(anim);
+  tile.dataset.animId = anim.id;
+  appendTrayLabel(tile, label);
+  const thumbCanvas = document.createElement('canvas');
+  thumbCanvas.draggable = false;
+  tile.appendChild(thumbCanvas);
+  renderAnimThumbnail(anim, thumbCanvas);
+  tile.addEventListener('click', () => {
+    if (Date.now() < suppressTileClickUntil) return;
+    openColorMenuAnimId = null;
+    if (anim.inPlacementMode) { selectedId = anim.id; renderAnimList(); return; }
+    if (groupSelectionMode) {
+      toggleGroupCandidate(anim);
+      renderAnimList(); draw(); updateCursor();
+      return;
+    }
+    if (isMultiSelectionActive() && multiSelectedIds.has(anim.id)) {
+      drillSelectObject(anim);
+      renderAnimList(); draw(); updateCursor();
+      return;
+    }
+    const alreadySelected = selectedId === anim.id || editModeAnimId === anim.id;
+    if (alreadySelected) {
+      if (anim.activeSegments && anim.activeSegments.size > 0) {
+        anim.activeSegments = new Set();
+        anim.expandedArcs = new Set();
+      } else {
+        tilesDrillPath = [];
+        selectedId = null;
+        exitEditMode();
+      }
+      renderAnimList(); draw(); updateCursor();
+      return;
+    }
+    drillSelectObject(anim);
+    renderAnimList(); draw(); updateCursor();
+  });
+  wrap.appendChild(tile);
+  if (child) configureAnimTileDrag(wrap, anim);
+  tilesEl.appendChild(wrap);
+  return wrap;
+}
+
+function renderObjectTray(detailAnim) {
+  const tilesEl = document.getElementById('object-tiles');
+  const breadcrumbEl = document.getElementById('tiles-breadcrumb');
+  if (breadcrumbEl) {
+    breadcrumbEl.innerHTML = '';
+    breadcrumbEl.style.display = 'none';
+  }
+  tilesEl.innerHTML = '';
+  tilesEl.style.height = '';
+  tilesEl.scrollTop = 0;
+  const lineOptionsAnim = activeLineToolOptionsAnim();
+  tilesEl.classList.toggle('line-tool-options-host', !!lineOptionsAnim);
+  if (lineOptionsAnim) {
+    renderLineToolOptions(tilesEl);
+    updateTilesMoreIndicator();
+    return;
+  }
+
+  const path = activeTrayGroupPath(detailAnim);
+  const childGroupId = path.length ? path[path.length - 1] : null;
+  const displayItems = directChildItems(childGroupId);
+  if (childGroupId === null) {
+    animations.filter(a => a.inPlacementMode).forEach(a => {
+      if (!displayItems.some(it => it.type === 'anim' && it.item.id === a.id))
+        displayItems.unshift({ type: 'anim', item: a, pos: -1 });
+    });
+  }
+
+  for (let i = 0; i < path.length; i++) {
+    const g = groups.find(grp => grp.id === path[i]);
+    if (!g) continue;
+    appendGroupTrayTile(tilesEl, g, {
+      label: i === 0 ? rootTileLabelForGroup(g.id) : '',
+      path: true,
+      child: false,
+    });
+    appendTrayPartition(tilesEl);
+  }
+
+  if (!displayItems.length && !path.length) {
+    const hint = document.createElement('p');
+    hint.className = 'placement-hint';
+    hint.textContent = 'Select a tool to create an object.';
+    tilesEl.appendChild(hint);
+  }
+
+  displayItems.forEach(({ type, item }, tileIdx) => {
+    const label = childGroupId === null ? String(tileIdx + 1) : '';
+    if (type === 'group') appendGroupTrayTile(tilesEl, item, { label, path: false, child: true });
+    else appendAnimTrayTile(tilesEl, item, { label, child: true });
+  });
+
+  const selectedTile = tilesEl.querySelector('.obj-tile.selected');
+  if (selectedTile) selectedTile.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  updateTilesMoreIndicator();
+}
+
+function renderAnimListLegacy() {
   // ── Tiles ──
   const tilesEl = document.getElementById('object-tiles');
   const detailAnim = animations.find(a => a.id === selectedId) ||
@@ -12027,10 +12906,7 @@ function renderAnimList() {
           renderAnimList(); updateGroupObjectsButton();
           return;
         }
-        tilesDrillPath.push(g.id);
-        clearObjectSelectionState();
-        selectedGroupId = g.id;
-        fitObjWindow(); fitIsolationWindow();
+        selectGroup(g.id);
         renderAnimList(); draw(); updateCursor();
       });
       if (drillGroupId === null) {
@@ -12173,6 +13049,11 @@ function renderAnimList() {
   detailEl.removeAttribute('data-anim-id');
   detailEl.removeAttribute('data-group-id');
 
+  if (isGroupSelectionActive()) {
+    renderGroupDetail(detailEl, selectedGroupId);
+    return;
+  }
+
   const anim = detailAnim;
   if (!anim) { updateToolPanel(); setView('tiles'); return; }
   setView('detail');
@@ -12217,6 +13098,7 @@ function renderAnimList() {
     anim.activeSegments = new Set();
     openColorMenuAnimId = opening ? anim.id : null;
     colorEditTarget = 'outline';
+    if (opening) gradientColorTab = 1;
     renderAnimList(); draw();
   });
   const visBtn = document.createElement('button');
@@ -12240,10 +13122,16 @@ function renderAnimList() {
   header.append(leftGroup, rightGroup);
   detailEl.appendChild(header);
 
+  detailEl.addEventListener('click', e => {
+    if (openColorMenuAnimId === anim.id) {
+      openColorMenuAnimId = null;
+      renderAnimList();
+    }
+  }, { once: true });
+
   if (openColorMenuAnimId === anim.id) {
     appendColorExpansion(detailEl, anim);
-    const keepArcRolesVisible = animFillStyle(anim) === 'gradient' && !isPrimitiveAnim(anim) && !isTextAnim(anim);
-    if (!keepArcRolesVisible) { updateToolPanel(); return; }
+    updateToolPanel(); return;
   }
 
   if (anim.inPlacementMode) {
@@ -12537,8 +13425,8 @@ function _skipOld() { // dead code stub — body deleted
     const isSelected = (selectedId === anim.id);
 
     const row = document.createElement('div');
-    row.className = 'anim-row' + (inEdit ? ' in-edit' : isSelected ? ' selected' : '') + (!anim.visible ? ' is-hidden' : '');
-    row.style.borderColor = !anim.visible ? '#585b70' : anim.color;
+    row.className = 'anim-row' + (inEdit ? ' in-edit' : isSelected ? ' selected' : '') + (!isAnimEffectivelyVisible(anim) ? ' is-hidden' : '');
+    row.style.borderColor = !isAnimEffectivelyVisible(anim) ? '#585b70' : anim.color;
     row.dataset.animId = anim.id;
 
     // ── Header ──
@@ -12887,6 +13775,93 @@ function scrollToShowExpanded(_animId) {
   // No-op in new layout — arc items use scrollIntoView directly
 }
 
+function renderAnimListDraftUnused() {
+  const detailAnim = animations.find(a => a.id === selectedId) ||
+                     animations.find(a => a.id === editModeAnimId);
+  renderObjectTray(detailAnim);
+  updateGroupObjectsButton();
+
+  const detailEl = document.getElementById('object-detail');
+  detailEl.innerHTML = '';
+  detailEl.removeAttribute('data-anim-id');
+  detailEl.removeAttribute('data-group-id');
+
+  if (isGroupSelectionActive()) {
+    renderGroupDetail(detailEl, selectedGroupId);
+    return;
+  }
+
+  const anim = detailAnim;
+  if (!anim) { updateToolPanel(); setView('tiles'); return; }
+  setView('detail');
+
+  if (!anim.activeSegments) anim.activeSegments = new Set();
+  if (!anim.expandedArcs) anim.expandedArcs = new Set();
+  if (!anim.expandedAnchors) anim.expandedAnchors = new Set();
+
+  detailEl.dataset.animId = String(anim.id);
+
+  const header = document.createElement('div');
+  header.className = 'detail-header';
+
+  const leftGroup = document.createElement('div');
+  leftGroup.className = 'detail-header-left';
+  const numSpan = document.createElement('span');
+  numSpan.className = 'detail-num';
+  const _detailItems = directChildItems(currentDrillGroupId());
+  const _detailIdx = _detailItems.findIndex(it => it.type === 'anim' && it.item.id === anim.id);
+  numSpan.textContent = _detailIdx >= 0 ? getDrillPrefix() + (_detailIdx + 1) : animations.indexOf(anim) + 1;
+  const thumbDiv = document.createElement('div');
+  thumbDiv.className = 'detail-thumb';
+  const thumbCanvas = document.createElement('canvas');
+  thumbDiv.appendChild(thumbCanvas);
+  renderAnimThumbnail(anim, thumbCanvas, 30);
+  leftGroup.append(numSpan, thumbDiv);
+  header.appendChild(leftGroup);
+
+  const rightGroup = document.createElement('div');
+  rightGroup.className = 'detail-header-right';
+  const colorBtn = document.createElement('button');
+  colorBtn.className = 'anim-color-btn';
+  colorBtn.style.backgroundColor = anim.color || '#cdd6f4';
+  colorBtn.title = 'Edit color';
+  colorBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    openColorMenuAnimId = openColorMenuAnimId === anim.id ? null : anim.id;
+    renderAnimList();
+  });
+  const visBtn = document.createElement('button');
+  visBtn.className = 'anim-icon-btn anim-vis-btn' + (!anim.visible ? ' is-hidden' : '');
+  visBtn.title = anim.visible ? 'Hide object' : 'Show object';
+  visBtn.appendChild(makeVisibilityIcon(anim.visible));
+  visBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    pushUndo();
+    anim.visible = !anim.visible;
+    renderAnimList(); draw();
+  });
+  const deleteBtn = document.createElement('button');
+  deleteBtn.className = 'anim-icon-btn anim-delete-btn';
+  deleteBtn.title = 'Delete object';
+  deleteBtn.textContent = '×';
+  deleteBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    deleteSelectedAnimation(anim.id);
+  });
+  rightGroup.append(colorBtn, visBtn, deleteBtn);
+  header.appendChild(rightGroup);
+  detailEl.appendChild(header);
+
+  if (openColorMenuAnimId === anim.id) {
+    const colorPanel = buildColorEditor(anim);
+    detailEl.appendChild(colorPanel);
+  }
+
+  if (isTextAnim(anim)) renderTextDetail(detailEl, anim);
+  else renderCurveDetail(detailEl, anim);
+  updateToolPanel();
+}
+
 let _tilesVisibleRows = 1;
 
 function setView(view) {
@@ -12925,6 +13900,27 @@ function updateTilesMoreIndicator() {
   if (hiddenAbove > 0) aboveEl.textContent = `▲ +${hiddenAbove} more`;
   belowEl.style.display = hiddenBelow > 0 ? 'block' : 'none';
   if (hiddenBelow > 0) belowEl.textContent = `▼ +${hiddenBelow} more`;
+}
+
+function renderAnimList() {
+  renderAnimListLegacy();
+  const detailAnim = animations.find(a => a.id === selectedId) ||
+                     animations.find(a => a.id === editModeAnimId);
+  renderObjectTray(detailAnim);
+  updateGroupObjectsButton();
+}
+
+function updateTilesMoreIndicator() {
+  const tilesEl = document.getElementById('object-tiles');
+  const wrapper = document.getElementById('object-tiles-wrapper');
+  const aboveEl = document.getElementById('tiles-more-above');
+  const belowEl = document.getElementById('tiles-more');
+  if (aboveEl) aboveEl.style.display = 'none';
+  if (belowEl) belowEl.style.display = 'none';
+  if (!tilesEl || !wrapper) return;
+  const maxScroll = Math.max(0, tilesEl.scrollWidth - tilesEl.clientWidth);
+  wrapper.classList.toggle('can-scroll-left', tilesEl.scrollLeft > 1);
+  wrapper.classList.toggle('can-scroll-right', tilesEl.scrollLeft < maxScroll - 1);
 }
 
 
@@ -13164,6 +14160,7 @@ fold.addEventListener('mouseenter', () => { foldTooltip.style.display = 'block';
 fold.addEventListener('mouseleave', () => { foldTooltip.style.display = 'none'; });
 
 function draw() {
+  syncRotationModeTarget();
   if (currentMode === 'graphs') {
     finishCanvasTextEdit(false);
     drawGraphs();
@@ -13183,7 +14180,7 @@ function getObjWindowAnims() {
   if (multiSelectedIds.size > 0) {
     return [...multiSelectedIds].map(id => animations.find(a => a.id === id)).filter(Boolean);
   }
-  if (selectedGroupId != null) return groupMembers(selectedGroupId);
+  if (selectedGroupId != null) return allDescendantAnims(selectedGroupId);
   if (selectedId != null) {
     const a = animations.find(x => x.id === selectedId);
     return a ? [a] : [];
@@ -13378,9 +14375,8 @@ document.getElementById('object-tiles').addEventListener('dragleave', e => {
 document.getElementById('object-tiles').addEventListener('wheel', e => {
   e.preventDefault();
   const _el = document.getElementById('object-tiles');
-  const _rowH = 72;
-  const _dir = e.deltaY > 0 ? 1 : -1;
-  _el.scrollTop = Math.round(_el.scrollTop / _rowH) * _rowH + _dir * _rowH;
+  _el.scrollLeft += Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
+  updateTilesMoreIndicator();
 }, { passive: false });
 document.getElementById('object-tiles').addEventListener('click', e => {
   if (e.target !== e.currentTarget) return;
@@ -13392,6 +14388,7 @@ document.getElementById('object-tiles').addEventListener('click', e => {
     else finalizePlacement(placing);
   }
   if (editModeAnimId !== null) exitEditMode();
+  tilesDrillPath = [];
   selectedId = null;
   selectedGroupId = null;
   clearMultiSelection();
