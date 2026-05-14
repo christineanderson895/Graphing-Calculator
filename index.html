@@ -1267,6 +1267,37 @@
       stroke-linecap: round;
       stroke-linejoin: round;
     }
+    #save-btn, #load-btn, #share-btn {
+      width: 38px; height: 38px;
+      border: 1px solid #45475a;
+      border-radius: 7px;
+      background: #1e1e2e;
+      color: #cdd6f4;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      flex-shrink: 0;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+    }
+    #save-btn:hover, #load-btn:hover, #share-btn:hover {
+      background: #313244;
+      border-color: #89b4fa;
+      color: #f5f7ff;
+    }
+    #save-btn:disabled, #load-btn:disabled, #share-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    #save-btn svg, #load-btn svg, #share-btn svg {
+      width: 17px; height: 17px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
     #global-settings-btn {
       width: 38px;
       height: 38px;
@@ -1571,6 +1602,25 @@
           <path d="M20 9H9.5A5.5 5.5 0 0 0 4 14.5v0A5.5 5.5 0 0 0 9.5 20H13"/>
         </svg>
       </button>
+      <button id="save-btn" title="Save drawing (download JSON)" aria-label="Save drawing">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 15V3"/><path d="m8 11 4 4 4-4"/>
+          <path d="M3 19h18"/>
+        </svg>
+      </button>
+      <button id="load-btn" title="Open drawing (load JSON)" aria-label="Open drawing">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M3 15v4a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-4"/>
+          <path d="M12 3v12"/><path d="m8 7 4-4 4 4"/>
+        </svg>
+      </button>
+      <button id="share-btn" title="Share drawing (copy link)" aria-label="Share drawing">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+          <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+        </svg>
+      </button>
+      <input id="load-file-input" type="file" accept=".json" style="display:none" aria-hidden="true">
       <button id="global-settings-btn" title="Global Settings" aria-label="Global Settings" aria-expanded="false">
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M12.2 2h-.4a2 2 0 0 0-2 2v.2a2 2 0 0 1-1 1.7l-.4.2a2 2 0 0 1-2 0l-.2-.1a2 2 0 0 0-2.7.7l-.2.4A2 2 0 0 0 4 9.8l.2.1a2 2 0 0 1 1 1.7v.8a2 2 0 0 1-1 1.7l-.2.1a2 2 0 0 0-.7 2.7l.2.4a2 2 0 0 0 2.7.7l.2-.1a2 2 0 0 1 2 0l.4.2a2 2 0 0 1 1 1.7v.2a2 2 0 0 0 2 2h.4a2 2 0 0 0 2-2v-.2a2 2 0 0 1 1-1.7l.4-.2a2 2 0 0 1 2 0l.2.1a2 2 0 0 0 2.7-.7l.2-.4a2 2 0 0 0-.7-2.7l-.2-.1a2 2 0 0 1-1-1.7v-.8a2 2 0 0 1 1-1.7l.2-.1a2 2 0 0 0 .7-2.7l-.2-.4a2 2 0 0 0-2.7-.7l-.2.1a2 2 0 0 1-2 0l-.4-.2a2 2 0 0 1-1-1.7V4a2 2 0 0 0-2-2Z"></path>
@@ -1834,6 +1884,125 @@ function loadProject() {
     return true;
   } catch {
     return false;
+  }
+}
+
+// ── File save / load / share ──────────────────────────────────────────────────
+
+function projectSnapshot() {
+  return {
+    animations: snapshotAnimations(),
+    groups: snapshotGroups(),
+    groupNameCounter,
+    viewport: { originX, originY, scale },
+    animColorIdx,
+    fillStyleVersion: PROJECT_FILL_STYLE_VERSION,
+  };
+}
+
+function loadFromSnapshot(data) {
+  const { animations: snap, groups: savedGroups, groupNameCounter: savedCounter,
+          viewport, animColorIdx: ci, fillStyleVersion } = data;
+  if (viewport) {
+    if (typeof viewport.originX === 'number') originX = viewport.originX;
+    if (typeof viewport.originY === 'number') originY = viewport.originY;
+    if (typeof viewport.scale   === 'number') scale   = viewport.scale;
+  }
+  if (typeof ci === 'number') animColorIdx = ci;
+  if (snap) {
+    const legacyRadialIsCircular = !fillStyleVersion || fillStyleVersion < PROJECT_FILL_STYLE_VERSION;
+    restoreSnapshot({
+      anims: normalizeProjectSnapshotFillStyles(snap, legacyRadialIsCircular),
+      groups: savedGroups ?? [],
+      groupNameCounter: savedCounter ?? 0,
+    });
+    if (legacyRadialIsCircular) setTimeout(saveProject, 0);
+  }
+  saveProject();
+}
+
+function hasMeaningfulContent() {
+  return animations.some(a => !a.inPlacementMode);
+}
+
+function confirmReplace(message) {
+  return !hasMeaningfulContent() || confirm(message);
+}
+
+function exportProjectJSON() {
+  const json = JSON.stringify(projectSnapshot(), null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `drawing-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function importProjectJSON() {
+  if (!confirmReplace('This will replace your current drawing. Continue?')) return;
+  const input = document.getElementById('load-file-input');
+  input.value = '';
+  input.onchange = () => {
+    const file = input.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+      try {
+        loadFromSnapshot(JSON.parse(e.target.result));
+        renderAnimList(); draw();
+      } catch {
+        alert('Could not read that file — make sure it is a valid drawing JSON.');
+      }
+    };
+    reader.readAsText(file);
+  };
+  input.click();
+}
+
+async function shareProjectLink() {
+  const btn = document.getElementById('share-btn');
+  const origTitle = btn.title;
+  btn.disabled = true;
+  btn.title = 'Uploading…';
+  try {
+    const res = await fetch('https://jsonblob.com/api/jsonBlob', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify(projectSnapshot()),
+    });
+    if (!res.ok) throw new Error(`Server returned ${res.status}`);
+    const location = res.headers.get('Location') || '';
+    const blobId = location.split('/').pop();
+    if (!blobId) throw new Error('No blob ID in response');
+    const base = window.location.href.split('?')[0];
+    await navigator.clipboard.writeText(`${base}?d=${blobId}`);
+    btn.title = 'Link copied to clipboard!';
+    setTimeout(() => { btn.disabled = false; btn.title = origTitle; }, 2500);
+  } catch (err) {
+    btn.disabled = false;
+    btn.title = origTitle;
+    alert(`Could not create share link: ${err.message}`);
+  }
+}
+
+async function loadFromShareParam() {
+  const blobId = new URLSearchParams(window.location.search).get('d');
+  if (!blobId) return;
+  window.history.replaceState({}, '', window.location.href.split('?')[0]);
+  if (!confirmReplace('A shared drawing was found in the link. Load it? (Your current drawing will be replaced.)')) return;
+  try {
+    const res = await fetch(`https://jsonblob.com/api/jsonBlob/${blobId}`, {
+      headers: { 'Accept': 'application/json' },
+    });
+    if (!res.ok) throw new Error(`Server returned ${res.status}`);
+    loadFromSnapshot(await res.json());
+    renderAnimList(); draw();
+  } catch (err) {
+    alert(`Could not load the shared drawing: ${err.message}`);
   }
 }
 
@@ -14078,6 +14247,9 @@ globalSettingsBtn.addEventListener('click', e => {
 
 document.getElementById('undo-btn').addEventListener('click', () => undo());
 document.getElementById('redo-btn').addEventListener('click', () => redo());
+document.getElementById('save-btn').addEventListener('click', () => exportProjectJSON());
+document.getElementById('load-btn').addEventListener('click', () => importProjectJSON());
+document.getElementById('share-btn').addEventListener('click', () => shareProjectLink());
 updateUndoRedoButtons();
 
 globalSettingsMenu.addEventListener('click', e => e.stopPropagation());
@@ -14411,6 +14583,7 @@ if (!loadProject()) renderAnimList();
 renderGlobalSettingsControls();
 
 resize();
+loadFromShareParam();
 </script>
 </body>
 </html>
