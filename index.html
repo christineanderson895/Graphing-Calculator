@@ -210,6 +210,27 @@
       cursor: default;
       opacity: 0.72;
     }
+    #merge-objects-btn {
+      margin: 0 8px 7px;
+      min-height: 30px;
+      border: 1px solid #45475a;
+      background: #1e1e2e;
+      color: #a6adc8;
+      font-size: 0.78rem;
+      border-radius: 6px;
+      cursor: pointer;
+      width: calc(100% - 16px);
+      padding: 6px 9px;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+    }
+    #merge-objects-btn:hover:not(:disabled) {
+      background: #45475a;
+      border-color: #cba6f7;
+    }
+    #merge-objects-btn.is-ready {
+      border-color: #cba6f7;
+      color: #f5f7ff;
+    }
     .group-objects-btn-inner {
       display: block;
       width: calc(100% - 16px);
@@ -424,6 +445,21 @@
       flex: 1; min-width: 0; display: flex; align-items: center;
     }
     .detail-thickness input[type="range"] { width: 100%; }
+    .detail-name-row {
+      padding: 3px 12px 5px; border-bottom: 1px solid #1e1e2e;
+    }
+    .detail-name-label {
+      font-size: 0.78rem; color: #45475a; cursor: pointer;
+      display: inline-block; width: 100%; user-select: none;
+    }
+    .detail-name-label.has-name { color: #9399b2; }
+    .detail-name-label:hover { color: #89b4fa; }
+    .detail-name-input {
+      width: 100%; box-sizing: border-box; background: transparent;
+      border: none; border-bottom: 1px solid #89b4fa;
+      color: #cdd6f4; font-size: 0.78rem; outline: none;
+      padding: 1px 0; font-family: inherit;
+    }
 
     .detail-group-tiles {
       display: flex;
@@ -514,8 +550,16 @@
     }
     .anchor-list-header:hover { background: #1e1e2e; }
     .anchor-list-header.anchor-active { color: #cdd6f4; }
+    .anchor-list-header.node-hovered { background: #252537; }
+    .arc-list-header.arc-hovered { background: #252537; }
     .anchor-label { flex: 0 0 auto; font-family: monospace; min-width: 32px; }
     .anchor-coords { flex: 1; font-size: 0.68rem; color: #585b70; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .node-badge {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 18px; height: 18px; border-radius: 50%;
+      border: 1.5px solid #89b4fa; background: #1e1e2e;
+      color: #cdd6f4; font-family: monospace; font-size: 0.68rem; flex-shrink: 0;
+    }
     .anchor-split-btn, .arc-split-btn {
       flex-shrink: 0; background: none; border: 1px solid #45475a;
       color: #6c7086; border-radius: 3px; padding: 1px 5px;
@@ -1669,6 +1713,7 @@
       </button>
     </div>
     <button id="group-objects-btn" type="button">Group Objects</button>
+    <button id="merge-objects-btn" type="button" style="display:none">Merge</button>
     <div id="object-detail"></div>
     <div id="global-settings">
       <button id="undo-btn" title="Undo (Ctrl+Z)" aria-label="Undo" disabled>
@@ -3556,6 +3601,12 @@ let openColorMenuRegionId = null;
 let openColorMenuRegionGroupId = null;
 let selectedGroupAnchor = null;  // { groupId, animId, anchorIdx }
 let selectedGroupArc = null;     // { groupId, animId, segIdx }
+let selectedObjectNode = null;     // { animId, num } — selected node in Nodes tab
+let drillObjectArc = null;         // { animId, label } — topo arc being drilled into
+let selectedObjectRegionId = null; // { animId, id: regionId } — selected region in Regions tab
+let hoveredObjectNodeNum = null;   // number | null — hovered node badge in schematic
+let hoveredObjectArcLabel = null;  // string | null — hovered arc label in schematic
+let hoveredObjectRegionId = null;  // regionId | null — hovered region centroid in schematic
 let hoveredRegionId = null;
 let hoveredRegionGroupId = null;
 let colorEditTarget = 'outline';
@@ -3644,6 +3695,26 @@ function snapshotAnimations() {
     gradientToArcs: [...(a.gradientToArcs ?? [])],
     gradientToColor: a.gradientToColor ?? null,
     gradientToOpacity: a.gradientToOpacity ?? null,
+    name: a.name ?? null,
+    curves: a.curves ? a.curves.map(c => ({
+      id: c.id, color: c.color, kind: c.kind || 'freeform',
+      fillColor: c.fillColor ?? null, outlineOpacity: c.outlineOpacity ?? 1,
+      fillOpacity: c.fillOpacity ?? 0.5, fillStyle: normalizeFillStyle(c.fillStyle),
+      closed: !!c.closed, text: c.text ?? '', fontSize: c.fontSize ?? 36,
+      textScaleX: c.textScaleX ?? 1, textScaleY: c.textScaleY ?? 1,
+      textShearX: c.textShearX ?? 0, textShearY: c.textShearY ?? 0,
+      visible: c.visible, thickness: c.thickness, rotation: c.rotation ?? 0,
+      anchors: c.anchors.map(p => new Cx(p.re, p.im)),
+      segments: c.segments.map(s => s ? ({ h0: new Cx(s.h0.re, s.h0.im), h1: new Cx(s.h1.re, s.h1.im), eccentricity: s.eccentricity, visible: s.visible ?? true }) : null),
+      anchorLocked: [...(c.anchorLocked ?? [])],
+      anchorLabels: [...(c.anchorLabels ?? [])],
+      activeSegments: [...(c.activeSegments ?? [])],
+      gradientFromArcs: [...(c.gradientFromArcs ?? [])],
+      gradientToArcs: [...(c.gradientToArcs ?? [])],
+      gradientToColor: c.gradientToColor ?? null,
+      gradientToOpacity: c.gradientToOpacity ?? null,
+    })) : null,
+    regions: (a.regions ?? []).map(r => ({ ...r, boundary: r.boundary.map(e => ({ ...e })) })),
   }));
 }
 
@@ -3680,6 +3751,7 @@ function restoreSnapshot(snap) {
   openColorMenuGroupId = null;
   openColorMenuRegionId = null;
   openColorMenuRegionGroupId = null;
+  selectedObjectRegionId = null;
   colorEditTarget = 'outline';
   finishCanvasTextEdit(false);
   activeTextEditUndoAnimId = null;
@@ -3740,8 +3812,33 @@ function restoreSnapshot(snap) {
       gradientToArcs: new Set(s.gradientToArcs ?? []),
       gradientToColor: s.gradientToColor ?? null,
       gradientToOpacity: s.gradientToOpacity ?? null,
+      name: s.name ?? null,
+      curves: s.curves ? s.curves.map(c => ({
+        id: c.id, color: c.color, kind: c.kind || 'freeform',
+        fillColor: c.fillColor ?? null, outlineOpacity: c.outlineOpacity ?? 1,
+        fillOpacity: c.fillOpacity ?? 0.5, fillStyle: normalizeFillStyle(c.fillStyle),
+        closed: !!c.closed, text: c.text ?? '', fontSize: c.fontSize ?? 36,
+        textScaleX: c.textScaleX ?? 1, textScaleY: c.textScaleY ?? 1,
+        textShearX: c.textShearX ?? 0, textShearY: c.textShearY ?? 0,
+        visible: c.visible, thickness: c.thickness, rotation: c.rotation ?? 0,
+        anchors: c.anchors.map(p => new Cx(p.re, p.im)),
+        segments: c.segments.map(sg => sg ? ({
+          h0: new Cx(sg.h0.re, sg.h0.im), h1: new Cx(sg.h1.re, sg.h1.im),
+          eccentricity: sg.eccentricity ?? 1, visible: sg.visible ?? true,
+          compiled: null, compiledRef: null,
+        }) : null),
+        anchorLocked: c.anchorLocked ? [...c.anchorLocked] : [],
+        anchorLabels: c.anchorLabels ? [...c.anchorLabels] : [],
+        activeSegments: new Set(c.activeSegments ?? []),
+        gradientFromArcs: new Set(c.gradientFromArcs ?? []),
+        gradientToArcs: new Set(c.gradientToArcs ?? []),
+        gradientToColor: c.gradientToColor ?? null,
+        gradientToOpacity: c.gradientToOpacity ?? null,
+      })) : null,
+      regions: (s.regions ?? []).map(r => ({ ...r, boundary: r.boundary.map(e => ({ ...e })) })),
     };
     if (!anim.inPlacementMode) recompileAnim(anim);
+    if (anim.curves) { for (const c of anim.curves) recompileAnim(c); }
     return anim;
   });
   cleanupSingletonGroups();
@@ -4371,6 +4468,68 @@ function createGroupFromCandidates() {
   return true;
 }
 
+function mergeObjects(ids) {
+  const sources = ids.map(id => animations.find(a => a.id === id))
+    .filter(a => a && !a.inPlacementMode);
+  if (sources.length < 2) return;
+  pushUndo();
+  const allCurves = [];
+  for (const src of sources) {
+    if (src.curves) {
+      allCurves.push(...src.curves);
+    } else {
+      allCurves.push({
+        id: src.id,
+        color: src.color, kind: animKind(src),
+        fillColor: src.fillColor ?? null, outlineOpacity: src.outlineOpacity ?? 1,
+        fillOpacity: src.fillOpacity ?? 0.5, fillStyle: src.fillStyle ?? 'solid',
+        gradientFromArcs: src.gradientFromArcs ? new Set(src.gradientFromArcs) : new Set(),
+        gradientToArcs: src.gradientToArcs ? new Set(src.gradientToArcs) : new Set(),
+        gradientToColor: src.gradientToColor ?? null, gradientToOpacity: src.gradientToOpacity ?? null,
+        closed: !!src.closed, text: src.text ?? '', fontSize: src.fontSize ?? 36,
+        textScaleX: src.textScaleX ?? 1, textScaleY: src.textScaleY ?? 1,
+        textShearX: src.textShearX ?? 0, textShearY: src.textShearY ?? 0,
+        visible: src.visible, thickness: src.thickness, rotation: src.rotation ?? 0,
+        anchors: src.anchors, segments: src.segments,
+        anchorLocked: src.anchorLocked ? [...src.anchorLocked] : [],
+        anchorLabels: src.anchorLabels ? [...src.anchorLabels] : [],
+        activeSegments: new Set(),
+      });
+    }
+  }
+  const sourceIds = new Set(sources.map(s => s.id));
+  const firstIdx = Math.min(...sources.map(s => animations.indexOf(s)));
+  const groupId = sources.every(s => s.groupId === sources[0].groupId) ? (sources[0].groupId ?? null) : null;
+  const merged = {
+    id: Date.now() + Math.random(),
+    name: null,
+    letter: sources[0].letter,
+    color: allCurves[0]?.color || '#cdd6f4',
+    kind: 'freeform',
+    fillColor: null, outlineOpacity: 1, fillOpacity: 0.3, fillStyle: 'solid',
+    closed: false, text: '', fontSize: 36,
+    textScaleX: 1, textScaleY: 1, textShearX: 0, textShearY: 0,
+    visible: true, thickness: sources[0].thickness, rotation: 0,
+    anchors: [], segments: [], anchorLocked: [], anchorLabels: [],
+    activeSegments: new Set(),
+    inPlacementMode: false, reversePlacement: false,
+    extensionAnchorIdx: null, extensionForward: true, extensionInsertAt: 0,
+    tContinuation: null, expanded: false,
+    expandedAnchors: new Set(), expandedArcs: new Set(),
+    gradientFromArcs: new Set(), gradientToArcs: new Set(),
+    gradientToColor: null, gradientToOpacity: null,
+    groupId, curves: allCurves, regions: [],
+  };
+  animations = animations.filter(a => !sourceIds.has(a.id));
+  animations.splice(Math.min(firstIdx, animations.length), 0, merged);
+  selectedId = merged.id;
+  editModeAnimId = null;
+  selectedGroupId = null;
+  clearMultiSelection();
+  if (objectHasLinkableCurves(merged)) linkObjectCurves(merged);
+  renderAnimList(); draw(); saveProject();
+}
+
 function ungroup(groupId) {
   const members = groupMembers(groupId);
   const g = groups.find(grp => grp.id === groupId);
@@ -4473,6 +4632,29 @@ function clearSelectionShearGuides(exceptAnim = null) {
 
 function animRotation(anim) {
   return isFinite(anim?.rotation) ? anim.rotation : 0;
+}
+
+function animCurves(anim) {
+  return anim?.curves ?? [anim];
+}
+
+function makeCurveProxy(parentAnim, c) {
+  return {
+    ...c,
+    id: parentAnim.id + '_c_' + c.id,
+    visible: true,
+    inPlacementMode: false,
+    activeSegments: new Set(),
+    groupId: parentAnim.groupId,
+    expanded: false,
+    expandedAnchors: new Set(),
+    expandedArcs: new Set(),
+    anchorLabels: c.anchorLabels ?? [],
+    anchorLocked: c.anchorLocked ?? [],
+    gradientFromArcs: c.gradientFromArcs instanceof Set ? c.gradientFromArcs : new Set(c.gradientFromArcs ?? []),
+    gradientToArcs: c.gradientToArcs instanceof Set ? c.gradientToArcs : new Set(c.gradientToArcs ?? []),
+    activeSegments: c.activeSegments instanceof Set ? c.activeSegments : new Set(c.activeSegments ?? []),
+  };
 }
 
 function animFillColor(anim) {
@@ -4948,6 +5130,7 @@ function addAnimation(kind = 'freeform') {
   const anim = {
     id: Date.now() + Math.random(),
     letter, color, kind,
+    name: null,
     fillColor: null,
     outlineOpacity: 1,
     fillOpacity: 0.3,
@@ -4975,6 +5158,8 @@ function addAnimation(kind = 'freeform') {
     expanded: false,
     expandedAnchors: new Set(),
     expandedArcs: new Set(),
+    curves: null,
+    regions: [],
   };
   if (canFillAnim(anim)) anim.fillColor = color;
   animations.push(anim);
@@ -5081,9 +5266,23 @@ function duplicateAnimation() {
     expanded: true,
     expandedAnchors: new Set(),
     expandedArcs: new Set(),
+    curves: src.curves ? src.curves.map(c => ({
+      ...c,
+      id: Date.now() + Math.random(),
+      anchors: c.anchors.map(a => new Cx(a.re + 1, a.im - 1)),
+      segments: c.segments.map(s => s ? ({ h0: new Cx(s.h0.re + 1, s.h0.im - 1), h1: new Cx(s.h1.re + 1, s.h1.im - 1), eccentricity: s.eccentricity, compiled: null, compiledRef: null }) : null),
+      anchorLocked: c.anchorLocked ? [...c.anchorLocked] : [],
+      activeSegments: new Set(),
+      expandedAnchors: new Set(),
+      expandedArcs: new Set(),
+      gradientFromArcs: new Set(c.gradientFromArcs instanceof Set ? c.gradientFromArcs : []),
+      gradientToArcs: new Set(c.gradientToArcs instanceof Set ? c.gradientToArcs : []),
+    })) : null,
+    regions: [],
   };
   animations.push(anim);
   recompileAnim(anim);
+  if (anim.curves) for (const c of anim.curves) recompileAnim(c);
   enterEditMode(anim);
   updateCursor();
 }
@@ -5131,6 +5330,19 @@ function makeTransformedAnimation(src, transformPoint, rotation) {
     expanded: false,
     expandedAnchors: new Set(),
     expandedArcs: new Set(),
+    curves: src.curves ? src.curves.map(c => ({
+      ...c,
+      id: Date.now() + Math.random(),
+      anchors: c.anchors.map(transformPoint),
+      segments: c.segments.map(s => s ? ({ h0: transformPoint(s.h0), h1: transformPoint(s.h1), eccentricity: s.eccentricity, compiled: null, compiledRef: null }) : null),
+      anchorLocked: c.anchorLocked ? [...c.anchorLocked] : [],
+      activeSegments: new Set(),
+      expandedAnchors: new Set(),
+      expandedArcs: new Set(),
+      gradientFromArcs: new Set(c.gradientFromArcs instanceof Set ? c.gradientFromArcs : []),
+      gradientToArcs: new Set(c.gradientToArcs instanceof Set ? c.gradientToArcs : []),
+    })) : null,
+    regions: [],
   };
 }
 
@@ -5184,6 +5396,8 @@ function makeTransformedArcAnimation(src, segIdx, transformPoint) {
     expanded: false,
     expandedAnchors: new Set(),
     expandedArcs: new Set(),
+    curves: null,
+    regions: [],
   };
 }
 
@@ -5212,6 +5426,7 @@ function createSideActionCopy(src, kind) {
   if (kind === 'reflect' && isTextAnim(anim)) anim.textScaleX = -(anim.textScaleX || 1);
   animations.push(anim);
   recompileAnim(anim);
+  if (anim.curves) for (const c of anim.curves) recompileAnim(c);
 
   selectedGroupId = null;
   selectedId = src.id;
@@ -5677,15 +5892,19 @@ function segmentHitCandidate(anim, cx, cy) {
     return { dist, hit: { anim, segIdx: 0, text: true } };
   }
   let bestHit = null, bestDist = Infinity;
-  for (let segIdx = 0; segIdx < anim.segments.length; segIdx++) {
-    const seg = anim.segments[segIdx];
-    if (!seg || !seg.compiled) continue;
-    if (seg.visible === false && editModeAnimId !== anim.id) continue;
-    const samples = sampleCompiledAdaptive(seg.compiled);
-    const hit = polylineHitInfo(samples, cx, cy);
-    if (hit.dist < bestDist) {
-      bestDist = hit.dist;
-      bestHit = { anim, segIdx, u: hit.u };
+  // Merged objects store constituent curves in anim.curves; fall back to [anim] for single curves.
+  const curvesToScan = anim.curves ?? [anim];
+  for (const c of curvesToScan) {
+    for (let segIdx = 0; segIdx < c.segments.length; segIdx++) {
+      const seg = c.segments[segIdx];
+      if (!seg || !seg.compiled) continue;
+      if (seg.visible === false && editModeAnimId !== anim.id) continue;
+      const samples = sampleCompiledAdaptive(seg.compiled);
+      const hit = polylineHitInfo(samples, cx, cy);
+      if (hit.dist < bestDist) {
+        bestDist = hit.dist;
+        bestHit = { anim, segIdx, u: hit.u };
+      }
     }
   }
   return bestHit ? { dist: bestDist, hit: bestHit } : null;
@@ -6707,6 +6926,7 @@ canvas.addEventListener('mousedown', e => {
         startMathX: mathX, startMathY: mathY,
         origAnchors: fb.anchors.map(cloneCx),
         origSegs: fb.segments.map(s => s ? ({ h0: cloneCx(s.h0), h1: cloneCx(s.h1) }) : null),
+        ...(fb.curves ? { mergedCurves: true, origStates: fb.curves.map(cloneTransformState) } : {}),
       };
       selectedGroupId = null;
       selectedId = fb.id;
@@ -6729,6 +6949,7 @@ canvas.addEventListener('mousedown', e => {
           handle: resizeHit.handle,
           startMathX: mathX, startMathY: mathY,
           origBounds: primBounds ?? frameMathBounds(frame),
+          ...(resizeHit.anim.curves ? { mergedCurves: true, origStates: resizeHit.anim.curves.map(cloneTransformState) } : {}),
         };
       }
     } else if (resizeHit.groupId != null) {
@@ -7135,7 +7356,7 @@ window.addEventListener('mousemove', e => {
   }
 
   if (frameDrag) {
-    if (frameDrag.groupId != null || frameDrag.multi) {
+    if (frameDrag.groupId != null || frameDrag.multi || frameDrag.mergedCurves) {
       const dx = softSnap(mathX - frameDrag.startMathX), dy = softSnap(mathY - frameDrag.startMathY);
       applyGroupTranslation(frameDrag, dx, dy);
       draw(); return;
@@ -9150,14 +9371,15 @@ function selectedObjectCanvasBounds(anim) {
   }
 
   let bounds = null;
-  for (const seg of anim.segments) {
-    if (!seg || !seg.compiled) continue;
-    for (const pt of sampleCompiledAdaptive(seg.compiled)) {
-      bounds = includeCanvasPoint(bounds, pt);
+  const curvesToBound = anim.curves ?? [anim];
+  for (const c of curvesToBound) {
+    for (const seg of c.segments) {
+      if (!seg || !seg.compiled) continue;
+      for (const pt of sampleCompiledAdaptive(seg.compiled)) bounds = includeCanvasPoint(bounds, pt);
     }
-  }
-  if (!bounds) {
-    for (const anchor of anim.anchors) bounds = includeCanvasPoint(bounds, toCanvas(anchor.re, anchor.im));
+    if (!bounds) {
+      for (const anchor of c.anchors) bounds = includeCanvasPoint(bounds, toCanvas(anchor.re, anchor.im));
+    }
   }
   return bounds;
 }
@@ -9274,15 +9496,18 @@ function objectMathBounds(anim) {
   }
 
   let bounds = null;
-  for (const seg of anim.segments) {
-    if (!seg || !seg.compiled) continue;
-    for (const pt of sampleCompiledAdaptive(seg.compiled)) {
-      const [mx, my] = toMath(pt[0], pt[1]);
-      bounds = includeMathPoint(bounds, new Cx(mx, my));
+  const curvesToBound = anim.curves ?? [anim];
+  for (const c of curvesToBound) {
+    for (const seg of c.segments) {
+      if (!seg || !seg.compiled) continue;
+      for (const pt of sampleCompiledAdaptive(seg.compiled)) {
+        const [mx, my] = toMath(pt[0], pt[1]);
+        bounds = includeMathPoint(bounds, new Cx(mx, my));
+      }
     }
-  }
-  if (!bounds) {
-    for (const anchor of anim.anchors) bounds = includeMathPoint(bounds, anchor);
+    if (!bounds) {
+      for (const anchor of c.anchors) bounds = includeMathPoint(bounds, anchor);
+    }
   }
   return bounds;
 }
@@ -10357,6 +10582,15 @@ function transformResizeSeg(seg, transformPoint) {
 }
 
 function restoreResizeOriginalAnim(drag) {
+  if (drag.mergedCurves) {
+    for (const state of drag.origStates) {
+      state.anim.anchors = state.origAnchors.map(cloneCx);
+      state.anim.segments = state.origSegs.map(cloneResizeSeg);
+      state.anim.anchorLocked = state.origAnchorLocked ? [...state.origAnchorLocked] : [];
+      recompileAnim(state.anim);
+    }
+    return;
+  }
   const { anim } = drag;
   anim.kind = drag.origKind;
   anim.closed = !!drag.origClosed;
@@ -10547,7 +10781,7 @@ function applySideResizeShearForCursor(drag, mathX, mathY) {
 
 function applyResizeOrShearForCursor(drag, mathX, mathY) {
   if (drag.multi) return applyMultiSelectionResizeOrShearForCursor(drag, mathX, mathY);
-  if (drag.groupId != null) return applyGroupResizeOrShearForCursor(drag, mathX, mathY);
+  if (drag.groupId != null || drag.mergedCurves) return applyGroupResizeOrShearForCursor(drag, mathX, mathY);
   if (isSideResizeHandle(drag.handle)) return applySideResizeShearForCursor(drag, mathX, mathY);
   drag.anim.selectionGuideShear = null;
   const nextBounds = resizeBoundsForCursor(drag, mathX, mathY);
@@ -10726,7 +10960,7 @@ function rotationCenterForMultiSelection() {
 }
 
 function applyRotationDelta(drag, delta) {
-  if (drag.groupId != null || drag.multi) {
+  if (drag.groupId != null || drag.multi || drag.mergedCurves) {
     for (const state of drag.origStates) {
       applyPointTransformFromState(
         state,
@@ -10772,6 +11006,7 @@ function beginRotationDragFromHit(rotateHit, mathX, mathY, flags = {}) {
         ...cloneTransformState(rotateHit.anim),
         center: new Cx(cRe, cIm),
         startAngle: Math.atan2(mathY - cIm, mathX - cRe),
+        ...(rotateHit.anim.curves ? { mergedCurves: true, origStates: rotateHit.anim.curves.map(cloneTransformState) } : {}),
         ...flags,
       };
     }
@@ -11199,6 +11434,23 @@ function drawCommittedAnimation(anim) {
   if (!anim || !isAnimEffectivelyVisible(anim) || anim.inPlacementMode) return;
   const inEditMode = (editModeAnimId === anim.id);
 
+  if (anim.curves) {
+    for (const c of anim.curves) {
+      const proxy = makeCurveProxy(anim, c);
+      if (isPrimitiveAnim(proxy)) {
+        drawPrimitive(proxy);
+      } else if (isTextAnim(proxy)) {
+        drawTextAnim(proxy);
+      } else {
+        if (proxy.anchors.length === 1 && proxy.segments.length === 0) drawDot(proxy);
+        if (canFillAnim(proxy) && animFillColor(proxy)) drawCurveFill(proxy, null, 1, []);
+        for (let i = 0; i < proxy.segments.length; i++) drawSegment(proxy, i);
+      }
+    }
+    drawSelectedObjectBounds(anim);
+    return;
+  }
+
   if (isPrimitiveAnim(anim)) {
     drawPrimitive(anim);
     drawSelectedObjectBounds(anim);
@@ -11362,6 +11614,7 @@ function drawAnimations() {
   drawGrid();
   drawGroupFills();
   drawGroupRegionFills();
+  drawObjectRegionFills();
   const dpr = devicePixelRatio;
 
   // Hover glow under hovered segment
@@ -12728,6 +12981,60 @@ function renderAnimThumbnail(anim, canvasEl, size = 48) {
   const mathPts = [];
   const addPt = (re, im) => { if (isFinite(re) && isFinite(im)) mathPts.push([re, im]); };
 
+  if (anim.curves) {
+    for (const c of anim.curves) {
+      c.anchors?.forEach(a => { if (a) addPt(a.re, a.im); });
+      c.segments?.forEach(seg => {
+        if (!seg?.compiled) return;
+        for (let i = 0; i <= 24; i++) {
+          try { const pt = seg.compiled(0, i / 24, {}); if (pt) addPt(pt.re, pt.im); } catch (_) {}
+        }
+      });
+    }
+    if (mathPts.length === 0) return;
+    let minRe = Infinity, maxRe = -Infinity, minIm = Infinity, maxIm = -Infinity;
+    for (const [re, im] of mathPts) {
+      if (re < minRe) minRe = re; if (re > maxRe) maxRe = re;
+      if (im < minIm) minIm = im; if (im > maxIm) maxIm = im;
+    }
+    const pad2 = 5 * dpr;
+    const rangeRe2 = maxRe - minRe || 1, rangeIm2 = maxIm - minIm || 1;
+    const drawW2 = PX - 2 * pad2, drawH2 = PX - 2 * pad2;
+    const ts2 = Math.min(drawW2 / rangeRe2, drawH2 / rangeIm2);
+    const ox2 = pad2 + (drawW2 - rangeRe2 * ts2) / 2;
+    const oy2 = pad2 + (drawH2 - rangeIm2 * ts2) / 2;
+    const T2 = (re, im) => [ox2 + (re - minRe) * ts2, PX - oy2 - (im - minIm) * ts2];
+    for (const c of anim.curves) {
+      const cColor = c.color || '#cdd6f4';
+      tctx.strokeStyle = cColor;
+      tctx.lineWidth = 1.5 * dpr; tctx.lineCap = 'round'; tctx.lineJoin = 'round';
+      const cFill = c.fillColor;
+      if (cFill && c.closed && c.segments?.some(s => !!s)) {
+        tctx.beginPath();
+        let open = false;
+        for (const seg of (c.segments ?? [])) {
+          if (!seg?.compiled) { if (open) { tctx.closePath(); open = false; } continue; }
+          for (let i = 0; i <= 24; i++) {
+            try { const pt = seg.compiled(0, i / 24, {}); if (!pt) continue; const [x,y] = T2(pt.re, pt.im); if (!open) { tctx.moveTo(x,y); open = true; } else tctx.lineTo(x,y); } catch (_) {}
+          }
+        }
+        if (open) tctx.closePath();
+        tctx.fillStyle = cFill; tctx.globalAlpha = c.fillOpacity ?? 0.3;
+        try { tctx.fill('evenodd'); } catch (_) { tctx.fill(); }
+      }
+      tctx.globalAlpha = 0.9;
+      for (const seg of (c.segments ?? [])) {
+        if (!seg?.compiled || seg.visible === false) continue;
+        tctx.beginPath(); let first = true;
+        for (let i = 0; i <= 24; i++) {
+          try { const pt = seg.compiled(0, i / 24, {}); if (!pt) continue; const [x,y] = T2(pt.re, pt.im); if (first) { tctx.moveTo(x,y); first = false; } else tctx.lineTo(x,y); } catch (_) {}
+        }
+        tctx.stroke();
+      }
+    }
+    return;
+  }
+
   if (isTextAnim(anim)) {
     const lines = textLines(anim);
     const hasText = lines.some(line => line.trim().length > 0);
@@ -13434,6 +13741,212 @@ function getEdgeDepartureAngle(anim, fromIdx, toIdx) {
   return Math.atan2(dy, dx); // math y-up coords
 }
 
+function detectObjectTopology(anim) {
+  anim.regions = [];
+  const curves = animCurves(anim).filter(a =>
+    !isPrimitiveAnim(a) && !isTextAnim(a) &&
+    a.segments.length > 0
+  );
+  if (curves.length < 2) return;
+
+  const EPSILON = 1e-6;
+  const keyToNode = new Map();
+  const nodePositions = [];
+  const ufParent = [];
+  const ufFind = id => { while (ufParent[id] !== id) { ufParent[id] = ufParent[ufParent[id]]; id = ufParent[id]; } return id; };
+  const ufUnion = (a, b) => { a = ufFind(a); b = ufFind(b); if (a !== b) ufParent[b] = a; };
+  for (const a of curves) {
+    for (let i = 0; i < a.anchors.length; i++) {
+      const pt = a.anchors[i];
+      const key = `${a.id}:${i}`;
+      for (const b of curves) {
+        if (b === a) continue;
+        for (let j = 0; j < b.anchors.length; j++) {
+          const bKey = `${b.id}:${j}`;
+          const bp = b.anchors[j];
+          if (Math.hypot(bp.re - pt.re, bp.im - pt.im) < EPSILON) {
+            if (!keyToNode.has(key)) { const id = nodePositions.length; keyToNode.set(key, id); ufParent.push(id); nodePositions.push({ re: pt.re, im: pt.im }); }
+            if (!keyToNode.has(bKey)) { const id = nodePositions.length; keyToNode.set(bKey, id); ufParent.push(id); nodePositions.push({ re: bp.re, im: bp.im }); }
+            ufUnion(keyToNode.get(key), keyToNode.get(bKey));
+          }
+        }
+      }
+    }
+  }
+  for (const a of curves) {
+    const n = a.anchors.length;
+    if (n < 2) continue;
+    const key0 = `${a.id}:0`, keyN = `${a.id}:${n - 1}`;
+    const p0 = a.anchors[0], pN = a.anchors[n - 1];
+    if (Math.hypot(pN.re - p0.re, pN.im - p0.im) < EPSILON) {
+      if (!keyToNode.has(key0)) { const id = nodePositions.length; keyToNode.set(key0, id); ufParent.push(id); nodePositions.push({ re: p0.re, im: p0.im }); }
+      if (!keyToNode.has(keyN)) { const id = nodePositions.length; keyToNode.set(keyN, id); ufParent.push(id); nodePositions.push({ re: pN.re, im: pN.im }); }
+      ufUnion(keyToNode.get(key0), keyToNode.get(keyN));
+    }
+  }
+  for (const [k, v] of keyToNode) keyToNode.set(k, ufFind(v));
+  const uniqueNodes = new Set(keyToNode.values());
+  if (uniqueNodes.size < 2) return;
+
+  const halfEdges = [];
+  for (const a of curves) {
+    const jIdxs = [];
+    for (let i = 0; i < a.anchors.length; i++) { if (keyToNode.has(`${a.id}:${i}`)) jIdxs.push(i); }
+    if (jIdxs.length < 2) continue;
+    for (let k = 0; k < jIdxs.length - 1; k++) {
+      const fromIdx = jIdxs[k], toIdx = jIdxs[k + 1];
+      let valid = true;
+      for (let si = fromIdx; si < toIdx; si++) { if (!a.segments[si]?.compiled) { valid = false; break; } }
+      if (!valid) continue;
+      const fwd = { animId: a.id, fromIdx, toIdx, depAngle: getEdgeDepartureAngle(a, fromIdx, toIdx), visited: false, twin: null };
+      const bwd = { animId: a.id, fromIdx: toIdx, toIdx: fromIdx, depAngle: getEdgeDepartureAngle(a, toIdx, fromIdx), visited: false, twin: null };
+      fwd.twin = bwd; bwd.twin = fwd;
+      halfEdges.push(fwd, bwd);
+    }
+  }
+  if (!halfEdges.length) return;
+
+  const outgoing = new Map();
+  for (const he of halfEdges) {
+    const nid = keyToNode.get(`${he.animId}:${he.fromIdx}`);
+    if (nid === undefined) continue;
+    if (!outgoing.has(nid)) outgoing.set(nid, []);
+    outgoing.get(nid).push(he);
+  }
+  for (const edges of outgoing.values()) edges.sort((a, b) => a.depAngle - b.depAngle);
+
+  const nextHE = he => {
+    const nid = keyToNode.get(`${he.animId}:${he.toIdx}`);
+    if (nid === undefined) return null;
+    const edges = outgoing.get(nid);
+    if (!edges?.length) return null;
+    const ti = edges.indexOf(he.twin);
+    if (ti === -1) return null;
+    return edges[(ti - 1 + edges.length) % edges.length];
+  };
+
+  const faces = [];
+  for (const startHE of halfEdges) {
+    if (startHE.visited) continue;
+    const face = [];
+    let he = startHE, steps = 0;
+    do {
+      he.visited = true;
+      face.push({ animId: he.animId, startIdx: he.fromIdx, endIdx: he.toIdx });
+      he = nextHE(he);
+      if (!he || ++steps > 500) break;
+    } while (he !== startHE);
+    if (he === startHE && face.length >= 2) faces.push(face);
+  }
+  if (!faces.length) return;
+
+  const curvesMap = new Map(curves.map(a => [a.id, a]));
+  let regionId = 0;
+  for (const face of faces) {
+    let area = 0, prevPt = null;
+    const accum = pt => { if (!pt) return; if (prevPt) area += prevPt[0] * pt[1] - pt[0] * prevPt[1]; prevPt = pt; };
+    for (const edge of face) {
+      const a = curvesMap.get(edge.animId);
+      if (!a) continue;
+      const fwd = edge.endIdx > edge.startIdx;
+      const sMin = Math.min(edge.startIdx, edge.endIdx), sMax = Math.max(edge.startIdx, edge.endIdx);
+      if (fwd) { for (let s = sMin; s < sMax; s++) { const sg = a.segments[s]; if (sg?.compiled) sampleCompiledAdaptive(sg.compiled).forEach(accum); } }
+      else { for (let s = sMax-1; s >= sMin; s--) { const sg = a.segments[s]; if (sg?.compiled) [...sampleCompiledAdaptive(sg.compiled)].reverse().forEach(accum); } }
+    }
+    area /= 2;
+    if (area >= 0 || Math.abs(area) < 100) continue;
+    anim.regions.push({ id: regionId++, boundary: face, fillColor: null, fillOpacity: 0.3, fillStyle: 'solid', gradientToColor: null, gradientToOpacity: 0 });
+  }
+}
+
+// Returns { essentialPoints: [{num, pos}], topoArcs: [{label, fromNum, toNum, curveId, fromIdx, toIdx}] }
+// Essential points = 0-cells of the CW complex (degree ≠ 2): endpoints, branch points, isolated.
+function computeObjectTopologyData(anim) {
+  const curves = animCurves(anim).filter(c => !isPrimitiveAnim(c) && !isTextAnim(c));
+  if (!curves.length) return { essentialPoints: [], topoArcs: [] };
+
+  const EPSILON = 1e-6;
+
+  // Flat list of all (curve, anchorIdx) refs
+  const pts = [];
+  for (const c of curves) {
+    for (let i = 0; i < c.anchors.length; i++) pts.push({ c, i });
+  }
+
+  // Union-find
+  const uf = pts.map((_, j) => j);
+  const find = j => { while (uf[j] !== j) { uf[j] = uf[uf[j]]; j = uf[j]; } return j; };
+  const union = (a, b) => { a = find(a); b = find(b); if (a !== b) uf[b] = a; };
+
+  // Union all coincident anchor pairs (n is small per object so O(n²) is fine)
+  for (let a = 0; a < pts.length; a++) {
+    const pa = pts[a].c.anchors[pts[a].i];
+    if (!pa) continue;
+    for (let b = a + 1; b < pts.length; b++) {
+      const pb = pts[b].c.anchors[pts[b].i];
+      if (!pb) continue;
+      if (Math.hypot(pb.re - pa.re, pb.im - pa.im) < EPSILON) union(a, b);
+    }
+  }
+
+  // Degree of each root (# incident segment half-edges)
+  const degree = new Map();
+  for (let j = 0; j < pts.length; j++) {
+    const { c, i } = pts[j];
+    const root = find(j);
+    const nSeg = c.segments.length;
+    const d = (i > 0 && i <= nSeg ? 1 : 0) + (i < nSeg ? 1 : 0);
+    degree.set(root, (degree.get(root) ?? 0) + d);
+  }
+
+  // Number essential roots (degree ≠ 2) by first appearance
+  const rootToNum = new Map();
+  const rootSumRe = new Map(), rootSumIm = new Map(), rootCnt = new Map();
+  for (let j = 0; j < pts.length; j++) {
+    const root = find(j);
+    if ((degree.get(root) ?? 0) === 2) continue;
+    const pt = pts[j].c.anchors[pts[j].i];
+    if (!pt) continue;
+    if (!rootToNum.has(root)) rootToNum.set(root, rootToNum.size);
+    rootSumRe.set(root, (rootSumRe.get(root) ?? 0) + pt.re);
+    rootSumIm.set(root, (rootSumIm.get(root) ?? 0) + pt.im);
+    rootCnt.set(root, (rootCnt.get(root) ?? 0) + 1);
+  }
+
+  const essentialPoints = [];
+  for (const [root, num] of rootToNum) {
+    const cnt = rootCnt.get(root);
+    essentialPoints.push({ num, pos: { re: rootSumRe.get(root) / cnt, im: rootSumIm.get(root) / cnt } });
+  }
+  essentialPoints.sort((a, b) => a.num - b.num);
+
+  // Topological arcs: consecutive essential-anchor pairs per curve
+  const topoArcs = [];
+  let offset = 0;
+  for (const c of curves) {
+    const essIdxs = [];
+    for (let i = 0; i < c.anchors.length; i++) {
+      const root = find(offset + i);
+      if ((degree.get(root) ?? 0) !== 2) essIdxs.push(i);
+    }
+    if (essIdxs.length === 0) {
+      if (c.segments.length > 0)
+        topoArcs.push({ label: 'Loop', fromNum: null, toNum: null, curveId: c.id, fromIdx: 0, toIdx: c.anchors.length - 1 });
+    } else {
+      for (let k = 0; k + 1 < essIdxs.length; k++) {
+        const fi = essIdxs[k], ti = essIdxs[k + 1];
+        const fromNum = rootToNum.get(find(offset + fi));
+        const toNum   = rootToNum.get(find(offset + ti));
+        if (fromNum !== undefined && toNum !== undefined)
+          topoArcs.push({ label: `${fromNum}-${toNum}`, fromNum, toNum, curveId: c.id, fromIdx: fi, toIdx: ti });
+      }
+    }
+    offset += c.anchors.length;
+  }
+
+  return { essentialPoints, topoArcs };
+}
+
 function detectRegionsForGroup(groupId) {
   const grp = groups.find(g => g.id === groupId);
   if (!grp) return;
@@ -13634,6 +14147,35 @@ function drawGroupRegionFills() {
   }
 }
 
+function drawObjectRegionFills() {
+  for (const anim of animations) {
+    if (!anim.regions?.length || !isAnimEffectivelyVisible(anim)) continue;
+    const curvesMap = new Map(animCurves(anim).map(c => [c.id, c]));
+    for (const region of anim.regions) {
+      if (!region.fillColor) continue;
+      const opacity = region.fillOpacity ?? 0.3;
+      ctx.save();
+      ctx.beginPath();
+      addRegionBoundaryToPathLike(ctx, region.boundary, curvesMap);
+      if (region.fillStyle === 'gradient') {
+        const bounds = computeRegionCanvasBounds(region, curvesMap);
+        const c1 = parseColorToRgb(region.fillColor);
+        const c2 = parseColorToRgb(region.gradientToColor || region.fillColor);
+        if (bounds && c1 && c2) {
+          const gx2 = Math.abs(bounds.right - bounds.left) < 1 ? bounds.left + 1 : bounds.right;
+          const gy2 = Math.abs(bounds.bottom - bounds.top) < 1 ? bounds.top : bounds.bottom;
+          const grad = ctx.createLinearGradient(bounds.left, bounds.top, gx2, gy2);
+          grad.addColorStop(0, rgbaCss(c1, opacity));
+          grad.addColorStop(1, rgbaCss(c2, region.gradientToOpacity ?? 0));
+          ctx.fillStyle = grad; ctx.globalAlpha = 1;
+        } else { ctx.fillStyle = region.fillColor; ctx.globalAlpha = opacity; }
+      } else { ctx.fillStyle = region.fillColor; ctx.globalAlpha = opacity; }
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+}
+
 function hitTestGroupRegion(groupId, cx, cy) {
   const grp = groups.find(g => g.id === groupId);
   if (!grp?.regions?.length) return null;
@@ -13691,6 +14233,38 @@ function groupHasLinkableCurves(groupId) {
   return false;
 }
 
+function objectHasLinkableCurves(anim) {
+  if (!anim.curves) return false;
+  const LINK_THRESH_PX = 20 * devicePixelRatio;
+  const curves = animCurves(anim).filter(a =>
+    !isPrimitiveAnim(a) && !isTextAnim(a) && a.segments.length > 0);
+  if (curves.length < 2) return false;
+  curves.forEach(a => recompileAnim(a));
+  const eps = [];
+  for (const a of curves) {
+    if (a.closed) continue;
+    const n = a.anchors.length;
+    if (n < 2) continue;
+    const [fx, fy] = toCanvas(a.anchors[0].re, a.anchors[0].im);
+    const [lx, ly] = toCanvas(a.anchors[n - 1].re, a.anchors[n - 1].im);
+    eps.push({ animId: a.id, cx: fx, cy: fy });
+    eps.push({ animId: a.id, cx: lx, cy: ly });
+  }
+  if (!eps.length) return false;
+  for (const ep of eps) {
+    for (const a of curves) {
+      if (a.id === ep.animId) continue;
+      for (const seg of a.segments) {
+        if (!seg?.compiled) continue;
+        for (const pt of sampleCompiledAdaptive(seg.compiled)) {
+          if (pt && Math.hypot(pt[0] - ep.cx, pt[1] - ep.cy) < LINK_THRESH_PX) return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
 function unlinkGroupCurves(groupId) {
   pushUndo();
   const grp = groups.find(g => g.id === groupId);
@@ -13701,6 +14275,123 @@ function unlinkGroupCurves(groupId) {
   hoveredRegionGroupId = null;
   saveProject();
   renderAnimList(); draw();
+}
+
+function linkObjectCurves(anim) {
+  const LINK_THRESH_PX = 20 * devicePixelRatio;
+  const SNAP_STEPS = 40;
+  // Use at least 20px worth of math units so linking works regardless of snap setting
+  const mathThresh = Math.max(snapCurveThreshold(), LINK_THRESH_PX / scale);
+  const curves = animCurves(anim).filter(a =>
+    !isPrimitiveAnim(a) && !isTextAnim(a) &&
+    a.segments.length > 0
+  );
+  if (curves.length < 2) return;
+  curves.forEach(a => recompileAnim(a));
+
+  const autoSnapped = new Set();
+  for (const a of curves) {
+    if (a.closed) continue;
+    const n = a.anchors.length;
+    if (n < 2) continue;
+    const p0 = a.anchors[0], pN = a.anchors[n - 1];
+    if (Math.hypot(pN.re - p0.re, pN.im - p0.im) < mathThresh) {
+      const centRe = (p0.re + pN.re) / 2, centIm = (p0.im + pN.im) / 2;
+      p0.re = centRe; p0.im = centIm; pN.re = centRe; pN.im = centIm;
+      autoSnapped.add(a.id);
+    }
+  }
+
+  const eps = [];
+  for (const a of curves) {
+    if (a.closed || autoSnapped.has(a.id)) continue;
+    const n = a.anchors.length;
+    if (n < 2) continue;
+    eps.push({ anim: a, anchor: a.anchors[0],   canvasPos: toCanvas(a.anchors[0].re,   a.anchors[0].im),   matched: false });
+    eps.push({ anim: a, anchor: a.anchors[n-1], canvasPos: toCanvas(a.anchors[n-1].re, a.anchors[n-1].im), matched: false });
+  }
+
+  const uf1 = eps.map((_, i) => i);
+  const uf1Find = id => { while (uf1[id] !== id) { uf1[id] = uf1[uf1[id]]; id = uf1[id]; } return id; };
+  const uf1Union = (a, b) => { a = uf1Find(a); b = uf1Find(b); if (a !== b) uf1[b] = a; };
+  for (let i = 0; i < eps.length; i++) {
+    for (let j = i + 1; j < eps.length; j++) {
+      if (eps[i].anim === eps[j].anim) continue;
+      if (Math.hypot(eps[i].anchor.re - eps[j].anchor.re, eps[i].anchor.im - eps[j].anchor.im) < mathThresh)
+        uf1Union(i, j);
+    }
+  }
+  const ep1Clusters = new Map();
+  for (let i = 0; i < eps.length; i++) { const r = uf1Find(i); if (!ep1Clusters.has(r)) ep1Clusters.set(r, []); ep1Clusters.get(r).push(i); }
+  for (const members of ep1Clusters.values()) {
+    const anims = new Set(members.map(i => eps[i].anim));
+    if (anims.size < 2) continue;
+    const centRe = members.reduce((s, i) => s + eps[i].anchor.re, 0) / members.length;
+    const centIm = members.reduce((s, i) => s + eps[i].anchor.im, 0) / members.length;
+    for (const i of members) { eps[i].anchor.re = centRe; eps[i].anchor.im = centIm; eps[i].matched = true; }
+  }
+
+  for (const ep of eps) {
+    if (ep.matched) continue;
+    const [ex, ey] = ep.canvasPos;
+    let bestDist = LINK_THRESH_PX, bestAnim = null, bestSi = -1, bestT = 0;
+    for (const other of curves) {
+      if (other === ep.anim) continue;
+      for (let si = 0; si < other.segments.length; si++) {
+        const seg = other.segments[si];
+        if (!seg?.compiled) continue;
+        for (let k = 0; k <= SNAP_STEPS; k++) {
+          const t = k / SNAP_STEPS;
+          const pt = compiledCanvasPoint(seg.compiled, t);
+          if (!pt) continue;
+          const d = Math.hypot(pt[0] - ex, pt[1] - ey);
+          if (d < bestDist) { bestDist = d; bestAnim = other; bestSi = si; bestT = t; }
+        }
+      }
+    }
+    if (!bestAnim) continue;
+    const segC = bestAnim.segments[bestSi];
+    let lo = Math.max(0, bestT - 2/SNAP_STEPS), hi = Math.min(1, bestT + 2/SNAP_STEPS);
+    for (let iter = 0; iter < 20; iter++) {
+      const t1 = lo + (hi-lo)/3, t2 = hi - (hi-lo)/3;
+      const p1 = compiledCanvasPoint(segC.compiled, t1), p2 = compiledCanvasPoint(segC.compiled, t2);
+      if (!p1 || !p2) break;
+      if (Math.hypot(p1[0]-ex, p1[1]-ey) < Math.hypot(p2[0]-ex, p2[1]-ey)) hi = t2; else lo = t1;
+    }
+    const refinedT = (lo + hi) / 2;
+    {
+      const segS = bestAnim.segments[bestSi];
+      const A0 = bestAnim.anchors[bestSi], A1 = bestAnim.anchors[bestSi + 1];
+      const mt = 1 - refinedT, t = refinedT;
+      const snapRe = mt*mt*mt*A0.re + 3*mt*mt*t*segS.h0.re + 3*mt*t*t*segS.h1.re + t*t*t*A1.re;
+      const snapIm = mt*mt*mt*A0.im + 3*mt*mt*t*segS.h0.im + 3*mt*t*t*segS.h1.im + t*t*t*A1.im;
+      if (Math.hypot(snapRe - ep.anchor.re, snapIm - ep.anchor.im) > mathThresh) continue;
+    }
+    ep.matched = true;
+    if (refinedT > 0.02 && refinedT < 0.98) {
+      splitSegmentAtT(bestAnim, bestSi, refinedT);
+      recompileAnim(bestAnim);
+      ep.anchor.re = bestAnim.anchors[bestSi + 1].re;
+      ep.anchor.im = bestAnim.anchors[bestSi + 1].im;
+    } else {
+      const snapIdx = refinedT <= 0.02 ? bestSi : bestSi + 1;
+      ep.anchor.re = bestAnim.anchors[snapIdx].re;
+      ep.anchor.im = bestAnim.anchors[snapIdx].im;
+    }
+  }
+
+  curves.forEach(a => recompileAnim(a));
+
+  const linkedPairs = new Set();
+  for (const ep of eps) { if (ep.matched) { for (const other of eps) { if (other !== ep && other.matched && other.anim !== ep.anim && Math.hypot(ep.anchor.re - other.anchor.re, ep.anchor.im - other.anchor.im) < mathThresh) { const key = [ep.anim.id, other.anim.id].sort().join(':'); linkedPairs.add(key); } } } }
+  if (hasCurveTopologyCycle(linkedPairs, curves)) {
+    for (const [animA, animB] of [...linkedPairs].map(k => k.split(':').map(id => curves.find(a => String(a.id) === id)).filter(Boolean))) {
+      if (animA && animB) addIntersectionAnchors(animA, animB);
+    }
+    curves.forEach(a => recompileAnim(a));
+  }
+
+  detectObjectTopology(anim);
 }
 
 function linkGroupCurves(groupId, skipUndo = false) {
@@ -14247,13 +14938,7 @@ function renderGroupDetail(detailEl, groupId) {
   const grpObj = groups.find(grp => grp.id === groupId);
   if (!grpObj) return;
 
-  // Auto-trigger region detection when Regions tab is first opened
-  const _activeTab = grpObj.detailTab || 'regions';
-  if (_activeTab === 'regions' && !grpObj.regions?.length && groupHasLinkableCurves(groupId)) {
-    linkGroupCurves(groupId, true);
-    return; // linkGroupCurves calls renderAnimList; re-entry will render with regions
-  }
-
+  // Header
   const header = document.createElement('div');
   header.className = 'detail-header';
   const leftGroup = document.createElement('div');
@@ -14300,22 +14985,6 @@ function renderGroupDetail(detailEl, groupId) {
   ungroupBtn.textContent = 'Ungroup';
   ungroupBtn.addEventListener('click', e => { e.stopPropagation(); ungroup(groupId); });
 
-  const fillColorBtn = document.createElement('button');
-  fillColorBtn.className = 'anim-color-btn';
-  fillColorBtn.title = grpObj?.fillColor ? 'Edit group fill color' : 'Add group fill color';
-  if (grpObj?.fillColor) {
-    fillColorBtn.style.background = grpObj.fillColor;
-  } else {
-    fillColorBtn.style.background = 'repeating-conic-gradient(#6c7086 0% 25%, #313244 0% 50%) 0 0 / 8px 8px';
-    fillColorBtn.style.opacity = '0.6';
-  }
-  fillColorBtn.addEventListener('click', e => {
-    e.stopPropagation();
-    openColorMenuGroupId = openColorMenuGroupId === groupId ? null : groupId;
-    openColorMenuAnimId = null;
-    renderAnimList();
-  });
-
   const isHidden = isGroupEffectivelyHidden(groupId);
   const visBtn = document.createElement('button');
   visBtn.className = 'anim-icon-btn anim-vis-btn' + (isHidden ? ' is-hidden' : '');
@@ -14334,59 +15003,89 @@ function renderGroupDetail(detailEl, groupId) {
   delBtn.className = 'anim-icon-btn anim-delete-btn';
   delBtn.title = 'Delete group';
   delBtn.textContent = '×';
-  delBtn.addEventListener('click', e => {
-    e.stopPropagation();
-    deleteGroup(groupId);
-  });
-  rightGroup.append(ungroupBtn, fillColorBtn, visBtn, delBtn);
+  delBtn.addEventListener('click', e => { e.stopPropagation(); deleteGroup(groupId); });
+
+  rightGroup.append(ungroupBtn, visBtn, delBtn);
   header.append(leftGroup, rightGroup);
   detailEl.appendChild(header);
 
-  detailEl.addEventListener('click', e => {
-    let changed = false;
-    if (openColorMenuGroupId === groupId) { openColorMenuGroupId = null; changed = true; }
-    if (openColorMenuRegionGroupId === groupId) { openColorMenuRegionId = null; openColorMenuRegionGroupId = null; changed = true; }
-    if (changed) renderAnimList();
-  }, { once: true });
+  // Member list
+  const list = document.createElement('div');
+  list.style.cssText = 'overflow-y:auto; min-height:0; flex:1; padding:4px 0;';
 
-  if (openColorMenuGroupId === groupId && grpObj) {
-    appendGroupColorExpansion(detailEl, grpObj);
-    updateToolPanel(); return;
-  }
+  for (const item of items) {
+    const isGroupItem = item.type === 'group';
+    const grpItem = isGroupItem ? item.item : null;
+    const animItem = isGroupItem ? null : item.item;
 
-  if (!grpObj.detailTab) grpObj.detailTab = 'regions';
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex; align-items:center; padding:4px 8px; gap:6px; border-radius:4px;';
+    row.addEventListener('mouseenter', () => row.style.background = '#313244');
+    row.addEventListener('mouseleave', () => row.style.background = '');
 
-  const tabBar = document.createElement('div');
-  tabBar.className = 'detail-tabs';
-  for (const [tabId, tabLabel] of [['anchors', 'Anchors'], ['arcs', 'Arcs'], ['regions', 'Regions']]) {
-    const btn = document.createElement('button');
-    btn.className = 'detail-tab' + (grpObj.detailTab === tabId ? ' active' : '');
-    btn.textContent = tabLabel;
-    btn.addEventListener('click', e => {
+    const labelEl = document.createElement('span');
+    labelEl.style.cssText = 'flex:1; font-size:0.8rem; color:#cdd6f4; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;';
+    if (isGroupItem) {
+      labelEl.textContent = grpItem.name || `Group ${groupHierarchicalNumber(grpItem.id)}`;
+    } else {
+      labelEl.textContent = animItem.name || animItem.letter;
+    }
+    row.appendChild(labelEl);
+
+    const itemIsHidden = isGroupItem ? isGroupEffectivelyHidden(grpItem.id) : !animItem.visible;
+    const itemVisBtn = document.createElement('button');
+    itemVisBtn.className = 'anim-icon-btn anim-vis-btn' + (itemIsHidden ? ' is-hidden' : '');
+    itemVisBtn.title = itemIsHidden ? 'Show' : 'Hide';
+    itemVisBtn.appendChild(makeVisibilityIcon(!itemIsHidden));
+    itemVisBtn.addEventListener('click', e => {
       e.stopPropagation();
-      grpObj.detailTab = tabId;
+      pushUndo();
+      if (isGroupItem) {
+        const g = groups.find(grp => grp.id === grpItem.id);
+        if (g) g.hidden = !g.hidden;
+      } else {
+        animItem.visible = !animItem.visible;
+      }
+      saveProject(); renderAnimList(); draw();
+    });
+    row.appendChild(itemVisBtn);
+
+    const itemDelBtn = document.createElement('button');
+    itemDelBtn.className = 'anim-icon-btn anim-delete-btn';
+    itemDelBtn.title = 'Delete';
+    itemDelBtn.textContent = '×';
+    itemDelBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      if (isGroupItem) deleteGroup(grpItem.id); else deleteAnimation(animItem.id);
+    });
+    row.appendChild(itemDelBtn);
+
+    const drillBtn = document.createElement('button');
+    drillBtn.style.cssText = 'background:none; border:none; color:#6c7086; font-size:1.1rem; cursor:pointer; padding:0 4px; flex-shrink:0; line-height:1;';
+    drillBtn.textContent = '›';
+    drillBtn.title = 'View details';
+    drillBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      if (isGroupItem) {
+        selectGroup(grpItem.id);
+      } else {
+        selectedGroupId = null;
+        selectedId = animItem.id;
+      }
       renderAnimList();
     });
-    tabBar.appendChild(btn);
-  }
-  detailEl.appendChild(tabBar);
+    row.appendChild(drillBtn);
 
-  const tabContent = document.createElement('div');
-  tabContent.style.cssText = 'overflow-y:auto; min-height:0; flex:1;';
-  if (grpObj.detailTab === 'anchors') {
-    renderGroupAnchorsTab(tabContent, groupId, grpObj);
-  } else if (grpObj.detailTab === 'arcs') {
-    renderGroupArcsTab(tabContent, groupId, grpObj);
-  } else {
-    renderGroupRegionsTab(tabContent, groupId, grpObj);
+    list.appendChild(row);
   }
-  detailEl.appendChild(tabContent);
 
+  detailEl.appendChild(list);
   updateToolPanel();
 }
 
 function updateGroupObjectsButton() {
   const btn = document.getElementById('group-objects-btn');
+  const mergeBtn = document.getElementById('merge-objects-btn');
   if (!btn) return;
   btn.className = '';
   btn.disabled = false;
@@ -14394,6 +15093,11 @@ function updateGroupObjectsButton() {
   const objectDetailOpen = (selectedId != null || editModeAnimId != null) && !groupActive;
   const shouldShow = !activeLineToolOptionsAnim() && !groupActive && (groupSelectionMode || !objectDetailOpen);
   btn.style.display = shouldShow ? 'block' : 'none';
+  if (mergeBtn) {
+    const showMerge = isMultiSelectionActive() && !groupSelectionMode && !groupActive;
+    mergeBtn.style.display = showMerge ? 'block' : 'none';
+    mergeBtn.className = showMerge ? 'is-ready' : '';
+  }
   if (!shouldShow) return;
 
   if (groupSelectionMode) {
@@ -14801,6 +15505,349 @@ function drawCurveSchematic(canvas, anim) {
   }
 }
 
+// Shared geometric schematic drawn above the Points/Arcs/Regions tab bar.
+// mode: 'points' | 'arcs' | 'regions'
+function drawObjectSchematic(canvasEl, anim, mode, opts = {}) {
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvasEl.width, H = canvasEl.height;
+  const ctx = canvasEl.getContext('2d');
+  ctx.clearRect(0, 0, W, H);
+
+  const curves = animCurves(anim).filter(c => !isPrimitiveAnim(c) && !isTextAnim(c));
+  if (!curves.length) return;
+
+  // ── Bounding box over all anchors and control points ──
+  let minRe = Infinity, maxRe = -Infinity, minIm = Infinity, maxIm = -Infinity;
+  const expandBB = pt => {
+    if (!pt) return;
+    minRe = Math.min(minRe, pt.re); maxRe = Math.max(maxRe, pt.re);
+    minIm = Math.min(minIm, pt.im); maxIm = Math.max(maxIm, pt.im);
+  };
+  for (const c of curves) {
+    for (const a of c.anchors) expandBB(a);
+    for (const seg of c.segments) { if (seg) { expandBB(seg.h0); expandBB(seg.h1); } }
+  }
+  if (!isFinite(minRe)) return;
+
+  const PAD = 20 * dpr;
+  const rangeRe = Math.max(maxRe - minRe, 1e-6);
+  const rangeIm = Math.max(maxIm - minIm, 1e-6);
+  const sc = Math.min((W - PAD * 2) / rangeRe, (H - PAD * 2) / rangeIm);
+  const offX = (W - rangeRe * sc) / 2;
+  const offY = (H - rangeIm * sc) / 2;
+  const toC = pt => ({ x: offX + (pt.re - minRe) * sc, y: H - (offY + (pt.im - minIm) * sc) });
+
+  // ── Draw curve strokes ──
+  for (const c of curves) {
+    const isPolyline = isPolylineAnim(c);
+    ctx.strokeStyle = (c.color || anim.color || '#89b4fa') + 'bb';
+    ctx.lineWidth = 1.5 * dpr;
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    for (let i = 0; i < c.segments.length; i++) {
+      const seg = c.segments[i];
+      const p0 = c.anchors[i], p1 = c.anchors[i + 1];
+      if (!p0 || !p1) continue;
+      const { x: ax, y: ay } = toC(p0);
+      const { x: bx, y: by } = toC(p1);
+      ctx.beginPath(); ctx.moveTo(ax, ay);
+      if (!isPolyline && seg?.h0 && seg?.h1) {
+        const { x: cx0, y: cy0 } = toC(seg.h0);
+        const { x: cx1, y: cy1 } = toC(seg.h1);
+        ctx.bezierCurveTo(cx0, cy0, cx1, cy1, bx, by);
+      } else { ctx.lineTo(bx, by); }
+      ctx.stroke();
+    }
+  }
+
+  const { essentialPoints, topoArcs } = computeObjectTopologyData(anim);
+  const curvesMap = new Map(curves.map(c => [c.id, c]));
+
+  if (mode === 'points') {
+    const nodeR = 9 * dpr;
+    // Build display positions and relax overlapping badges apart
+    const disp = essentialPoints.map(ep => { const {x, y} = toC(ep.pos); return {num: ep.num, x, y, ox: x, oy: y}; });
+    const minDist = nodeR * 2.4;
+    for (let iter = 0; iter < 20; iter++) {
+      for (let i = 0; i < disp.length; i++) {
+        for (let j = i + 1; j < disp.length; j++) {
+          const dx = disp[j].x - disp[i].x, dy = disp[j].y - disp[i].y;
+          const d = Math.hypot(dx, dy) || 0.01;
+          if (d < minDist) {
+            const push = (minDist - d) / 2, nx = dx / d, ny = dy / d;
+            disp[i].x -= nx * push; disp[i].y -= ny * push;
+            disp[j].x += nx * push; disp[j].y += ny * push;
+          }
+        }
+      }
+      for (const p of disp) { p.x += (p.ox - p.x) * 0.15; p.y += (p.oy - p.y) * 0.15; }
+    }
+    // Clamp to canvas bounds
+    for (const p of disp) {
+      p.x = Math.max(nodeR + 1, Math.min(W - nodeR - 1, p.x));
+      p.y = Math.max(nodeR + 1, Math.min(H - nodeR - 1, p.y));
+    }
+    const selectedNum = opts.selectedNode ?? -1;
+    const hoveredNum = opts.hoveredNode ?? -1;
+    ctx.font = `${Math.round(8.5 * dpr)}px monospace`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    for (const { num, x, y } of disp) {
+      const isSel = num === selectedNum;
+      const isHov = num === hoveredNum && !isSel;
+      if (isHov) {
+        ctx.beginPath(); ctx.arc(x, y, nodeR + 3 * dpr, 0, Math.PI * 2);
+        ctx.strokeStyle = '#89b4fa55'; ctx.lineWidth = 1.5 * dpr; ctx.stroke();
+      }
+      ctx.beginPath(); ctx.arc(x, y, nodeR, 0, Math.PI * 2);
+      ctx.fillStyle = isSel ? '#89b4fa' : '#1e1e2e'; ctx.fill();
+      ctx.strokeStyle = '#89b4fa'; ctx.lineWidth = 1.5 * dpr; ctx.stroke();
+      ctx.fillStyle = isSel ? '#1e1e2e' : '#cdd6f4'; ctx.fillText(String(num), x, y);
+    }
+
+  } else if (mode === 'arcs') {
+    // ── Small dots at essential points + arc midpoint labels ──
+    const nodeR = 3 * dpr;
+    ctx.strokeStyle = '#89b4fa'; ctx.lineWidth = 1.5 * dpr;
+    for (const { pos } of essentialPoints) {
+      const { x, y } = toC(pos);
+      ctx.beginPath(); ctx.arc(x, y, nodeR, 0, Math.PI * 2);
+      ctx.fillStyle = '#313244'; ctx.fill(); ctx.stroke();
+    }
+    ctx.font = `${Math.round(8 * dpr)}px monospace`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    for (const arc of topoArcs) {
+      const c = curvesMap.get(arc.curveId);
+      if (!c) continue;
+      // Midpoint of the arc: use Bézier midpoint for single segment, middle anchor for multi
+      let labelPos;
+      if (arc.toIdx - arc.fromIdx === 1) {
+        const seg = c.segments[arc.fromIdx];
+        const p0 = c.anchors[arc.fromIdx], p1 = c.anchors[arc.toIdx];
+        if (seg?.h0 && seg?.h1 && p0 && p1)
+          labelPos = { re: (p0.re + 3*seg.h0.re + 3*seg.h1.re + p1.re) / 8,
+                       im: (p0.im + 3*seg.h0.im + 3*seg.h1.im + p1.im) / 8 };
+        else if (p0 && p1) labelPos = { re: (p0.re + p1.re) / 2, im: (p0.im + p1.im) / 2 };
+      } else {
+        const midAnchor = c.anchors[Math.floor((arc.fromIdx + arc.toIdx) / 2)];
+        labelPos = midAnchor;
+      }
+      if (!labelPos) continue;
+      const { x, y } = toC(labelPos);
+      const tw = ctx.measureText(arc.label).width + 6 * dpr;
+      const th = 11 * dpr;
+      const isHovArc = arc.label === (opts.hoveredArcLabel ?? '');
+      ctx.fillStyle = isHovArc ? '#313244ee' : '#181825cc';
+      ctx.fillRect(x - tw / 2, y - th / 2, tw, th);
+      if (isHovArc) { ctx.strokeStyle = '#cba6f755'; ctx.lineWidth = 1 * dpr; ctx.strokeRect(x - tw / 2, y - th / 2, tw, th); }
+      ctx.fillStyle = isHovArc ? '#cba6f7' : '#cba6f7aa';
+      ctx.fillText(arc.label, x, y);
+    }
+
+  } else if (mode === 'regions') {
+    // ── Region fills + centroid badge numbers ──
+    const regions = anim.regions ?? [];
+    if (regions.length === 0) {
+      ctx.fillStyle = '#45475a';
+      ctx.font = `${Math.round(9 * dpr)}px sans-serif`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('No regions', W / 2, H / 2);
+      return;
+    }
+    const selectedRegionId = opts.selectedRegionId ?? -1;
+    // Draw filled region shapes
+    for (const region of regions) {
+      const path = new Path2D();
+      let isFirst = true;
+      for (const edge of region.boundary) {
+        const c = curvesMap.get(edge.animId);
+        if (!c) continue;
+        const fwd = edge.endIdx > edge.startIdx;
+        const sMin = Math.min(edge.startIdx, edge.endIdx), sMax = Math.max(edge.startIdx, edge.endIdx);
+        if (fwd) {
+          for (let s = sMin; s < sMax; s++) {
+            const p0 = c.anchors[s], p1 = c.anchors[s + 1], seg = c.segments[s];
+            if (!p0 || !p1) continue;
+            const { x: ax, y: ay } = toC(p0), { x: bx, y: by } = toC(p1);
+            if (isFirst) { path.moveTo(ax, ay); isFirst = false; } else path.lineTo(ax, ay);
+            if (seg?.h0 && seg?.h1) {
+              const { x: cx0, y: cy0 } = toC(seg.h0), { x: cx1, y: cy1 } = toC(seg.h1);
+              path.bezierCurveTo(cx0, cy0, cx1, cy1, bx, by);
+            } else path.lineTo(bx, by);
+          }
+        } else {
+          for (let s = sMax - 1; s >= sMin; s--) {
+            const p0 = c.anchors[s], p1 = c.anchors[s + 1], seg = c.segments[s];
+            if (!p0 || !p1) continue;
+            const { x: ax, y: ay } = toC(p1), { x: bx, y: by } = toC(p0);
+            if (isFirst) { path.moveTo(ax, ay); isFirst = false; } else path.lineTo(ax, ay);
+            if (seg?.h0 && seg?.h1) {
+              const { x: cx0, y: cy0 } = toC(seg.h1), { x: cx1, y: cy1 } = toC(seg.h0);
+              path.bezierCurveTo(cx0, cy0, cx1, cy1, bx, by);
+            } else path.lineTo(bx, by);
+          }
+        }
+      }
+      path.closePath();
+      const isSel = region.id === selectedRegionId;
+      const fillCol = region.fillColor || '#89b4fa';
+      ctx.save();
+      ctx.fillStyle = fillCol;
+      ctx.globalAlpha = isSel ? Math.min(1, (region.fillOpacity ?? 0.3) + 0.25) : (region.fillOpacity ?? 0.3);
+      ctx.fill(path);
+      ctx.globalAlpha = 1;
+      if (isSel) { ctx.strokeStyle = fillCol; ctx.lineWidth = 1.5 * dpr; ctx.stroke(path); }
+      ctx.restore();
+    }
+    // Draw centroid badge circles
+    ctx.font = `bold ${Math.round(9 * dpr)}px monospace`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    for (let ri = 0; ri < regions.length; ri++) {
+      const region = regions[ri];
+      let sumX = 0, sumY = 0, cnt = 0;
+      for (const edge of region.boundary) {
+        const c = curvesMap.get(edge.animId);
+        if (!c) continue;
+        const sMin = Math.min(edge.startIdx, edge.endIdx), sMax = Math.max(edge.startIdx, edge.endIdx);
+        for (let s = sMin; s < sMax; s++) {
+          const p0 = c.anchors[s], p1 = c.anchors[s + 1];
+          if (!p0 || !p1) continue;
+          const seg = c.segments[s];
+          if (seg?.h0 && seg?.h1) {
+            sumX += (p0.re + 3*seg.h0.re + 3*seg.h1.re + p1.re) / 8;
+            sumY += (p0.im + 3*seg.h0.im + 3*seg.h1.im + p1.im) / 8;
+          } else { sumX += (p0.re + p1.re) / 2; sumY += (p0.im + p1.im) / 2; }
+          cnt++;
+        }
+      }
+      if (!cnt) continue;
+      const { x, y } = toC({ re: sumX / cnt, im: sumY / cnt });
+      const isSel = region.id === selectedRegionId;
+      const isHovR = !isSel && region.id === (opts.hoveredRegionId ?? -1);
+      const fillCol = region.fillColor || '#89b4fa';
+      const r = 11 * dpr;
+      if (isHovR) {
+        ctx.beginPath(); ctx.arc(x, y, r + 3 * dpr, 0, Math.PI * 2);
+        ctx.strokeStyle = fillCol + '66'; ctx.lineWidth = 1.5 * dpr; ctx.stroke();
+      }
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fillStyle = isSel ? fillCol : '#1e1e2ecc'; ctx.globalAlpha = 1; ctx.fill();
+      ctx.strokeStyle = fillCol + (isSel ? '' : isHovR ? 'cc' : '99'); ctx.lineWidth = 1.5 * dpr; ctx.stroke();
+      ctx.fillStyle = isSel ? '#1e1e2e' : '#cdd6f4';
+      ctx.fillText(String(ri + 1), x, y);
+    }
+  }
+}
+
+function hitTestRegionCentroid(canvasEl, anim, cx, cy) {
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvasEl.width, H = canvasEl.height;
+  const regions = anim.regions ?? [];
+  if (!regions.length) return null;
+  const curves = animCurves(anim).filter(c => !isPrimitiveAnim(c) && !isTextAnim(c));
+  if (!curves.length) return null;
+  let minRe = Infinity, maxRe = -Infinity, minIm = Infinity, maxIm = -Infinity;
+  for (const c of curves) {
+    for (const a of c.anchors) { minRe = Math.min(minRe, a.re); maxRe = Math.max(maxRe, a.re); minIm = Math.min(minIm, a.im); maxIm = Math.max(maxIm, a.im); }
+    for (const seg of c.segments) { if (seg) { minRe = Math.min(minRe, seg.h0.re, seg.h1.re); maxRe = Math.max(maxRe, seg.h0.re, seg.h1.re); minIm = Math.min(minIm, seg.h0.im, seg.h1.im); maxIm = Math.max(maxIm, seg.h0.im, seg.h1.im); } }
+  }
+  if (!isFinite(minRe)) return null;
+  const PAD = 20 * dpr;
+  const sc = Math.min((W - PAD * 2) / Math.max(maxRe - minRe, 1e-6), (H - PAD * 2) / Math.max(maxIm - minIm, 1e-6));
+  const offX = (W - (maxRe - minRe) * sc) / 2, offY = (H - (maxIm - minIm) * sc) / 2;
+  const toC = pt => ({ x: offX + (pt.re - minRe) * sc, y: H - (offY + (pt.im - minIm) * sc) });
+  const curvesMap = new Map(curves.map(c => [c.id, c]));
+  const hitR = 16 * dpr;
+  for (const region of regions) {
+    let sumX = 0, sumY = 0, cnt = 0;
+    for (const edge of region.boundary) {
+      const c = curvesMap.get(edge.animId);
+      if (!c) continue;
+      const sMin = Math.min(edge.startIdx, edge.endIdx), sMax = Math.max(edge.startIdx, edge.endIdx);
+      for (let s = sMin; s < sMax; s++) {
+        const p0 = c.anchors[s], p1 = c.anchors[s + 1];
+        if (!p0 || !p1) continue;
+        const seg = c.segments[s];
+        if (seg?.h0 && seg?.h1) {
+          sumX += (p0.re + 3*seg.h0.re + 3*seg.h1.re + p1.re) / 8;
+          sumY += (p0.im + 3*seg.h0.im + 3*seg.h1.im + p1.im) / 8;
+        } else { sumX += (p0.re + p1.re) / 2; sumY += (p0.im + p1.im) / 2; }
+        cnt++;
+      }
+    }
+    if (!cnt) continue;
+    const { x, y } = toC({ re: sumX / cnt, im: sumY / cnt });
+    if (Math.hypot(cx - x, cy - y) <= hitR) return region.id;
+  }
+  return null;
+}
+
+function _schemBB(canvasEl, anim) {
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvasEl.width, H = canvasEl.height;
+  const curves = animCurves(anim).filter(c => !isPrimitiveAnim(c) && !isTextAnim(c));
+  if (!curves.length) return null;
+  let minRe = Infinity, maxRe = -Infinity, minIm = Infinity, maxIm = -Infinity;
+  for (const c of curves) {
+    for (const a of c.anchors) { minRe = Math.min(minRe, a.re); maxRe = Math.max(maxRe, a.re); minIm = Math.min(minIm, a.im); maxIm = Math.max(maxIm, a.im); }
+    for (const seg of c.segments) { if (seg) { minRe = Math.min(minRe, seg.h0.re, seg.h1.re); maxRe = Math.max(maxRe, seg.h0.re, seg.h1.re); minIm = Math.min(minIm, seg.h0.im, seg.h1.im); maxIm = Math.max(maxIm, seg.h0.im, seg.h1.im); } }
+  }
+  if (!isFinite(minRe)) return null;
+  const PAD = 20 * dpr;
+  const sc = Math.min((W - PAD * 2) / Math.max(maxRe - minRe, 1e-6), (H - PAD * 2) / Math.max(maxIm - minIm, 1e-6));
+  const offX = (W - (maxRe - minRe) * sc) / 2, offY = (H - (maxIm - minIm) * sc) / 2;
+  return { W, H, sc, offX, offY, minRe, minIm, dpr, curves,
+    toC: pt => ({ x: offX + (pt.re - minRe) * sc, y: H - (offY + (pt.im - minIm) * sc) }) };
+}
+
+function hitTestNodeBadge(canvasEl, anim, cx, cy) {
+  const bb = _schemBB(canvasEl, anim);
+  if (!bb) return null;
+  const { toC, W, H, dpr } = bb;
+  const { essentialPoints } = computeObjectTopologyData(anim);
+  if (!essentialPoints.length) return null;
+  const nodeR = 9 * dpr;
+  const disp = essentialPoints.map(ep => { const { x, y } = toC(ep.pos); return { num: ep.num, x, y, ox: x, oy: y }; });
+  const minDist = nodeR * 2.4;
+  for (let iter = 0; iter < 20; iter++) {
+    for (let i = 0; i < disp.length; i++) {
+      for (let j = i + 1; j < disp.length; j++) {
+        const dx = disp[j].x - disp[i].x, dy = disp[j].y - disp[i].y;
+        const d = Math.hypot(dx, dy) || 0.01;
+        if (d < minDist) { const push = (minDist - d) / 2, nx = dx / d, ny = dy / d; disp[i].x -= nx * push; disp[i].y -= ny * push; disp[j].x += nx * push; disp[j].y += ny * push; }
+      }
+    }
+    for (const p of disp) { p.x += (p.ox - p.x) * 0.15; p.y += (p.oy - p.y) * 0.15; }
+  }
+  for (const p of disp) { p.x = Math.max(nodeR + 1, Math.min(W - nodeR - 1, p.x)); p.y = Math.max(nodeR + 1, Math.min(H - nodeR - 1, p.y)); }
+  const hitR = nodeR + 4 * dpr;
+  for (const { num, x, y } of disp) { if (Math.hypot(cx - x, cy - y) <= hitR) return num; }
+  return null;
+}
+
+function hitTestArcLabel(canvasEl, anim, cx, cy) {
+  const bb = _schemBB(canvasEl, anim);
+  if (!bb) return null;
+  const { toC, dpr } = bb;
+  const { topoArcs } = computeObjectTopologyData(anim);
+  const curvesMap = new Map(bb.curves.map(c => [c.id, c]));
+  const hitR = 14 * dpr;
+  for (const arc of topoArcs) {
+    const c = curvesMap.get(arc.curveId);
+    if (!c) continue;
+    let labelPos;
+    if (arc.toIdx - arc.fromIdx === 1) {
+      const seg = c.segments[arc.fromIdx], p0 = c.anchors[arc.fromIdx], p1 = c.anchors[arc.toIdx];
+      if (seg?.h0 && seg?.h1 && p0 && p1) labelPos = { re: (p0.re + 3*seg.h0.re + 3*seg.h1.re + p1.re) / 8, im: (p0.im + 3*seg.h0.im + 3*seg.h1.im + p1.im) / 8 };
+      else if (p0 && p1) labelPos = { re: (p0.re + p1.re) / 2, im: (p0.im + p1.im) / 2 };
+    } else {
+      labelPos = c.anchors[Math.floor((arc.fromIdx + arc.toIdx) / 2)];
+    }
+    if (!labelPos) continue;
+    const { x, y } = toC(labelPos);
+    if (Math.hypot(cx - x, cy - y) <= hitR) return arc.label;
+  }
+  return null;
+}
+
 function renderAnimListLegacy() {
   // ── Tiles ──
   const tilesEl = document.getElementById('object-tiles');
@@ -15174,20 +16221,151 @@ function renderAnimListLegacy() {
   // ── Tab state ──
   if (!anim.detailTab) anim.detailTab = 'anchors';
 
+  // ── Editable object name ──
+  {
+    const nameRow = document.createElement('div');
+    nameRow.className = 'detail-name-row';
+    const defaultName = `Object ${numSpan.textContent}`;
+    const nameLabel = document.createElement('span');
+    nameLabel.className = 'detail-name-label' + (anim.name ? ' has-name' : '');
+    nameLabel.textContent = anim.name || defaultName;
+    nameLabel.title = 'Click to rename';
+    nameLabel.addEventListener('click', e => {
+      e.stopPropagation();
+      let cancelled = false;
+      const inp = document.createElement('input');
+      inp.type = 'text'; inp.className = 'detail-name-input';
+      inp.value = anim.name || ''; inp.placeholder = defaultName;
+      nameRow.replaceChild(inp, nameLabel);
+      inp.focus(); inp.select();
+      inp.addEventListener('keydown', e2 => {
+        if (e2.key === 'Enter') { e2.preventDefault(); inp.blur(); }
+        if (e2.key === 'Escape') { e2.preventDefault(); cancelled = true; inp.blur(); }
+        e2.stopPropagation();
+      });
+      inp.addEventListener('blur', () => {
+        if (!cancelled) {
+          const newName = inp.value.trim() || null;
+          if (newName !== (anim.name ?? null)) { pushUndo(); anim.name = newName; saveProject(); }
+        }
+        renderAnimList();
+      });
+    });
+    nameRow.appendChild(nameLabel);
+    detailEl.appendChild(nameRow);
+  }
+
+  // ── Shared geometric schematic (above tab bar) ──
+  let schemCanvasEl = null;
+  {
+    const _schemMode = anim.detailTab === 'anchors' ? 'points' : anim.detailTab === 'arcs' ? 'arcs' : 'regions';
+    const _dpr = window.devicePixelRatio || 1;
+    const _schemW = Math.max((detailEl.clientWidth || 264) - 16, 80);
+    const _schemH = 110;
+    const schemWrap = document.createElement('div');
+    schemWrap.style.cssText = 'padding:8px 8px 4px; background:#11111b; border-bottom:1px solid #1e1e2e;';
+    const schemCanvas = document.createElement('canvas');
+    schemCanvasEl = schemCanvas;
+    schemCanvas.width = Math.round(_schemW * _dpr);
+    schemCanvas.height = Math.round(_schemH * _dpr);
+    schemCanvas.style.width = _schemW + 'px';
+    schemCanvas.style.height = _schemH + 'px';
+    schemCanvas.style.display = 'block';
+    schemCanvas.style.borderRadius = '5px';
+    schemWrap.appendChild(schemCanvas);
+    detailEl.appendChild(schemWrap);
+
+    const buildOpts = () => {
+      const opts = {};
+      if (_schemMode === 'points') {
+        if (selectedObjectNode?.animId === anim.id) opts.selectedNode = selectedObjectNode.num;
+        opts.hoveredNode = hoveredObjectNodeNum;
+      }
+      if (_schemMode === 'arcs') opts.hoveredArcLabel = hoveredObjectArcLabel;
+      if (_schemMode === 'regions') {
+        opts.selectedRegionId = selectedObjectRegionId?.animId === anim.id ? selectedObjectRegionId.id : -1;
+        opts.hoveredRegionId = hoveredObjectRegionId;
+      }
+      return opts;
+    };
+    drawObjectSchematic(schemCanvas, anim, _schemMode, buildOpts());
+
+    // ── Hover sync: schematic → list rows ──
+    schemCanvas.addEventListener('mousemove', e => {
+      const rect = schemCanvas.getBoundingClientRect();
+      const px = (e.clientX - rect.left) * _dpr, py = (e.clientY - rect.top) * _dpr;
+      if (_schemMode === 'points') {
+        const hit = hitTestNodeBadge(schemCanvas, anim, px, py);
+        if (hit !== hoveredObjectNodeNum) {
+          hoveredObjectNodeNum = hit;
+          drawObjectSchematic(schemCanvas, anim, _schemMode, buildOpts());
+          detailEl.querySelectorAll('[data-node-num]').forEach(r =>
+            r.classList.toggle('node-hovered', Number(r.dataset.nodeNum) === hit));
+        }
+      } else if (_schemMode === 'arcs') {
+        const hit = hitTestArcLabel(schemCanvas, anim, px, py);
+        if (hit !== hoveredObjectArcLabel) {
+          hoveredObjectArcLabel = hit;
+          drawObjectSchematic(schemCanvas, anim, _schemMode, buildOpts());
+          detailEl.querySelectorAll('[data-arc-label]').forEach(r =>
+            r.classList.toggle('arc-hovered', r.dataset.arcLabel === hit));
+        }
+      } else if (_schemMode === 'regions') {
+        const hit = hitTestRegionCentroid(schemCanvas, anim, px, py);
+        if (hit !== hoveredObjectRegionId) {
+          hoveredObjectRegionId = hit ?? null;
+          drawObjectSchematic(schemCanvas, anim, _schemMode, buildOpts());
+        }
+      }
+    });
+    schemCanvas.addEventListener('mouseleave', () => {
+      if (_schemMode === 'points' && hoveredObjectNodeNum !== null) {
+        hoveredObjectNodeNum = null;
+        drawObjectSchematic(schemCanvas, anim, _schemMode, buildOpts());
+        detailEl.querySelectorAll('[data-node-num]').forEach(r => r.classList.remove('node-hovered'));
+      } else if (_schemMode === 'arcs' && hoveredObjectArcLabel !== null) {
+        hoveredObjectArcLabel = null;
+        drawObjectSchematic(schemCanvas, anim, _schemMode, buildOpts());
+        detailEl.querySelectorAll('[data-arc-label]').forEach(r => r.classList.remove('arc-hovered'));
+      } else if (_schemMode === 'regions' && hoveredObjectRegionId !== null) {
+        hoveredObjectRegionId = null;
+        drawObjectSchematic(schemCanvas, anim, _schemMode, buildOpts());
+      }
+    });
+
+    // ── Region click-to-select ──
+    if (_schemMode === 'regions' && anim.regions?.length > 0) {
+      schemCanvas.style.cursor = 'pointer';
+      schemCanvas.addEventListener('click', e => {
+        e.stopPropagation();
+        const rect = schemCanvas.getBoundingClientRect();
+        const hitId = hitTestRegionCentroid(schemCanvas, anim,
+          (e.clientX - rect.left) * _dpr, (e.clientY - rect.top) * _dpr);
+        if (hitId !== null) {
+          selectedObjectRegionId = (selectedObjectRegionId?.animId === anim.id && selectedObjectRegionId?.id === hitId)
+            ? null : { animId: anim.id, id: hitId };
+          renderAnimList();
+        }
+      });
+    }
+  }
+
   // ── Tab bar ──
   const tabBar = document.createElement('div');
   tabBar.className = 'detail-tabs';
   const _tabDefs = [
-    ['anchors', 'Anchors'],
+    ['anchors', 'Nodes'],
     ['arcs', isPolylineAnim(anim) ? 'Segments' : 'Arcs'],
     ['regions', 'Regions'],
   ];
   for (const [tabId, tabLabel] of _tabDefs) {
+    const isDrillBack = tabId === 'arcs' && drillObjectArc?.animId === anim.id;
     const btn = document.createElement('button');
     btn.className = 'detail-tab' + (anim.detailTab === tabId ? ' active' : '');
-    btn.textContent = tabLabel;
+    btn.textContent = isDrillBack ? '← Arcs' : tabLabel;
     btn.addEventListener('click', e => {
       e.stopPropagation();
+      if (isDrillBack) drillObjectArc = null;
       anim.detailTab = tabId;
       renderAnimList();
     });
@@ -15198,71 +16376,165 @@ function renderAnimListLegacy() {
   const segmentLabel = isPolylineAnim(anim) ? 'Segment' : 'Arc';
   const curveColor = !anim.visible ? '#585b70' : anim.color;
 
-  // ── Anchors tab ──
+  // ── Nodes tab ──
   if (anim.detailTab === 'anchors') {
-    const anchorList = document.createElement('div');
-    anchorList.className = 'arc-list';
+    const { essentialPoints } = computeObjectTopologyData(anim);
+    const nodeList = document.createElement('div');
+    nodeList.className = 'arc-list';
 
-    const addAnchorRow = (anchorIdx) => {
-      const pt = anim.anchors[anchorIdx];
-      const lbl = anchorLabel(anim, anchorIdx);
-      const isActive = anim.expandedAnchors?.has(anchorIdx);
-      const item = document.createElement('div');
-      item.className = 'anchor-list-item';
-      const header = document.createElement('div');
-      header.className = 'anchor-list-header' + (isActive ? ' anchor-active' : '');
-      if (isActive) header.style.color = curveColor;
-      const labelSpan = document.createElement('span');
-      labelSpan.className = 'anchor-label';
-      labelSpan.textContent = lbl;
-      const coordSpan = document.createElement('span');
-      coordSpan.className = 'anchor-coords';
-      coordSpan.textContent = pt ? formatCoordPairHundredths(pt) : '—';
-      coordSpan.setAttribute('data-anchor-loc', anchorIdx);
-      header.append(labelSpan, coordSpan);
-      const prevSeg = anchorIdx > 0 ? anim.segments[anchorIdx - 1] : null;
-      const nextSeg = anchorIdx < anim.segments.length ? anim.segments[anchorIdx] : null;
-      if (prevSeg && nextSeg && !isPolylineAnim(anim)) {
-        const splitBtn = document.createElement('button');
-        splitBtn.className = 'anchor-split-btn';
-        splitBtn.textContent = 'Split';
-        splitBtn.title = `Split anchor ${lbl} into ${lbl}⁻ / ${lbl}⁺`;
-        splitBtn.addEventListener('click', e => {
+    if (essentialPoints.length === 0) {
+      const emptyMsg = document.createElement('div');
+      emptyMsg.style.cssText = 'padding:10px 8px; color:#45475a; font-size:0.72rem; font-style:italic;';
+      emptyMsg.textContent = 'Closed loop — no branch or endpoint nodes.';
+      nodeList.appendChild(emptyMsg);
+    } else {
+      for (const { num, pos } of essentialPoints) {
+        const isSel = selectedObjectNode?.animId === anim.id && selectedObjectNode?.num === num;
+        const item = document.createElement('div');
+        item.className = 'anchor-list-item';
+        const row = document.createElement('div');
+        row.className = 'anchor-list-header' + (isSel ? ' anchor-active' : '');
+        if (isSel) row.style.cssText += 'cursor:pointer;';
+        const badge = document.createElement('span');
+        badge.className = 'node-badge';
+        if (isSel) { badge.style.background = curveColor; badge.style.borderColor = curveColor; badge.style.color = '#1e1e2e'; }
+        badge.textContent = String(num);
+        const coords = document.createElement('span');
+        coords.className = 'anchor-coords';
+        if (isSel) coords.style.color = '#cdd6f4';
+        coords.textContent = formatCoordPairHundredths(pos);
+        row.append(badge, coords);
+        row.dataset.nodeNum = String(num);
+        row.addEventListener('click', e => {
           e.stopPropagation();
-          pushUndo();
-          splitAnchorPoint(anim, anchorIdx);
-          saveProject();
-          renderAnimList(); draw();
+          selectedObjectNode = isSel ? null : { animId: anim.id, num };
+          renderAnimList();
         });
-        header.appendChild(splitBtn);
+        row.addEventListener('mouseenter', () => {
+          hoveredObjectNodeNum = num;
+          if (schemCanvasEl) drawObjectSchematic(schemCanvasEl, anim, 'points', {
+            selectedNode: selectedObjectNode?.animId === anim.id ? selectedObjectNode.num : undefined,
+            hoveredNode: num,
+          });
+        });
+        row.addEventListener('mouseleave', () => {
+          hoveredObjectNodeNum = null;
+          if (schemCanvasEl) drawObjectSchematic(schemCanvasEl, anim, 'points', {
+            selectedNode: selectedObjectNode?.animId === anim.id ? selectedObjectNode.num : undefined,
+            hoveredNode: null,
+          });
+        });
+        item.appendChild(row);
+        nodeList.appendChild(item);
       }
-      item.appendChild(header);
-      anchorList.appendChild(item);
-    };
-
-    const _anchorLoop = findLoopRange(anim);
-    const _simpleClosed = anim.closed && _anchorLoop
-      && _anchorLoop.loopStart === 0 && _anchorLoop.loopEnd === anim.anchors.length - 1;
-    const _anchorEnd = _simpleClosed ? anim.anchors.length - 1 : anim.anchors.length;
-    for (let i = 0; i < _anchorEnd; i++) {
-      addAnchorRow(i);
     }
-    if (_simpleClosed) {
-      const closeNote = document.createElement('div');
-      closeNote.className = 'anchor-list-item';
-      closeNote.style.borderColor = '#252537';
-      const closeNoteHdr = document.createElement('div');
-      closeNoteHdr.className = 'anchor-list-header';
-      closeNoteHdr.style.cssText = 'color:#45475a; font-style:italic; cursor:default;';
-      closeNoteHdr.textContent = '↩ closes to P0';
-      closeNote.appendChild(closeNoteHdr);
-      anchorList.appendChild(closeNote);
-    }
-    detailEl.appendChild(anchorList);
+    detailEl.appendChild(nodeList);
   }
 
   // ── Arcs tab ──
   else if (anim.detailTab === 'arcs') {
+
+    // ── Merged object: topological arc list ──
+    if (anim.curves) {
+      const { topoArcs } = computeObjectTopologyData(anim);
+      const curvesMap = new Map(animCurves(anim).map(c => [c.id, c]));
+      const activeDrill = drillObjectArc?.animId === anim.id ? drillObjectArc.label : null;
+      const container = document.createElement('div');
+      container.className = 'arc-list';
+
+      if (activeDrill !== null) {
+        // ── Drill-down: sub-arcs within a topo arc ──
+        const arc = topoArcs.find(a => a.label === activeDrill);
+        if (!arc) { drillObjectArc = null; renderAnimList(); return; }
+        const curve = curvesMap.get(arc.curveId);
+        if (!curve) { drillObjectArc = null; renderAnimList(); return; }
+
+        for (let si = arc.fromIdx; si < arc.toIdx; si++) {
+          // Intermediate anchor between sub-arcs
+          if (si > arc.fromIdx) {
+            const pt = curve.anchors[si];
+            const aItem = document.createElement('div');
+            aItem.className = 'anchor-list-item';
+            const aRow = document.createElement('div');
+            aRow.className = 'anchor-list-header';
+            aRow.style.cursor = 'default';
+            const dot = document.createElement('span');
+            dot.style.cssText = 'width:8px;height:8px;border-radius:50%;border:1px solid #45475a;background:#181825;flex-shrink:0;';
+            const coords = document.createElement('span');
+            coords.className = 'anchor-coords';
+            coords.textContent = pt ? formatCoordPairHundredths(pt) : '—';
+            aRow.append(dot, coords);
+            aItem.appendChild(aRow);
+            container.appendChild(aItem);
+          }
+          // Sub-arc row
+          const seg = curve.segments[si];
+          if (!seg) continue;
+          const pct = Math.round(eccentricityToPercent(seg.eccentricity) / 5) * 5;
+          const subIdx = si - arc.fromIdx + 1;
+          const item = document.createElement('div');
+          item.className = 'arc-list-item';
+          const header = document.createElement('div');
+          header.className = 'arc-list-header';
+          const lbl = document.createElement('span');
+          lbl.textContent = `Sub-arc ${subIdx}`;
+          const eccSpan = document.createElement('span');
+          eccSpan.style.cssText = 'font-size:0.68rem;color:#6c7086;margin-left:auto;';
+          eccSpan.textContent = `${pct}%`;
+          header.append(lbl, eccSpan);
+          item.appendChild(header);
+          container.appendChild(item);
+        }
+
+      } else if (topoArcs.length > 0) {
+        // ── Top-level: list of topological arcs ──
+        for (const arc of topoArcs) {
+          const count = arc.toIdx - arc.fromIdx;
+          const item = document.createElement('div');
+          item.className = 'arc-list-item';
+          const header = document.createElement('div');
+          header.className = 'arc-list-header';
+          header.style.cursor = 'pointer';
+          const lbl = document.createElement('span');
+          lbl.textContent = `Arc ${arc.label}`;
+          const countSpan = document.createElement('span');
+          countSpan.style.cssText = 'font-size:0.68rem;color:#6c7086;margin-left:8px;';
+          countSpan.textContent = count === 1 ? '1 seg' : `${count} segs`;
+          const arrow = document.createElement('span');
+          arrow.style.cssText = 'color:#45475a;margin-left:auto;font-size:0.9rem;';
+          arrow.textContent = '›';
+          header.append(lbl, countSpan, arrow);
+          header.dataset.arcLabel = arc.label;
+          header.addEventListener('click', e => {
+            e.stopPropagation();
+            drillObjectArc = { animId: anim.id, label: arc.label };
+            renderAnimList();
+          });
+          header.addEventListener('mouseenter', () => {
+            hoveredObjectArcLabel = arc.label;
+            if (schemCanvasEl) drawObjectSchematic(schemCanvasEl, anim, 'arcs', { hoveredArcLabel: arc.label });
+          });
+          header.addEventListener('mouseleave', () => {
+            hoveredObjectArcLabel = null;
+            if (schemCanvasEl) drawObjectSchematic(schemCanvasEl, anim, 'arcs', { hoveredArcLabel: null });
+          });
+          item.appendChild(header);
+          container.appendChild(item);
+        }
+
+      } else {
+        // ── No topo arcs — curves not linked yet ──
+        const empty = document.createElement('div');
+        empty.style.cssText = 'padding:10px 8px;color:#45475a;font-size:0.72rem;font-style:italic;';
+        empty.textContent = 'No topological arcs — link endpoints in the Regions tab first.';
+        container.appendChild(empty);
+      }
+
+      detailEl.appendChild(container);
+      return;
+    }
+
+    // ── Single-curve: existing segment list ──
     const arcList = document.createElement('div');
     arcList.className = 'arc-list';
 
@@ -15430,6 +16702,51 @@ function renderAnimListLegacy() {
     const regDiv = document.createElement('div');
     regDiv.className = 'regions-tab-content';
     regDiv.style.padding = '0';
+
+    // ── Merged object path ──
+    if (anim.curves) {
+      const regions = anim.regions ?? [];
+      if (regions.length === 0) {
+        const canLink = objectHasLinkableCurves(anim);
+        const empty = document.createElement('div');
+        empty.className = 'regions-empty';
+        empty.style.padding = '10px 8px';
+        empty.textContent = canLink
+          ? 'Endpoints are close — link them to create regions.'
+          : 'No regions — curves are not close enough to connect.';
+        regDiv.appendChild(empty);
+        if (canLink) {
+          const linkBtn = document.createElement('button');
+          linkBtn.textContent = 'Link endpoints';
+          linkBtn.style.cssText = 'display:block; margin:6px auto 0; background:#313244; color:#cdd6f4; border:1px solid #45475a; border-radius:4px; padding:4px 14px; cursor:pointer; font-size:12px;';
+          linkBtn.addEventListener('mouseenter', () => { linkBtn.style.background = '#45475a'; });
+          linkBtn.addEventListener('mouseleave', () => { linkBtn.style.background = '#313244'; });
+          linkBtn.addEventListener('click', e => {
+            e.stopPropagation();
+            pushUndo();
+            linkObjectCurves(anim);
+            saveProject();
+            renderAnimList(); draw();
+          });
+          regDiv.appendChild(linkBtn);
+        }
+      } else {
+        const selRegion = selectedObjectRegionId?.animId === anim.id
+          ? regions.find(r => r.id === selectedObjectRegionId.id) : null;
+        if (selRegion) {
+          appendRegionColorExpansion(regDiv, selRegion, anim);
+        } else {
+          const hint = document.createElement('div');
+          hint.style.cssText = 'padding:12px 8px; color:#6c7086; font-size:0.72rem; text-align:center;';
+          hint.textContent = 'Click a region in the schematic to edit its fill.';
+          regDiv.appendChild(hint);
+        }
+      }
+      detailEl.appendChild(regDiv);
+      return;
+    }
+
+    // ── Single-curve path ──
     const epLoop = findLoopRange(anim);
 
     // Schematic — always shown
@@ -16447,6 +17764,11 @@ document.getElementById('animations-panel').addEventListener('click', e => {
   clearGroupMode();
   exitEditMode();
   renderAnimList(); draw(); updateCursor();
+});
+
+document.getElementById('merge-objects-btn').addEventListener('click', e => {
+  e.stopPropagation();
+  if (isMultiSelectionActive()) mergeObjects([...multiSelectedIds]);
 });
 
 document.getElementById('group-objects-btn').addEventListener('click', e => {
