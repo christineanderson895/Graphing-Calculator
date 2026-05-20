@@ -2156,6 +2156,17 @@ function saveProject() {
   } catch {}
 }
 
+const FREEFORM_TOOL_KEY = 'freeformToolSettings';
+function saveFreeformPlacementState() {
+  try { localStorage.setItem(FREEFORM_TOOL_KEY, JSON.stringify({ eccentricity: freeformPlacementEccentricity })); } catch {}
+}
+function loadFreeformPlacementState() {
+  try {
+    const s = JSON.parse(localStorage.getItem(FREEFORM_TOOL_KEY) || '{}');
+    if (typeof s.eccentricity === 'number') freeformPlacementEccentricity = Math.max(0, Math.min(100, s.eccentricity));
+  } catch {}
+}
+
 function loadProject() {
   try {
     const saved = localStorage.getItem(PROJECT_KEY);
@@ -3528,9 +3539,75 @@ function computeFreshPlacementSegments(points) {
 }
 
 function rebuildFreshPlacementSegments(anim) {
-  anim.segments = computeFreshPlacementSegments(anim.anchors);
+  if (animKind(anim) === 'freeform') {
+    // Preserve per-segment eccentricities set by the user; only the NEW last segment
+    // (just committed) gets the current freeformPlacementEccentricity.
+    const savedEccs = anim.segments.map(s => (s ? s.eccentricity : percentToEccentricity(freeformPlacementEccentricity)));
+    anim.segments = buildFreeformPlacementSegs(anim.anchors, freeformPlacementEccentricity);
+    for (let i = 0; i < savedEccs.length && i < anim.segments.length; i++) {
+      if (anim.segments[i]) anim.segments[i].eccentricity = savedEccs[i];
+    }
+  } else {
+    anim.segments = computeFreshPlacementSegments(anim.anchors);
+  }
   anim.tContinuation = null;
   recompileAnim(anim);
+}
+
+// Build freeform placement segments: seg 0 is always straight; segs 1+ use tangent
+// continuity with the symmetric mirror-handle rule, handles at L/3.
+// eccPct (0–100) sets eccentricity on every segment.
+function buildFreeformPlacementSegs(anchors, eccPct) {
+  const n = anchors.length;
+  if (n < 2) return [];
+  const ecc = percentToEccentricity(eccPct);
+  const segs = [];
+  // prevOutDir: unit Cx pointing in the outgoing tangent direction from the previous segment's end anchor.
+  let prevOutDir = null;
+
+  for (let i = 0; i < n - 1; i++) {
+    const A0 = anchors[i], A1 = anchors[i + 1];
+    const dx = A1.re - A0.re, dy = A1.im - A0.im;
+    const L = Math.hypot(dx, dy);
+    if (L < 1e-9) {
+      const mid = new Cx((A0.re + A1.re) / 2, (A0.im + A1.im) / 2);
+      const seg = makeSeg(mid, mid);
+      seg.eccentricity = ecc;
+      segs.push(seg);
+      // keep prevOutDir unchanged (degenerate segment)
+      continue;
+    }
+    const HL = L / 2;
+    let h0, h1;
+
+    if (i === 0) {
+      // Segment 0: straight — handles collinear with chord
+      h0 = new Cx(A0.re + dx / 2, A0.im + dy / 2);
+      h1 = new Cx(A1.re - dx / 2, A1.im - dy / 2);
+      // Outgoing tangent direction at A1 = chord direction (straight segment)
+      prevOutDir = new Cx(dx / L, dy / L);
+    } else {
+      // Segments 1+: incoming handle direction = prevOutDir (tangent continuity)
+      h0 = new Cx(A0.re + HL * prevOutDir.re, A0.im + HL * prevOutDir.im);
+      // Mirror h0 across the perpendicular bisector of A0→A1 to get h1
+      // Reflection formula: h1 = M + reflect(-v_parallel + v_perp) where v = h0 - M
+      const Mre = (A0.re + A1.re) / 2, Mim = (A0.im + A1.im) / 2;
+      const vRe = h0.re - Mre, vIm = h0.im - Mim;
+      const dRe = dx / L, dIm = dy / L; // unit chord vector
+      const dot = vRe * dRe + vIm * dIm; // projection of v onto chord
+      // v_parallel = dot * d_unit; reflected = -v_parallel + v_perp = v - 2*v_parallel
+      h1 = new Cx(Mre + vRe - 2 * dot * dRe, Mim + vIm - 2 * dot * dIm);
+      // Outgoing tangent at A1 = normalize(A1 - h1) (tangent = 3*(A1-h1), direction only)
+      const outRe = A1.re - h1.re, outIm = A1.im - h1.im;
+      const outL = Math.hypot(outRe, outIm);
+      prevOutDir = outL > 1e-9 ? new Cx(outRe / outL, outIm / outL) : new Cx(dx / L, dy / L);
+    }
+
+    const seg = makeSeg(h0, h1);
+    seg.eccentricity = ecc;
+    segs.push(seg);
+  }
+  return segs;
 }
 
 function makeStraightSegment(p0, p1) {
@@ -3684,6 +3761,7 @@ let canvasTextEditAnimId = null;
 let canvasTextEditor = null;
 let activeTextEditUndoAnimId = null;
 let eccentricitySliderActiveKey  = null; // {animId, segIdx} | null — whose ecc slider is focused
+let freeformPlacementEccentricity = 50;  // 0–100, persisted; controls eccentricity during freeform drawing
 
 // Canvas drag state
 let placementPreviewPos = null; // Cx | null — cursor pos during placement
@@ -4950,6 +5028,15 @@ document.addEventListener('keydown', e => {
   if (e.ctrlKey && !e.shiftKey && e.key === 'z') { e.preventDefault(); undo(); }
   if ((e.ctrlKey && e.key === 'y') || (e.ctrlKey && e.shiftKey && (e.key === 'z' || e.key === 'Z'))) { e.preventDefault(); redo(); }
   if (e.ctrlKey && (e.key === 'd' || e.key === 'D')) { e.preventDefault(); duplicateAnimation(); }
+  const _freeformPlacing = animations.find(a => a.inPlacementMode && animKind(a) === 'freeform');
+  if (_freeformPlacing && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+    e.preventDefault();
+    const delta = e.key === 'ArrowRight' ? 10 : -10;
+    freeformPlacementEccentricity = Math.max(0, Math.min(100, freeformPlacementEccentricity + delta));
+    saveFreeformPlacementState();
+    renderAnimList(); draw();
+    return;
+  }
   if (e.key === 'ArrowLeft')  { e.preventDefault(); originX += scale; draw(); }
   if (e.key === 'ArrowRight') { e.preventDefault(); originX -= scale; draw(); }
   if (e.key === 'ArrowUp')    { e.preventDefault(); originY += scale; draw(); }
@@ -9687,10 +9774,54 @@ function drawTentativeFreeformExtension(anchors, segs, previewPoint, color, cw, 
   ctx.restore();
 }
 
+// Ghost eccentricity percentages shown as fan during freeform placement (segments 1+)
+const FREEFORM_GHOST_ECCS = [10, 30, 50, 70, 90];
+
+// Build just the tentative (preview) segment from the last anchor to previewPoint.
+// Uses the outgoing direction of the last committed segment for tangent continuity.
+function buildFreeformTentativeSeg(anim, previewPoint) {
+  const anchors = anim.anchors;
+  const n = anchors.length;
+  if (n === 0) return null;
+  const tentA0 = anchors[n - 1];
+  const dx = previewPoint.re - tentA0.re, dy = previewPoint.im - tentA0.im;
+  const L = Math.hypot(dx, dy);
+  if (L < 1e-9) return null;
+  const HL = L / 2;
+  let h0, h1;
+
+  if (n === 1) {
+    // Segment 0: always straight
+    h0 = new Cx(tentA0.re + dx / 2, tentA0.im + dy / 2);
+    h1 = new Cx(previewPoint.re - dx / 2, previewPoint.im - dy / 2);
+  } else {
+    // Outgoing direction at tentA0 = normalize(tentA0 - h1 of last committed seg)
+    const lastSeg = anim.segments[n - 2];
+    if (!lastSeg) return null;
+    const outRe = tentA0.re - lastSeg.h1.re, outIm = tentA0.im - lastSeg.h1.im;
+    const outLen = Math.hypot(outRe, outIm);
+    const prevOutDir = outLen > 1e-9
+      ? new Cx(outRe / outLen, outIm / outLen)
+      : new Cx(dx / L, dy / L);
+    h0 = new Cx(tentA0.re + HL * prevOutDir.re, tentA0.im + HL * prevOutDir.im);
+    // Mirror h0 across perpendicular bisector of tentA0 → previewPoint
+    const Mre = (tentA0.re + previewPoint.re) / 2, Mim = (tentA0.im + previewPoint.im) / 2;
+    const dRe = dx / L, dIm = dy / L;
+    const vRe = h0.re - Mre, vIm = h0.im - Mim;
+    const dot = vRe * dRe + vIm * dIm;
+    h1 = new Cx(Mre + vRe - 2 * dot * dRe, Mim + vIm - 2 * dot * dIm);
+  }
+
+  const seg = makeSeg(h0, h1);
+  seg.eccentricity = percentToEccentricity(freeformPlacementEccentricity);
+  return seg;
+}
+
 function drawFreshFreeformPlacement(anim, previewPoint, cw, dpr) {
-  const anchors = anim.anchors.map(cloneCx);
+  const anchors = anim.anchors;
   const n = anchors.length;
   const hasPreview = previewPoint && previewPoint.ok && previewPoint.ok();
+
   if (n === 0) {
     if (hasPreview) {
       const [hx, hy] = toCanvas(previewPoint.re, previewPoint.im);
@@ -9700,27 +9831,46 @@ function drawFreshFreeformPlacement(anim, previewPoint, cw, dpr) {
     }
     return;
   }
-  const cursorAtEnd = hasPreview && Math.hypot(previewPoint.re - anchors[n-1].re, previewPoint.im - anchors[n-1].im) < 1e-7;
-  const previewAnchors = (hasPreview && !cursorAtEnd) ? [...anchors, previewPoint] : [...anchors];
-  const previewSegs = computeFreshPlacementSegments(previewAnchors);
-  const solidCount = (hasPreview && !cursorAtEnd) ? previewSegs.length - 1 : previewSegs.length;
 
-  for (let i = 0; i < solidCount; i++) {
-    const seg = previewSegs[i];
-    if (!seg) continue;
-    recompileSegmentRaw(seg, previewAnchors[i], previewAnchors[i + 1]);
+  const lastAnchor = anchors[n - 1];
+  const cursorAtEnd = hasPreview && Math.hypot(previewPoint.re - lastAnchor.re, previewPoint.im - lastAnchor.im) < 1e-7;
+
+  // Draw committed segments using anim.segments — each has its own stored eccentricity
+  for (let i = 0; i < anim.segments.length; i++) {
+    const seg = anim.segments[i];
+    if (!seg || !seg.compiled) continue;
     ctx.save(); ctx.globalAlpha = 0.85;
     drawCompiledCurve(seg.compiled, anim.color, cw, 1);
     ctx.restore();
   }
 
-  if (hasPreview && !cursorAtEnd && previewSegs.length > 0) {
-    const tentSeg = previewSegs[previewSegs.length - 1];
+  // Draw the tentative (preview) segment from last anchor to cursor
+  if (hasPreview && !cursorAtEnd) {
+    const tentSeg = buildFreeformTentativeSeg(anim, previewPoint);
     if (tentSeg) {
-      recompileSegmentRaw(tentSeg, anchors[n - 1], previewPoint);
-      ctx.save(); ctx.globalAlpha = 0.4; ctx.setLineDash([4 * dpr, 4 * dpr]);
-      drawCompiledCurve(tentSeg.compiled, anim.color, cw, 1);
-      ctx.restore();
+      recompileSegmentRaw(tentSeg, lastAnchor, previewPoint);
+
+      if (n === 1) {
+        // Segment 0: always straight — plain dashed line, no ghost curves
+        ctx.save(); ctx.globalAlpha = 0.4; ctx.setLineDash([4 * dpr, 4 * dpr]);
+        drawCompiledCurve(tentSeg.compiled, anim.color, cw, 1);
+        ctx.setLineDash([]); ctx.restore();
+      } else {
+        // Segment 1+ preview: ghost fan at 5 eccentricities (thin), current on top
+        for (const ghostPct of FREEFORM_GHOST_ECCS) {
+          if (ghostPct === freeformPlacementEccentricity) continue;
+          const ghostSeg = makeSeg(new Cx(tentSeg.h0.re, tentSeg.h0.im), new Cx(tentSeg.h1.re, tentSeg.h1.im));
+          ghostSeg.eccentricity = percentToEccentricity(ghostPct);
+          recompileSegmentRaw(ghostSeg, lastAnchor, previewPoint);
+          ctx.save(); ctx.globalAlpha = 0.3;
+          drawCompiledCurve(ghostSeg.compiled, anim.color, cw * 0.25, 1);
+          ctx.restore();
+        }
+        // Current eccentricity on top, full weight
+        ctx.save(); ctx.globalAlpha = 0.85;
+        drawCompiledCurve(tentSeg.compiled, anim.color, cw, 1);
+        ctx.restore();
+      }
     }
   }
 
@@ -14839,25 +14989,16 @@ function detectObjectTopology(anim) {
   }
   if (!halfEdges.length) return;
 
-  // Collapse duplicate half-edges: when two curves share the same geometric edge
-  // (same junction nodes at both ends), each contributes a fwd/bwd pair giving
-  // 4 half-edges for one planar edge. Keep only the first pair per directed edge.
-  const seenEdgeKeys = new Set();
-  const discardedHE = new Set();
-  for (const he of halfEdges) {
-    if (discardedHE.has(he)) continue;
+  // Keep only half-edges that reference valid junction nodes. Each curve contributes
+  // its own half-edges independently — deduplication by node-pair alone incorrectly
+  // discards curve B's half-edges when B connects the same two junctions as A in the
+  // opposite direction (e.g. two open curves forming a closed loop together). Truly
+  // overlapping curves produce near-zero-area faces that the area threshold drops.
+  const activeHalfEdges = halfEdges.filter(he => {
     const fromNid = keyToNode.get(`${he.animId}:${he.fromIdx}`);
     const toNid   = keyToNode.get(`${he.animId}:${he.toIdx}`);
-    if (fromNid === undefined || toNid === undefined) { discardedHE.add(he); continue; }
-    const edgeKey = `${fromNid}\0${toNid}`;
-    if (seenEdgeKeys.has(edgeKey)) {
-      discardedHE.add(he);
-      if (he.twin) discardedHE.add(he.twin);
-    } else {
-      seenEdgeKeys.add(edgeKey);
-    }
-  }
-  const activeHalfEdges = halfEdges.filter(he => !discardedHE.has(he));
+    return fromNid !== undefined && toNid !== undefined;
+  });
   if (!activeHalfEdges.length) return;
 
   const outgoing = new Map();
@@ -15148,25 +15289,16 @@ function detectRegionsForGroup(groupId) {
   }
   if (!halfEdges.length) return;
 
-  // Collapse duplicate half-edges: when two curves share the same geometric edge
-  // (same junction nodes at both ends), each contributes a fwd/bwd pair giving
-  // 4 half-edges for one planar edge. Keep only the first pair per directed edge.
-  const seenEdgeKeys = new Set();
-  const discardedHE = new Set();
-  for (const he of halfEdges) {
-    if (discardedHE.has(he)) continue;
+  // Keep only half-edges that reference valid junction nodes. Each curve contributes
+  // its own half-edges independently — deduplication by node-pair alone incorrectly
+  // discards curve B's half-edges when B connects the same two junctions as A in the
+  // opposite direction (e.g. two open curves forming a closed loop together). Truly
+  // overlapping curves produce near-zero-area faces that the area threshold drops.
+  const activeHalfEdges = halfEdges.filter(he => {
     const fromNid = keyToNode.get(`${he.animId}:${he.fromIdx}`);
     const toNid   = keyToNode.get(`${he.animId}:${he.toIdx}`);
-    if (fromNid === undefined || toNid === undefined) { discardedHE.add(he); continue; }
-    const edgeKey = `${fromNid}\0${toNid}`;
-    if (seenEdgeKeys.has(edgeKey)) {
-      discardedHE.add(he);
-      if (he.twin) discardedHE.add(he.twin);
-    } else {
-      seenEdgeKeys.add(edgeKey);
-    }
-  }
-  const activeHalfEdges = halfEdges.filter(he => !discardedHE.has(he));
+    return fromNid !== undefined && toNid !== undefined;
+  });
   if (!activeHalfEdges.length) return;
 
   // Build per-node outgoing-edge lists sorted CCW (math y-up)
@@ -17888,7 +18020,44 @@ function renderAnimListLegacy() {
 
   detailEl.dataset.animId = String(anim.id);
 
-  // Header
+  // ── Freeform placement panel (no header — just eccentricity slider) ──
+  if (anim.inPlacementMode && animKind(anim) === 'freeform') {
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'padding:10px 12px; display:flex; flex-direction:column; gap:8px;';
+
+    const hintEl = document.createElement('div');
+    hintEl.className = 'placement-hint';
+    hintEl.style.cssText = 'padding:0; margin-bottom:2px;';
+    hintEl.textContent = 'Click to place anchors. ← → adjust eccentricity. Esc to finish.';
+    wrap.appendChild(hintEl);
+
+    // Eccentricity slider row
+    const sliderRow = document.createElement('div');
+    sliderRow.style.cssText = 'display:flex; align-items:center; gap:6px;';
+    const sliderLbl = document.createElement('label');
+    sliderLbl.textContent = 'Eccentricity';
+    sliderLbl.style.cssText = 'font-size:0.7rem; color:#6c7086; text-transform:uppercase; letter-spacing:0.05em; flex-shrink:0;';
+    const slider = document.createElement('input');
+    slider.type = 'range'; slider.min = 0; slider.max = 100; slider.step = 10;
+    slider.value = freeformPlacementEccentricity;
+    slider.style.cssText = 'flex:1; min-width:0;';
+    const sliderVal = document.createElement('span');
+    sliderVal.style.cssText = 'font-size:0.75rem; color:#cdd6f4; width:34px; text-align:right; flex-shrink:0;';
+    sliderVal.textContent = `${Math.round(freeformPlacementEccentricity)}%`;
+    slider.addEventListener('input', () => {
+      freeformPlacementEccentricity = parseFloat(slider.value);
+      sliderVal.textContent = `${Math.round(freeformPlacementEccentricity)}%`;
+      saveFreeformPlacementState();
+      draw();
+    });
+    sliderRow.append(sliderLbl, slider, sliderVal);
+    wrap.appendChild(sliderRow);
+
+    detailEl.appendChild(wrap);
+    updateToolPanel(); return;
+  }
+
+  // Header (non-placement / non-freeform-placement)
   const header = document.createElement('div');
   header.className = 'detail-header';
 
@@ -17926,15 +18095,6 @@ function renderAnimListLegacy() {
 
   header.append(leftGroup, rightGroup);
   detailEl.appendChild(header);
-
-  if (anim.inPlacementMode) {
-    const hint = document.createElement('div');
-    hint.className = 'placement-hint';
-    hint.style.padding = '10px 12px';
-    hint.textContent = 'Click canvas to place anchors. Press Escape to finish.';
-    detailEl.appendChild(hint);
-    updateToolPanel(); return;
-  }
 
   if (isTextAnim(anim)) {
     const _textWrap = document.createElement('div');
@@ -19267,6 +19427,7 @@ addFunction('sin(x)', 'cartesian');
 addFunction('cos(theta)', 'polar');
 functions.forEach(compileFunction);
 renderFunctionList();
+loadFreeformPlacementState();
 if (!loadProject()) renderAnimList();
 renderGlobalSettingsControls();
 
