@@ -366,53 +366,6 @@
       background: #6c7086;
       border-radius: 999px;
     }
-    #object-tiles.line-tool-options-host {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
-      padding: 8px 7px;
-      overflow: hidden;
-    }
-    .line-tool-mode-btn {
-      width: 58px;
-      height: 50px;
-      border-radius: 6px;
-      border: 1.5px solid #45475a;
-      background: #1e1e2e;
-      color: #cdd6f4;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 0;
-      cursor: pointer;
-      transition: background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s;
-    }
-    .line-tool-mode-btn:hover {
-      border-color: #89b4fa;
-      background: #313244;
-      color: #f5f7ff;
-    }
-    .line-tool-mode-btn.active {
-      border-color: #89b4fa;
-      background: #313244;
-      color: #f5f7ff;
-      box-shadow: 0 0 0 1px rgba(137, 180, 250, 0.32), 0 0 10px rgba(137, 180, 250, 0.18);
-    }
-    .line-tool-mode-btn svg {
-      width: 46px;
-      height: 34px;
-      stroke: currentColor;
-      fill: none;
-      stroke-width: 2.1;
-      stroke-linecap: round;
-      stroke-linejoin: round;
-    }
-    .line-tool-mode-btn svg circle {
-      fill: currentColor;
-      stroke: none;
-    }
-
     /* ── Object detail panel ── */
     #object-detail {
       flex: 0 1 auto; overflow-y: auto; min-height: 0;
@@ -885,6 +838,24 @@
     .color-tab-bar {
       display: flex;
       gap: 2px;
+      align-items: flex-end;
+    }
+    .arc-type-toggle-btn {
+      margin-left: auto;
+      margin-bottom: 2px;
+      padding: 2px 8px;
+      font-size: 0.68rem;
+      font-weight: 600;
+      color: #a6adc8;
+      background: #1e1e2e;
+      border: 1px solid #45475a;
+      border-radius: 4px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .arc-type-toggle-btn:hover {
+      background: #313244;
+      color: #cdd6f4;
     }
     .color-tab {
       padding: 4px 14px;
@@ -968,9 +939,10 @@
     }
     .color-preview-row .eyedropper-btn {
       padding: 4px 6px;
+      margin-top: 4px;
     }
     .color-preview-box {
-      width: 44px;
+      width: 100%;
       height: 44px;
       border: 1px solid #585b70;
       border-radius: 5px;
@@ -980,14 +952,26 @@
       color: #cdd6f4;
       font-family: monospace;
       font-size: 0.68rem;
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      text-align: center;
+      width: 100%;
+      box-sizing: border-box;
+      padding: 1px 3px;
+      background: transparent;
+      border: none;
+      border-bottom: 1px solid transparent;
+      border-radius: 2px;
+      outline: none;
+      cursor: default;
+      transition: background 0.12s, border-color 0.12s;
+    }
+    .color-preview-value:focus {
+      cursor: text;
+      background: rgba(255,255,255,0.06);
+      border-bottom-color: #585b70;
     }
     .fill-style-row {
       display: grid;
-      grid-template-columns: repeat(5, 1fr);
+      grid-template-columns: repeat(3, 1fr);
       gap: 4px;
       margin-bottom: 2px;
     }
@@ -1000,6 +984,86 @@
       padding-top: 4px;
       border-top: 1px solid #313244;
     }
+    .contour-arc-section {
+      margin-top: 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .contour-arc-heading {
+      font-size: 0.68rem;
+      font-weight: 600;
+      color: #6c7086;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 2px 0;
+    }
+    .contour-arc-row {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 0;
+    }
+    .contour-arc-label {
+      flex: 1;
+      font-size: 0.7rem;
+      color: #a6adc8;
+    }
+    .contour-arc-btn {
+      font-size: 0.65rem;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 4px;
+      border: 1px solid #45475a;
+      background: #313244;
+      color: #6c7086;
+      cursor: pointer;
+      transition: background 0.1s, color 0.1s, border-color 0.1s;
+    }
+    .contour-arc-btn.b1.active { background: #1e3a5f; color: #89b4fa; border-color: #89b4fa; }
+    .contour-arc-btn.b2.active { background: #3d2a1a; color: #fab387; border-color: #fab387; }
+    .contour-arc-btn:not(.active):hover { background: #45475a; color: #cdd6f4; }
+    .contour-arc-status { font-size: 0.62rem; color: #585b70; margin-right: 2px; }
+    .contour-set-btn {
+      font-size: 0.65rem; font-weight: 600; padding: 2px 8px; border-radius: 4px;
+      border: 1px solid #45475a; background: #313244; color: #a6adc8; cursor: pointer;
+    }
+    .contour-set-btn.b1:hover { background: #1e3a5f; color: #89b4fa; border-color: #89b4fa; }
+    .contour-set-btn.b2:hover { background: #3d2a1a; color: #fab387; border-color: #fab387; }
+    .contour-mode-label { font-size: 0.72rem; font-weight: 600; padding: 4px 0 2px; }
+    .contour-mode-count { font-size: 0.65rem; color: #6c7086; padding: 2px 0 6px; line-height: 1.4; }
+    .contour-mode-actions { display: flex; gap: 6px; }
+    .contour-confirm-btn {
+      flex: 1; padding: 4px 8px; font-size: 0.7rem; font-weight: 600;
+      background: #1e3a5f; color: #89b4fa; border: 1px solid #89b4fa;
+      border-radius: 4px; cursor: pointer;
+    }
+    .contour-confirm-btn:disabled { opacity: 0.4; cursor: default; }
+    .contour-cancel-btn {
+      flex: 1; padding: 4px 8px; font-size: 0.7rem;
+      background: #313244; color: #6c7086; border: 1px solid #45475a;
+      border-radius: 4px; cursor: pointer;
+    }
+    .contour-cancel-btn:hover { background: #45475a; color: #cdd6f4; }
+    .direction-wheel-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 8px;
+    }
+    .direction-wheel-label {
+      font-size: 0.7rem;
+      color: #6c7086;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .direction-wheel-canvas {
+      border-radius: 50%;
+      cursor: grab;
+      display: block;
+      flex-shrink: 0;
+    }
+    .direction-wheel-canvas:active { cursor: grabbing; }
     .gradient-stop-tab-bar {
       display: flex;
       gap: 2px;
@@ -1996,7 +2060,6 @@ function normalizeGlobalSettings(raw = {}) {
     axisStrength: Math.round(clamp(Number(raw.axisStrength ?? DEFAULT_GLOBAL_SETTINGS.axisStrength), 0, 100) / 5) * 5,
     snapStrength: nearestSnapStrength(Number(rawSnapStrength)),
     snapCurveStrength: nearestSnapStrength(Number(raw.snapCurveStrength ?? DEFAULT_GLOBAL_SETTINGS.snapCurveStrength)),
-    lineToolMode: LINE_TOOL_MODES.has(raw.lineToolMode) ? raw.lineToolMode : DEFAULT_GLOBAL_SETTINGS.lineToolMode,
   };
 }
 
@@ -2223,20 +2286,6 @@ function splitAnchorPoint(anim, anchorIdx) {
 
 let globalSettings = loadGlobalSettings();
 
-function currentLineToolMode() {
-  return LINE_TOOL_MODES.has(globalSettings.lineToolMode)
-    ? globalSettings.lineToolMode
-    : LINE_TOOL_MODE_POLYLINE;
-}
-
-function setLineToolMode(mode) {
-  if (!LINE_TOOL_MODES.has(mode)) return;
-  globalSettings.lineToolMode = mode;
-  saveGlobalSettings();
-  renderAnimList();
-  draw();
-  updateCursor();
-}
 
 function colorFromStrength(strength, base, max) {
   const pct = clamp(strength, 0, 100);
@@ -3421,6 +3470,28 @@ function makeStraightSegment(p0, p1) {
   return makeSeg(lerpCx(p0, p1, 1 / 3), lerpCx(p0, p1, 2 / 3));
 }
 
+function enforcePolylineSegments(anim) {
+  if (!anim || anim.kind !== POLYLINE_KIND) return;
+  const _overrides = anim.arcOverrideSegments;
+  for (let i = 0; i < anim.segments.length; i++) {
+    if (_overrides?.has(i)) continue;
+    const seg = anim.segments[i];
+    const p0 = anim.anchors[i], p1 = anim.anchors[i + 1];
+    if (!seg || !p0 || !p1) continue;
+    const s = makeStraightSegment(p0, p1);
+    seg.h0 = s.h0; seg.h1 = s.h1;
+  }
+}
+
+function isSegmentStraight(seg, p0, p1) {
+  if (!seg?.h0 || !seg?.h1) return false;
+  const tol = 1e-6;
+  const eh0re = p0.re + (p1.re - p0.re) / 3, eh0im = p0.im + (p1.im - p0.im) / 3;
+  const eh1re = p0.re + 2 * (p1.re - p0.re) / 3, eh1im = p0.im + 2 * (p1.im - p0.im) / 3;
+  return Math.hypot(seg.h0.re - eh0re, seg.h0.im - eh0im) < tol &&
+         Math.hypot(seg.h1.re - eh1re, seg.h1.im - eh1im) < tol;
+}
+
 function cloneSegment(seg) {
   return seg ? {
     h0: cloneCx(seg.h0),
@@ -3432,9 +3503,6 @@ function cloneSegment(seg) {
   } : null;
 }
 
-function lineToolModeForPlacement(anim) {
-  return anim?.extensionAnchorIdx != null ? LINE_TOOL_MODE_POLYLINE : currentLineToolMode();
-}
 
 function polylineHasOpenDisconnectedStart(anim) {
   return !!anim && anim.anchors.length > 0 &&
@@ -3445,27 +3513,6 @@ function committedPolylineSegmentCount(anim) {
   return anim ? anim.segments.reduce((count, seg) => count + (seg ? 1 : 0), 0) : 0;
 }
 
-function addDisconnectedPolylineStart(anim, anchor) {
-  const target = cloneCx(anchor);
-  if (polylineHasOpenDisconnectedStart(anim)) {
-    anim.anchors[anim.anchors.length - 1] = target;
-    return;
-  }
-  if (anim.anchors.length > 0) anim.segments.push(null);
-  anim.anchors.push(target);
-  anim.anchorLocked.push(false);
-}
-
-function addDisconnectedPolylineConnector(anim, endpoint, seg = null) {
-  if (!polylineHasOpenDisconnectedStart(anim)) addDisconnectedPolylineStart(anim, endpoint);
-  const start = anim.anchors[anim.anchors.length - 1];
-  const target = cloneCx(endpoint);
-  const committedSeg = cloneSegment(seg || makeStraightSegment(start, target));
-  anim.anchors.push(target);
-  anim.anchorLocked.push(false);
-  anim.segments.push(committedSeg);
-  recompileSegment(anim, anim.segments.length - 1);
-}
 
 function trimDanglingDisconnectedPolylineStart(anim) {
   if (!polylineHasOpenDisconnectedStart(anim)) return;
@@ -3500,74 +3547,6 @@ function lineIntersection(p, d, q, e) {
   return new Cx(p.re + d.re * t, p.im + d.im * t);
 }
 
-function makeParabolicLineConnector(p0, p1, angleDeg, side) {
-  const dx = p1.re - p0.re, dy = p1.im - p0.im;
-  const L = Math.hypot(dx, dy);
-  if (L < 1e-9) return makeStraightSegment(p0, p1);
-  const chord = new Cx(dx / L, dy / L);
-  const theta = angleDeg * Math.PI / 180;
-  const t0 = rotateUnitVector(chord, side * theta);
-  const t1 = rotateUnitVector(chord, -side * theta);
-  let control = lineIntersection(p0, t0, p1, new Cx(-t1.re, -t1.im));
-  if (!control || !control.ok()) {
-    const normal = new Cx(-chord.im, chord.re);
-    control = new Cx(
-      (p0.re + p1.re) * 0.5 + normal.re * side * L * Math.tan(theta) * 0.5,
-      (p0.im + p1.im) * 0.5 + normal.im * side * L * Math.tan(theta) * 0.5
-    );
-  }
-  return makeSeg(
-    new Cx(p0.re + (control.re - p0.re) * 2 / 3, p0.im + (control.im - p0.im) * 2 / 3),
-    new Cx(p1.re + (control.re - p1.re) * 2 / 3, p1.im + (control.im - p1.im) * 2 / 3)
-  );
-}
-
-function buildLineConnectorChoices(start, end) {
-  const choices = [
-    { key: 'straight', title: 'Straight line', seg: makeStraightSegment(start, end) },
-    { key: 'inner-up', title: 'Gentle curve above', seg: makeParabolicLineConnector(start, end, 22.5, 1) },
-    { key: 'outer-up', title: 'Wide curve above', seg: makeParabolicLineConnector(start, end, 45, 1) },
-    { key: 'inner-down', title: 'Gentle curve below', seg: makeParabolicLineConnector(start, end, 22.5, -1) },
-    { key: 'outer-down', title: 'Wide curve below', seg: makeParabolicLineConnector(start, end, 45, -1) },
-  ];
-  for (const choice of choices) recompileSegmentRaw(choice.seg, start, end);
-  return choices;
-}
-
-function clearLineConnectorChoice() {
-  lineConnectorChoice = null;
-  lineConnectorChoiceHover = null;
-}
-
-function queryLineConnectorChoice(cx, cy) {
-  if (!lineConnectorChoice) return null;
-  let best = null, bestDist = Infinity;
-  lineConnectorChoice.choices.forEach((choice, idx) => {
-    const samples = sampleCompiledAdaptive(choice.seg.compiled);
-    const hit = polylineHitInfo(samples, cx, cy);
-    const threshold = (idx === 0 ? 10 : 8) * devicePixelRatio;
-    if (hit.dist <= threshold && hit.dist < bestDist) {
-      bestDist = hit.dist;
-      best = { idx, choice };
-    }
-  });
-  return best;
-}
-
-function commitLineConnectorChoice(choiceIdx = 0, shouldRender = true) {
-  const pending = lineConnectorChoice;
-  if (!pending?.anim) return false;
-  const choice = pending.choices[choiceIdx] || pending.choices[0];
-  pushUndo();
-  clearLineConnectorChoice();
-  addDisconnectedPolylineConnector(pending.anim, pending.end, choice.seg);
-  if (shouldRender) {
-    renderAnimList();
-    draw();
-    updateCursor();
-  }
-  return true;
-}
 
 // Commit a pending arc with independent handle lengths at each end.
 function _commitPendingArc(anim, nextPoint) {
@@ -3629,6 +3608,7 @@ let hoveredRegionId = null;
 let hoveredRegionGroupId = null;
 let colorEditTarget = 'outline';
 let gradientColorTab = 1; // 1 or 2, active sub-tab when editing gradient fill
+let objectFillTab = 1;   // 1=Fill1, 2=Fill2, 3=Style — active sub-tab in object panel
 let eyedropperTarget = null; // 'outline' | 'fill' | 'gradientTo' | 'region-fill' | 'arc-stroke' | null
 let eyedropperAnimId = null;
 let eyedropperRegionId = null; // region id when target is 'region-fill'
@@ -3646,6 +3626,7 @@ let handleDrag = null;  // {anim, segIdx, side, anchorIdx}
 let curveDrag  = null;  // {anim, startMath, origAnchors, origSegs} — text only now
 let eccDrag    = null;  // {anim, segIdx, perpRe, perpIm, anchor0re, anchor0im, perpSamples, preSnapshot}
 let frameDrag  = null;  // {anim, startMathX, startMathY, origAnchors, origSegs}
+let contourSelectMode = null; // {regionId, groupId, animId, side, nodeIndices} | null
 let resizeDrag = null;  // {anim, handle, mode, startMath, origBounds, origAnchors, origSegs}
 let rotateDrag = null;  // {anim, center, startAngle, origRotation, origAnchors, origSegs}
 let rotationModeTarget = null; // {animId}|{groupId}|{multi:true}|null
@@ -3660,8 +3641,6 @@ let plusHover    = null; // {anim, end:'A0'|'A2'} | null
 let lockHover    = null; // {anim, anchorIdx} | null — interior anchor lock toggle
 let rubberBand   = null; // {startX,startY,curX,curY,ctrl} | null — drag-region selection
 let splitArcMode = null; // {anim, segIdx} | null — pending arc split waiting for canvas click
-let lineConnectorChoice = null; // {anim,start,end,choices} | null — pending straight/curve choice for line tool
-let lineConnectorChoiceHover = null; // {idx, choice} | null
 // curvePicker removed — arc type is now auto-selected during placement
 
 // Future playback state, disabled for now.
@@ -3686,6 +3665,10 @@ function snapshotAnimations() {
     closed: !!a.closed,
     text: a.text ?? '',
     fontSize: a.fontSize ?? 36,
+    fontFamily: a.fontFamily ?? 'sans-serif',
+    fontBold: a.fontBold ?? false,
+    fontItalic: a.fontItalic ?? false,
+    textAlign: a.textAlign ?? 'left',
     textScaleX: a.textScaleX ?? 1,
     textScaleY: a.textScaleY ?? 1,
     textShearX: a.textShearX ?? 0,
@@ -3720,6 +3703,8 @@ function snapshotAnimations() {
       fillColor: c.fillColor ?? null, outlineOpacity: c.outlineOpacity ?? 1,
       fillOpacity: c.fillOpacity ?? 0.5, fillStyle: normalizeFillStyle(c.fillStyle),
       closed: !!c.closed, text: c.text ?? '', fontSize: c.fontSize ?? 36,
+      fontFamily: c.fontFamily ?? 'sans-serif', fontBold: c.fontBold ?? false,
+      fontItalic: c.fontItalic ?? false, textAlign: c.textAlign ?? 'left',
       textScaleX: c.textScaleX ?? 1, textScaleY: c.textScaleY ?? 1,
       textShearX: c.textShearX ?? 0, textShearY: c.textShearY ?? 0,
       visible: c.visible, thickness: c.thickness, rotation: c.rotation ?? 0,
@@ -3732,6 +3717,7 @@ function snapshotAnimations() {
       gradientToArcs: [...(c.gradientToArcs ?? [])],
       gradientToColor: c.gradientToColor ?? null,
       gradientToOpacity: c.gradientToOpacity ?? null,
+      arcOverrideSegments: c.arcOverrideSegments?.size ? [...c.arcOverrideSegments] : [],
     })) : null,
     regions: (a.regions ?? []).map(r => ({ ...r, boundary: r.boundary.map(e => ({ ...e })) })),
   }));
@@ -3778,7 +3764,6 @@ function restoreSnapshot(snap) {
   eccDrag = null;
   frameDrag = null;
   frameHover = null;
-  clearLineConnectorChoice();
   openColorMenuRegionId = null;
   openColorMenuRegionGroupId = null;
   hoveredRegionId = null; hoveredRegionGroupId = null;
@@ -3802,6 +3787,10 @@ function restoreSnapshot(snap) {
       closed: !!s.closed,
       text: s.text ?? '',
       fontSize: s.fontSize ?? 36,
+      fontFamily: s.fontFamily ?? 'sans-serif',
+      fontBold: s.fontBold ?? false,
+      fontItalic: s.fontItalic ?? false,
+      textAlign: s.textAlign ?? 'left',
       textScaleX: s.textScaleX ?? 1,
       textScaleY: s.textScaleY ?? 1,
       textShearX: s.textShearX ?? 0,
@@ -3837,6 +3826,8 @@ function restoreSnapshot(snap) {
         fillColor: c.fillColor ?? null, outlineOpacity: c.outlineOpacity ?? 1,
         fillOpacity: c.fillOpacity ?? 0.5, fillStyle: normalizeFillStyle(c.fillStyle),
         closed: !!c.closed, text: c.text ?? '', fontSize: c.fontSize ?? 36,
+        fontFamily: c.fontFamily ?? 'sans-serif', fontBold: c.fontBold ?? false,
+        fontItalic: c.fontItalic ?? false, textAlign: c.textAlign ?? 'left',
         textScaleX: c.textScaleX ?? 1, textScaleY: c.textScaleY ?? 1,
         textShearX: c.textShearX ?? 0, textShearY: c.textShearY ?? 0,
         visible: c.visible, thickness: c.thickness, rotation: c.rotation ?? 0,
@@ -3853,6 +3844,7 @@ function restoreSnapshot(snap) {
         gradientToArcs: new Set(c.gradientToArcs ?? []),
         gradientToColor: c.gradientToColor ?? null,
         gradientToOpacity: c.gradientToOpacity ?? null,
+        arcOverrideSegments: c.arcOverrideSegments?.length ? new Set(c.arcOverrideSegments) : undefined,
       })) : null,
       regions: (s.regions ?? []).map(r => ({ ...r, boundary: r.boundary.map(e => ({ ...e })) })),
     };
@@ -4497,21 +4489,26 @@ function mergeObjects(ids) {
     if (src.curves) {
       allCurves.push(...src.curves);
     } else {
+      const _rectPath = animKind(src) === 'rectangle' ? primitiveToTopologyPath(src) : null;
       allCurves.push({
         id: src.id,
-        color: src.color, kind: animKind(src),
+        color: src.color,
+        kind:       _rectPath ? _rectPath.kind    : animKind(src),
+        closed:     _rectPath ? _rectPath.closed   : !!src.closed,
+        rotation:   _rectPath ? 0                  : (src.rotation ?? 0),
+        anchors:    _rectPath ? _rectPath.anchors  : src.anchors,
+        segments:   _rectPath ? _rectPath.segments : src.segments,
+        anchorLocked: _rectPath ? _rectPath.anchors.map(() => false) : (src.anchorLocked ? [...src.anchorLocked] : []),
+        anchorLabels: src.anchorLabels ? [...src.anchorLabels] : [],
         fillColor: src.fillColor ?? null, outlineOpacity: src.outlineOpacity ?? 1,
         fillOpacity: src.fillOpacity ?? 0.5, fillStyle: src.fillStyle ?? 'solid',
         gradientFromArcs: src.gradientFromArcs ? new Set(src.gradientFromArcs) : new Set(),
         gradientToArcs: src.gradientToArcs ? new Set(src.gradientToArcs) : new Set(),
         gradientToColor: src.gradientToColor ?? null, gradientToOpacity: src.gradientToOpacity ?? null,
-        closed: !!src.closed, text: src.text ?? '', fontSize: src.fontSize ?? 36,
+        text: src.text ?? '', fontSize: src.fontSize ?? 36,
         textScaleX: src.textScaleX ?? 1, textScaleY: src.textScaleY ?? 1,
         textShearX: src.textShearX ?? 0, textShearY: src.textShearY ?? 0,
-        visible: src.visible, thickness: src.thickness, rotation: src.rotation ?? 0,
-        anchors: src.anchors, segments: src.segments,
-        anchorLocked: src.anchorLocked ? [...src.anchorLocked] : [],
-        anchorLabels: src.anchorLabels ? [...src.anchorLabels] : [],
+        visible: src.visible, thickness: src.thickness,
         activeSegments: new Set(),
       });
     }
@@ -4546,6 +4543,8 @@ function mergeObjects(ids) {
   selectedGroupId = null;
   clearMultiSelection();
   if (objectHasLinkableCurves(merged)) linkObjectCurves(merged);
+  snapMergedCorners(merged);
+  detectObjectTopology(merged);
   renderAnimList(); draw(); saveProject();
 }
 
@@ -4661,6 +4660,9 @@ function makeCurveProxy(parentAnim, c) {
   return {
     ...c,
     id: parentAnim.id + '_c_' + c.id,
+    color: parentAnim.color,
+    outlineOpacity: parentAnim.outlineOpacity,
+    thickness: parentAnim.thickness,
     visible: true,
     inPlacementMode: false,
     activeSegments: new Set(),
@@ -4792,7 +4794,6 @@ function clearAnimationInteractionState(id) {
   if (frameHover?.id === id) frameHover = null;
   if (plusHover?.anim?.id === id) plusHover = null;
   if (lockHover?.anim?.id === id) lockHover = null;
-  if (lineConnectorChoice?.anim?.id === id) clearLineConnectorChoice();
   if (openColorMenuAnimId === id) openColorMenuAnimId = null;
   if (eccentricitySliderActiveKey?.animId === id) eccentricitySliderActiveKey = null;
   if (canvasTextEditAnimId === id) finishCanvasTextEdit(false);
@@ -4825,12 +4826,9 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     e.preventDefault();
     if (eyedropperTarget !== null) { deactivateEyedropper(); renderAnimList(); return; }
+    if (contourSelectMode !== null) { contourSelectMode = null; renderAnimList(); draw(); return; }
     const placing = animations.find(a => a.inPlacementMode);
     if (placing) {
-      if (isPolylineAnim(placing) && lineConnectorChoice?.anim === placing) {
-        commitLineConnectorChoice(0);
-        return;
-      }
       if (isPrimitiveAnim(placing) || placing.anchors.length === 0) {
         cancelPlacement(placing);
       } else {
@@ -4976,6 +4974,9 @@ function exitEditMode() {
   editModeAnimId = null;
   openColorMenuAnimId = null;
   openColorMenuGroupId = null;
+  drillObjectArc = null;
+  selectedObjectNode = null;
+  selectedObjectRegionId = null;
   finishCanvasTextEdit(false);
   eccentricitySliderActiveKey = null;
   eccDrag = null;
@@ -4987,6 +4988,9 @@ function exitEditMode() {
   rotateHover = null;
   rotateDrag = null;
   sideActionHover = null;
+  segmentHover = null;
+  anchorHover = null;
+  handleHover = null;
   plusHover = null;
   lockHover = null;
   rubberBand = null;
@@ -5029,7 +5033,6 @@ function cancelPlacement(anim) {
   if (!anim || !anim.inPlacementMode) return;
   placementPreviewPos = null;
   placementMatchCandidate = null;
-  if (lineConnectorChoice?.anim === anim) clearLineConnectorChoice();
   if (anim.extensionAnchorIdx != null) {
     anim.inPlacementMode = false;
     anim.extensionAnchorIdx = null;
@@ -5062,7 +5065,6 @@ function finalizePrimitivePlacement(anim) {
 function finalizePolylinePlacement(anim) {
   if (!anim || !anim.inPlacementMode || !isPolylineAnim(anim)) return;
   const isExtension = anim.extensionAnchorIdx != null;
-  if (lineConnectorChoice?.anim === anim) commitLineConnectorChoice(0, false);
   if (!isExtension) trimDanglingDisconnectedPolylineStart(anim);
   if (!isExtension && committedPolylineSegmentCount(anim) < 1) {
     cancelPlacement(anim);
@@ -5160,6 +5162,10 @@ function addAnimation(kind = 'freeform') {
     closed: false,
     text: '',
     fontSize: 36,
+    fontFamily: 'sans-serif',
+    fontBold: false,
+    fontItalic: false,
+    textAlign: 'left',
     textScaleX: 1,
     textScaleY: 1,
     textShearX: 0,
@@ -5204,6 +5210,10 @@ function addTextAnimation() {
   const anim = addAnimation('text');
   anim.text = 'Text';
   anim.fontSize = 36;
+  anim.fontFamily = 'sans-serif';
+  anim.fontBold = false;
+  anim.fontItalic = false;
+  anim.textAlign = 'left';
   anim.textScaleX = 1;
   anim.textScaleY = 1;
   anim.textShearX = 0;
@@ -5267,6 +5277,10 @@ function duplicateAnimation() {
     closed: !!src.closed,
     text: src.text ?? '',
     fontSize: src.fontSize ?? 36,
+    fontFamily: src.fontFamily ?? 'sans-serif',
+    fontBold: src.fontBold ?? false,
+    fontItalic: src.fontItalic ?? false,
+    textAlign: src.textAlign ?? 'left',
     textScaleX: src.textScaleX ?? 1,
     textScaleY: src.textScaleY ?? 1,
     textShearX: src.textShearX ?? 0,
@@ -5326,6 +5340,10 @@ function makeTransformedAnimation(src, transformPoint, rotation) {
     closed: !!src.closed,
     text: src.text ?? '',
     fontSize: src.fontSize ?? 36,
+    fontFamily: src.fontFamily ?? 'sans-serif',
+    fontBold: src.fontBold ?? false,
+    fontItalic: src.fontItalic ?? false,
+    textAlign: src.textAlign ?? 'left',
     textScaleX: src.textScaleX ?? 1,
     textScaleY: src.textScaleY ?? 1,
     textShearX: src.textShearX ?? 0,
@@ -5636,17 +5654,33 @@ function deactivateEyedropper() {
 }
 
 function applyEyedropperColor(hex) {
+  if (eyedropperTarget === 'region-fill' || eyedropperTarget === 'region-fill2') {
+    let region = null;
+    for (const grp of groups) {
+      region = (grp.regions ?? []).find(r => r.id === eyedropperRegionId);
+      if (region) break;
+    }
+    if (!region) {
+      const a = animations.find(a => a.id === eyedropperAnimId);
+      region = (a?.regions ?? []).find(r => r.id === eyedropperRegionId);
+    }
+    if (region) {
+      pushUndo();
+      if (eyedropperTarget === 'region-fill') {
+        region.fillColor = hex;
+        if (!region.fillStyle) region.fillStyle = 'solid';
+        region.fillOpacity = 1;
+      } else {
+        region.gradientToColor = hex;
+        region.gradientToOpacity = 1;
+      }
+    }
+    deactivateEyedropper(); renderAnimList(); draw(); return;
+  }
   const anim = animations.find(a => a.id === eyedropperAnimId);
   if (!anim) { deactivateEyedropper(); return; }
   pushUndo();
-  if (eyedropperTarget === 'region-fill') {
-    const region = (anim.regions ?? []).find(r => r.id === eyedropperRegionId);
-    if (region) {
-      region.fillColor = hex;
-      if (!region.fillStyle) region.fillStyle = 'solid';
-      region.fillOpacity = 1;
-    }
-  } else if (eyedropperTarget === 'arc-stroke') {
+  if (eyedropperTarget === 'arc-stroke') {
     const curve = animCurves(anim).find(c => c.id === eyedropperCurveId);
     if (curve) { curve.color = hex; curve.outlineOpacity = 1; }
     else { anim.color = hex; anim.outlineOpacity = 1; }
@@ -5654,14 +5688,14 @@ function applyEyedropperColor(hex) {
     anim.gradientToColor = hex;
     openColorMenuAnimId = eyedropperAnimId;
     colorEditTarget = 'fill';
-    gradientColorTab = 2;
+    objectFillTab = 2;
   } else if (eyedropperTarget === 'fill') {
     anim.fillColor = hex;
     if (!anim.fillStyle) anim.fillStyle = 'solid';
     anim.fillOpacity = 1;
     openColorMenuAnimId = eyedropperAnimId;
     colorEditTarget = 'fill';
-    gradientColorTab = 1;
+    objectFillTab = 1;
   } else {
     anim.color = hex;
     anim.outlineOpacity = 1;
@@ -5681,9 +5715,7 @@ function updateCursor() {
   }
   const placing = animations.some(a => a.inPlacementMode);
   if (placing) {
-    canvas.style.cursor = lineConnectorChoice
-      ? (lineConnectorChoiceHover ? 'pointer' : 'crosshair')
-      : 'none';
+    canvas.style.cursor = 'none';
   } else if (splitArcMode !== null) {
     const onTarget = segmentHover?.anim === splitArcMode.anim && segmentHover?.segIdx === splitArcMode.segIdx;
     canvas.style.cursor = 'default';
@@ -5916,6 +5948,18 @@ function hitTestObjectRegion(anim, cx, cy) {
 
 function fillHitCandidate(anim, cx, cy) {
   if (hitTestObjectRegion(anim, cx, cy) !== null) return true;
+  if (anim.curves?.length) {
+    for (const c of anim.curves) {
+      if (isPrimitiveAnim(c) || isTextAnim(c)) continue;
+      if (!animFillColor(c) || animFillOpacity(c) <= 0) continue;
+      ctx.save(); ctx.beginPath();
+      const drew = addCurveFillPath(ctx, c);
+      const hit = drew && isPointInCurrentPathEvenOdd(ctx, cx, cy);
+      ctx.restore(); ctx.beginPath();
+      if (hit) return true;
+    }
+    return false;
+  }
   if (!animHasVisibleFill(anim)) return false;
   if (isTextAnim(anim)) return textFillHit(anim, cx, cy);
   if (isPrimitiveAnim(anim)) return primitiveFillHit(anim, cx, cy);
@@ -6047,9 +6091,26 @@ function textLines(anim) {
   return lines.length ? lines : [''];
 }
 
+const FONT_FAMILIES = [
+  { value: 'sans-serif',        label: 'Sans-serif' },
+  { value: 'serif',             label: 'Serif' },
+  { value: 'monospace',         label: 'Monospace' },
+  { value: 'Arial',             label: 'Arial' },
+  { value: 'Georgia',           label: 'Georgia' },
+  { value: 'Times New Roman',   label: 'Times New Roman' },
+  { value: 'Courier New',       label: 'Courier New' },
+  { value: 'Verdana',           label: 'Verdana' },
+];
+
+const _GENERIC_FONT_FAMILIES = new Set(['sans-serif', 'serif', 'monospace', 'cursive', 'fantasy', 'system-ui']);
+
 function textFont(anim) {
   const size = Math.max(1, anim?.fontSize ?? 36) * (scale / TEXT_BASE_SCALE) * devicePixelRatio;
-  return `${size}px sans-serif`;
+  const weight = anim?.fontBold ? 'bold' : 'normal';
+  const style  = anim?.fontItalic ? 'italic' : 'normal';
+  const family = anim?.fontFamily || 'sans-serif';
+  const familyStr = _GENERIC_FONT_FAMILIES.has(family) ? family : `"${family}"`;
+  return `${style} ${weight} ${size}px ${familyStr}`;
 }
 
 function textScreenFontSize(anim) {
@@ -6160,9 +6221,10 @@ function drawTextPatternFill(anim, metrics, style) {
   maskCtx.scale(textScaleX(anim), textScaleY(anim));
   maskCtx.fillStyle = '#000';
   maskCtx.font = textFont(anim);
-  maskCtx.textAlign = 'left';
+  const _pmAlign = anim.textAlign || 'left';
+  maskCtx.textAlign = _pmAlign;
   maskCtx.textBaseline = 'alphabetic';
-  const x = -metrics.width * 0.5;
+  const x = _pmAlign === 'center' ? 0 : _pmAlign === 'right' ? metrics.width * 0.5 : -metrics.width * 0.5;
   let y = -metrics.height * 0.5 + metrics.fontPx;
   for (const line of metrics.lines) {
     maskCtx.fillText(line || ' ', x, y);
@@ -6193,12 +6255,13 @@ function drawTextAnim(anim) {
   ctx.transform(1, textShearY(anim), textShearX(anim), 1, 0, 0);
   ctx.scale(textScaleX(anim), textScaleY(anim));
   ctx.font = textFont(anim);
-  ctx.textAlign = 'left';
+  const _align = anim.textAlign || 'left';
+  ctx.textAlign = _align;
   ctx.textBaseline = 'alphabetic';
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
   ctx.lineWidth = Math.max(0.5, anim.thickness ?? 1) * devicePixelRatio;
-  const x = -metrics.width * 0.5;
+  const x = _align === 'center' ? 0 : _align === 'right' ? metrics.width * 0.5 : -metrics.width * 0.5;
   let y = -metrics.height * 0.5 + metrics.fontPx;
   if (animOutlineOpacity(anim) > 0 && ctx.lineWidth > 0) {
     ctx.strokeStyle = anim.color;
@@ -6346,6 +6409,10 @@ function positionCanvasTextEditor() {
   canvasTextEditor.style.width = `${width}px`;
   canvasTextEditor.style.height = `${height}px`;
   canvasTextEditor.style.fontSize = `${textScreenFontSize(anim)}px`;
+  canvasTextEditor.style.fontFamily = anim.fontFamily || 'sans-serif';
+  canvasTextEditor.style.fontWeight = anim.fontBold ? 'bold' : 'normal';
+  canvasTextEditor.style.fontStyle  = anim.fontItalic ? 'italic' : 'normal';
+  canvasTextEditor.style.textAlign  = anim.textAlign || 'left';
   canvasTextEditor.style.lineHeight = '1.2';
   const editColor = animFillColor(anim) || anim.color || '#cdd6f4';
   const editOpacity = animFillColor(anim) ? animFillOpacity(anim) : animOutlineOpacity(anim);
@@ -6370,6 +6437,7 @@ function rayExitRect(px, py, dx, dy, rx, ry, rw, rh) {
 }
 
 function getPlusPositions(anim) {
+  if (isTextAnim(anim) || isPrimitiveAnim(anim)) return [];
   if (isClosedPathAnim(anim)) return [];
   if (anim.anchors.length === 0) return [];
   if (anim.segments.length === 0) {
@@ -6686,55 +6754,9 @@ function insertPolylineExtensionAnchor(anim, target) {
   recompileAnim(anim);
 }
 
-function disconnectedPolylinePlacementClickHandler(anim, snapped, mathX, mathY) {
-  if (lineConnectorChoice?.anim === anim) {
-    const [cx, cy] = toCanvas(mathX, mathY);
-    const hit = queryLineConnectorChoice(cx, cy);
-    commitLineConnectorChoice(hit?.idx ?? 0);
-    return;
-  }
-
-  const mode = currentLineToolMode();
-  const anch = anim.anchors;
-  const nearIdx = nearestPlacementAnchorIndex(anim, mathX, mathY, undefined, snapped);
-  const target = nearIdx >= 0 ? cloneCx(anch[nearIdx]) : cloneCx(snapped);
-
-  if (!polylineHasOpenDisconnectedStart(anim)) {
-    pushUndo();
-    addDisconnectedPolylineStart(anim, target);
-    renderAnimList(); draw(); updateCursor();
-    return;
-  }
-
-  const start = anch[anch.length - 1];
-  if (mode === LINE_TOOL_MODE_CURVES) {
-    lineConnectorChoice = {
-      anim,
-      start: cloneCx(start),
-      end: target,
-      choices: buildLineConnectorChoices(start, target),
-    };
-    lineConnectorChoiceHover = null;
-    placementPreviewPos = null;
-    renderAnimList(); draw(); updateCursor();
-    return;
-  }
-
-  pushUndo();
-  addDisconnectedPolylineConnector(anim, target, makeStraightSegment(start, target));
-  renderAnimList(); draw(); updateCursor();
-}
 
 function polylinePlacementClickHandler(anim, snapped, mathX, mathY) {
   if (!anim || !isPolylineAnim(anim)) return;
-  if (lineConnectorChoice?.anim === anim) {
-    disconnectedPolylinePlacementClickHandler(anim, snapped, mathX, mathY);
-    return;
-  }
-  if (anim.extensionAnchorIdx == null && lineToolModeForPlacement(anim) !== LINE_TOOL_MODE_POLYLINE) {
-    disconnectedPolylinePlacementClickHandler(anim, snapped, mathX, mathY);
-    return;
-  }
   const anch = anim.anchors;
   const n = anch.length;
   const nearIdx = nearestPlacementAnchorIndex(anim, mathX, mathY, undefined, snapped);
@@ -6863,6 +6885,42 @@ canvas.addEventListener('mousedown', e => {
     applyEyedropperColor('#' + [pixel[0], pixel[1], pixel[2]].map(v => v.toString(16).padStart(2, '0')).join(''));
     return;
   }
+  // ── Contour boundary selection mode ──────────────────────────────────────────
+  if (contourSelectMode !== null) {
+    e.preventDefault();
+    const rect2 = canvas.getBoundingClientRect();
+    const ccx = (e.clientX - rect2.left) * devicePixelRatio;
+    const ccy = (e.clientY - rect2.top)  * devicePixelRatio;
+    const curvesMapCsm = getCurvesMapForContourMode();
+    const regionCsm = getRegionForContourMode();
+    if (curvesMapCsm && regionCsm?.boundary?.length) {
+      const nodesCsm = junctionNodesForRegion(regionCsm.boundary, curvesMapCsm);
+      const HIT_R = 18 * devicePixelRatio;
+      let closestIdx = -1, closestDist = HIT_R;
+      for (let ni = 0; ni < nodesCsm.length; ni++) {
+        const nd = nodesCsm[ni];
+        if (!nd) continue;
+        const d = Math.sqrt((ccx - nd.x) ** 2 + (ccy - nd.y) ** 2);
+        if (d < closestDist) { closestDist = d; closestIdx = ni; }
+      }
+      if (closestIdx >= 0) {
+        const prev = contourSelectMode.nodeIndices;
+        if (prev.length > 0 && prev[prev.length - 1] === closestIdx) {
+          contourSelectMode = { ...contourSelectMode, nodeIndices: prev.slice(0, -1) };
+        } else {
+          contourSelectMode = { ...contourSelectMode, nodeIndices: [...prev, closestIdx] };
+        }
+        renderAnimList(); draw();
+      } else {
+        // Clicked in dead space — cancel boundary selection
+        contourSelectMode = null;
+        renderAnimList(); draw();
+      }
+    }
+    return;
+  }
+  // ─────────────────────────────────────────────────────────────────────────────
+
   if (openColorMenuAnimId !== null || openColorMenuGroupId !== null || openColorMenuRegionId !== null) {
     openColorMenuAnimId = null; openColorMenuGroupId = null;
     openColorMenuRegionId = null; openColorMenuRegionGroupId = null;
@@ -7055,13 +7113,12 @@ canvas.addEventListener('mousedown', e => {
     if (resizeHit.anim) {
       const frame = selectionFrameMetrics(resizeHit.anim);
       if (frame) {
-        const isPrimCirc = resizeHit.anim.kind === 'circle' || resizeHit.anim.kind === 'ellipse';
-        const primBounds = isPrimCirc ? objectMathBounds(resizeHit.anim) : null;
         resizeDrag = {
           ...cloneTransformState(resizeHit.anim),
           handle: resizeHit.handle,
           startMathX: mathX, startMathY: mathY,
-          origBounds: primBounds ?? frameMathBounds(frame),
+          origBounds: objectMathBounds(resizeHit.anim) ?? frameMathBounds(frame),
+          origFrameBounds: frameMathBounds(frame),
           ...(resizeHit.anim.curves ? { mergedCurves: true, origStates: resizeHit.anim.curves.map(cloneTransformState) } : {}),
         };
       }
@@ -7071,7 +7128,8 @@ canvas.addEventListener('mousedown', e => {
         groupId: resizeHit.groupId,
         handle: resizeHit.handle,
         startMathX: mathX, startMathY: mathY,
-        origBounds: frameMathBounds(f),
+        origBounds: groupMathBounds(resizeHit.groupId) ?? frameMathBounds(f),
+        origFrameBounds: frameMathBounds(f),
         origStates: allDescendantAnims(resizeHit.groupId).map(cloneTransformState),
       };
     } else if (resizeHit.multi) {
@@ -7080,7 +7138,8 @@ canvas.addEventListener('mousedown', e => {
         multi: true,
         handle: resizeHit.handle,
         startMathX: mathX, startMathY: mathY,
-        origBounds: frameMathBounds(f),
+        origBounds: multiSelectionMathBounds() ?? frameMathBounds(f),
+        origFrameBounds: frameMathBounds(f),
         origStates: multiSelectionMembers().map(cloneTransformState),
       };
     }
@@ -7162,11 +7221,11 @@ canvas.addEventListener('mousedown', e => {
         if (Math.hypot(cx - _ncx, cy - _ncy) <= _HIT) {
           e.preventDefault();
           pushUndo();
-          // Find all endpoint anchors at this node position and drag them together
+          // Find all anchors at this node position and drag them together
           const _nodeAnchors = [];
           for (const _nc of animCurves(_topoAnim)) {
             if (isPrimitiveAnim(_nc) || isTextAnim(_nc)) continue;
-            for (const _ai of [0, _nc.anchors.length - 1]) {
+            for (let _ai = 0; _ai < _nc.anchors.length; _ai++) {
               const _na = _nc.anchors[_ai];
               if (_na && Math.hypot(_na.re - ep.pos.re, _na.im - ep.pos.im) < 1e-4) {
                 _nodeAnchors.push({ anim: _nc, anchorIdx: _ai });
@@ -7178,13 +7237,34 @@ canvas.addEventListener('mousedown', e => {
           const _primOrig = cloneCx(_prim.anim.anchors[_prim.anchorIdx]);
           const _primH0 = _prim.anim.segments[_prim.anchorIdx] ? cloneCx(_prim.anim.segments[_prim.anchorIdx].h0) : null;
           const _primH1 = _prim.anchorIdx > 0 && _prim.anim.segments[_prim.anchorIdx - 1] ? cloneCx(_prim.anim.segments[_prim.anchorIdx - 1].h1) : null;
+          const _primOutSeg = _prim.anim.segments[_prim.anchorIdx];
+          const _primInSeg = _prim.anchorIdx > 0 ? _prim.anim.segments[_prim.anchorIdx - 1] : null;
+          const _primNextAnch = _prim.anim.anchors[_prim.anchorIdx + 1] ?? null;
+          const _primPrevAnch = _prim.anchorIdx > 0 ? _prim.anim.anchors[_prim.anchorIdx - 1] : null;
           anchorDrag = {
             anim: _prim.anim, anchorIdx: _prim.anchorIdx, startMathX: mathX, startMathY: mathY,
             origAnchor: _primOrig, origH0: _primH0, origH1: _primH1,
             linkedIdx: null, linkedOrigH0: null, linkedOrigH1: null,
-            coincidentAnchors: _nodeAnchors.slice(1).map(({ anim: _ca, anchorIdx: _cai }) => ({
-              anim: _ca, anchorIdx: _cai, origAnchor: cloneCx(_ca.anchors[_cai]),
-            })),
+            outStraight: _primNextAnch ? isSegmentStraight(_primOutSeg, _primOrig, _primNextAnch) : false,
+            inStraight: _primPrevAnch ? isSegmentStraight(_primInSeg, _primPrevAnch, _primOrig) : false,
+            nextAnchor: _primNextAnch ? cloneCx(_primNextAnch) : null,
+            prevAnchor: _primPrevAnch ? cloneCx(_primPrevAnch) : null,
+            coincidentAnchors: _nodeAnchors.slice(1).map(({ anim: _ca, anchorIdx: _cai }) => {
+              const _caOrig = cloneCx(_ca.anchors[_cai]);
+              const _caOutSeg = _ca.segments[_cai];
+              const _caInSeg = _cai > 0 ? _ca.segments[_cai - 1] : null;
+              const _caN = _ca.anchors[_cai + 1] ?? null;
+              const _caP = _cai > 0 ? _ca.anchors[_cai - 1] : null;
+              return {
+                anim: _ca, anchorIdx: _cai, origAnchor: _caOrig,
+                origH0: _caOutSeg ? cloneCx(_caOutSeg.h0) : null,
+                origH1: _caInSeg ? cloneCx(_caInSeg.h1) : null,
+                outStraight: _caN ? isSegmentStraight(_caOutSeg, _caOrig, _caN) : false,
+                inStraight: _caP ? isSegmentStraight(_caInSeg, _caP, _caOrig) : false,
+                nextAnchor: _caN ? cloneCx(_caN) : null,
+                prevAnchor: _caP ? cloneCx(_caP) : null,
+              };
+            }),
           };
           updateCursor(); draw(); return;
         }
@@ -7258,23 +7338,43 @@ canvas.addEventListener('mousedown', e => {
         linkedOrigH1 = linkedIdx > 0 && aHitAnim.segments[linkedIdx - 1] ? cloneCx(aHitAnim.segments[linkedIdx - 1].h1) : null;
       }
     }
+    const _outSeg = aHitAnim.segments[anchorIdx];
+    const _inSeg = anchorIdx > 0 ? aHitAnim.segments[anchorIdx - 1] : null;
+    const _nextAnch = aHitAnim.anchors[anchorIdx + 1] ?? null;
+    const _prevAnch = anchorIdx > 0 ? aHitAnim.anchors[anchorIdx - 1] : null;
     anchorDrag = {
       anim: aHitAnim, anchorIdx, startMathX: mathX, startMathY: mathY,
       origAnchor, origH0, origH1, linkedIdx, linkedOrigH0, linkedOrigH1,
+      outStraight: _nextAnch ? isSegmentStraight(_outSeg, origAnchor, _nextAnch) : false,
+      inStraight: _prevAnch ? isSegmentStraight(_inSeg, _prevAnch, origAnchor) : false,
+      nextAnchor: _nextAnch ? cloneCx(_nextAnch) : null,
+      prevAnchor: _prevAnch ? cloneCx(_prevAnch) : null,
       coincidentAnchors: [],
     };
-    const _isEndpoint = anchorIdx === 0 || anchorIdx === aHitAnim.anchors.length - 1;
     const _topoParentId = drillObjectArc?.animId ?? selectedId;
-    if (_isEndpoint && _topoParentId) {
+    if (_topoParentId) {
       const _parentAnim = animations.find(a => a.id === _topoParentId);
       if (_parentAnim?.curves) {
         const _pos = aHitAnim.anchors[anchorIdx];
         for (const _sib of animCurves(_parentAnim)) {
           if (_sib === aHitAnim) continue;
-          for (const _ai of [0, _sib.anchors.length - 1]) {
+          for (let _ai = 0; _ai < _sib.anchors.length; _ai++) {
             const _sa = _sib.anchors[_ai];
             if (_sa && Math.hypot(_sa.re - _pos.re, _sa.im - _pos.im) < 1e-4) {
-              anchorDrag.coincidentAnchors.push({ anim: _sib, anchorIdx: _ai, origAnchor: cloneCx(_sa) });
+              const _saOrig = cloneCx(_sa);
+              const _saOutSeg = _sib.segments[_ai];
+              const _saInSeg = _ai > 0 ? _sib.segments[_ai - 1] : null;
+              const _saN = _sib.anchors[_ai + 1] ?? null;
+              const _saP = _ai > 0 ? _sib.anchors[_ai - 1] : null;
+              anchorDrag.coincidentAnchors.push({
+                anim: _sib, anchorIdx: _ai, origAnchor: _saOrig,
+                origH0: _saOutSeg ? cloneCx(_saOutSeg.h0) : null,
+                origH1: _saInSeg ? cloneCx(_saInSeg.h1) : null,
+                outStraight: _saN ? isSegmentStraight(_saOutSeg, _saOrig, _saN) : false,
+                inStraight: _saP ? isSegmentStraight(_saInSeg, _saP, _saOrig) : false,
+                nextAnchor: _saN ? cloneCx(_saN) : null,
+                prevAnchor: _saP ? cloneCx(_saP) : null,
+              });
             }
           }
         }
@@ -7478,15 +7578,6 @@ window.addEventListener('mousemove', e => {
   const placingForPreview = animations.find(a => a.inPlacementMode);
   if (placingForPreview) {
     const onCanvas = cx >= 0 && cy >= 0 && cx <= canvas.width && cy <= canvas.height;
-    if (isPolylineAnim(placingForPreview) && lineConnectorChoice?.anim === placingForPreview) {
-      placementPreviewPos = null;
-      const nextHover = onCanvas ? queryLineConnectorChoice(cx, cy) : null;
-      const changed = (nextHover?.idx ?? -1) !== (lineConnectorChoiceHover?.idx ?? -1);
-      lineConnectorChoiceHover = nextHover;
-      if (changed) updateCursor();
-      draw(); return;
-    }
-    lineConnectorChoiceHover = null;
     placementPreviewPos = onCanvas ? new Cx(softSnap(mathX), softSnap(mathY)) : null;
     draw(); return;
   }
@@ -7543,6 +7634,28 @@ window.addEventListener('mousemove', e => {
       }
       if (bestPt) { snapX = bestPt.re; snapY = bestPt.im; }
     }
+    // Weld snap: when dragging inside a merged object, snap to any sibling anchor.
+    // Skip anchors that are already coincident with the dragged node (they lag one frame
+    // behind and would otherwise snap the primary anchor back to its previous position).
+    const _weldParent = animations.find(p => p.curves?.includes(anim));
+    if (_weldParent) {
+      const _weldThresh = 12 / scale;
+      let _weldBest = _weldThresh, _weldPt = null;
+      const _skipKeys = new Set(
+        (anchorDrag.coincidentAnchors ?? []).map(cc => `${cc.anim.id}:${cc.anchorIdx}`)
+      );
+      for (const _sib of _weldParent.curves) {
+        if (_sib === anim || isPrimitiveAnim(_sib) || isTextAnim(_sib)) continue;
+        for (let _ai = 0; _ai < _sib.anchors.length; _ai++) {
+          if (_skipKeys.has(`${_sib.id}:${_ai}`)) continue;
+          const _sa = _sib.anchors[_ai];
+          if (!_sa) continue;
+          const _d = Math.hypot(_sa.re - snapX, _sa.im - snapY);
+          if (_d < _weldBest) { _weldBest = _d; _weldPt = _sa; }
+        }
+      }
+      if (_weldPt) { snapX = _weldPt.re; snapY = _weldPt.im; }
+    }
     const sdx = snapX - origAnchor.re, sdy = snapY - origAnchor.im;
     anim.anchors[anchorIdx] = new Cx(snapX, snapY);
     if (linkedIdx !== null) {
@@ -7553,15 +7666,62 @@ window.addEventListener('mousemove', e => {
       if (linkedOrigH1 !== null) anim.segments[linkedIdx - 1].h1 = new Cx(linkedOrigH1.re + sdx, linkedOrigH1.im + sdy);
     } else {
       const isInterior = origH0 !== null && origH1 !== null;
-      if (isInterior) {
-        anim.segments[anchorIdx].h0 = new Cx(origH0.re + sdx, origH0.im + sdy);
-        anim.segments[anchorIdx - 1].h1 = new Cx(origH1.re + sdx, origH1.im + sdy);
+      // Outgoing segment (anchorIdx → anchorIdx+1): update h0 and h1
+      if (anim.segments[anchorIdx]) {
+        if (anchorDrag.outStraight && anchorDrag.nextAnchor) {
+          const p1 = anchorDrag.nextAnchor;
+          anim.segments[anchorIdx].h0 = new Cx(snapX + (p1.re - snapX) / 3, snapY + (p1.im - snapY) / 3);
+          anim.segments[anchorIdx].h1 = new Cx(snapX + 2 * (p1.re - snapX) / 3, snapY + 2 * (p1.im - snapY) / 3);
+        } else if (isInterior && origH0 !== null) {
+          anim.segments[anchorIdx].h0 = new Cx(origH0.re + sdx, origH0.im + sdy);
+        }
+      }
+      // Incoming segment (anchorIdx-1 → anchorIdx): update h0 and h1
+      if (anchorIdx > 0 && anim.segments[anchorIdx - 1]) {
+        if (anchorDrag.inStraight && anchorDrag.prevAnchor) {
+          const p0 = anchorDrag.prevAnchor;
+          anim.segments[anchorIdx - 1].h0 = new Cx(p0.re + (snapX - p0.re) / 3, p0.im + (snapY - p0.im) / 3);
+          anim.segments[anchorIdx - 1].h1 = new Cx(p0.re + 2 * (snapX - p0.re) / 3, p0.im + 2 * (snapY - p0.im) / 3);
+        } else if (isInterior && origH1 !== null) {
+          anim.segments[anchorIdx - 1].h1 = new Cx(origH1.re + sdx, origH1.im + sdy);
+        }
       }
     }
+    if (anim.kind === POLYLINE_KIND) enforcePolylineSegments(anim);
     recompileAnim(anim);
     if (anchorDrag.coincidentAnchors?.length) {
-      for (const { anim: _ca, anchorIdx: _cai, origAnchor: _cOrig } of anchorDrag.coincidentAnchors) {
+      for (const _cc of anchorDrag.coincidentAnchors) {
+        const { anim: _ca, anchorIdx: _cai, origAnchor: _cOrig,
+                origH0: _cOrigH0, origH1: _cOrigH1,
+                outStraight: _cOutStraight, inStraight: _cInStraight,
+                nextAnchor: _cNext, prevAnchor: _cPrev } = _cc;
         _ca.anchors[_cai] = new Cx(_cOrig.re + sdx, _cOrig.im + sdy);
+        const _cSnapX = _cOrig.re + sdx, _cSnapY = _cOrig.im + sdy;
+        const _cIsInterior = _cOrigH0 !== null && _cOrigH1 !== null;
+        if (_ca.segments[_cai]) {
+          if (_cOutStraight && _cNext) {
+            _ca.segments[_cai].h0 = new Cx(_cSnapX + (_cNext.re - _cSnapX) / 3, _cSnapY + (_cNext.im - _cSnapY) / 3);
+            _ca.segments[_cai].h1 = new Cx(_cSnapX + 2 * (_cNext.re - _cSnapX) / 3, _cSnapY + 2 * (_cNext.im - _cSnapY) / 3);
+          } else if (_cIsInterior && _cOrigH0 !== null) {
+            _ca.segments[_cai].h0 = new Cx(_cOrigH0.re + sdx, _cOrigH0.im + sdy);
+          }
+        }
+        if (_cai > 0 && _ca.segments[_cai - 1]) {
+          if (_cInStraight && _cPrev) {
+            _ca.segments[_cai - 1].h0 = new Cx(_cPrev.re + (_cSnapX - _cPrev.re) / 3, _cPrev.im + (_cSnapY - _cPrev.im) / 3);
+            _ca.segments[_cai - 1].h1 = new Cx(_cPrev.re + 2 * (_cSnapX - _cPrev.re) / 3, _cPrev.im + 2 * (_cSnapY - _cPrev.im) / 3);
+          } else if (_cIsInterior && _cOrigH1 !== null) {
+            _ca.segments[_cai - 1].h1 = new Cx(_cOrigH1.re + sdx, _cOrigH1.im + sdy);
+          }
+        }
+        if (_ca.kind === POLYLINE_KIND) {
+          const _caLoop = findLoopRange(_ca);
+          if (_caLoop) {
+            if (_cai === _caLoop.loopStart) _ca.anchors[_caLoop.loopEnd] = new Cx(_cSnapX, _cSnapY);
+            else if (_cai === _caLoop.loopEnd) _ca.anchors[_caLoop.loopStart] = new Cx(_cSnapX, _cSnapY);
+          }
+          enforcePolylineSegments(_ca);
+        }
         recompileAnim(_ca);
       }
     }
@@ -7741,6 +7901,9 @@ window.addEventListener('mouseup', e => {
       selectedId = null;
       selectedGroupId = null;
       sceneIndicatorAnimId = null;
+      drillObjectArc = null;
+      selectedObjectNode = null;
+      selectedObjectRegionId = null;
       clearMultiSelection();
       clearGroupMode();
       clearSelectionShearGuides();
@@ -7939,7 +8102,8 @@ objCanvas.addEventListener('mousedown', e => {
           ...cloneTransformState(resizeHit.anim),
           handle: resizeHit.handle,
           startMathX: mathX, startMathY: mathY,
-          origBounds: frameMathBounds(frame),
+          origBounds: objectMathBounds(resizeHit.anim) ?? frameMathBounds(frame),
+          origFrameBounds: frameMathBounds(frame),
           onObjCanvas: true,
         };
       } else if (resizeHit.groupId != null) {
@@ -7948,7 +8112,8 @@ objCanvas.addEventListener('mousedown', e => {
           groupId: resizeHit.groupId,
           handle: resizeHit.handle,
           startMathX: mathX, startMathY: mathY,
-          origBounds: frameMathBounds(f),
+          origBounds: groupMathBounds(resizeHit.groupId) ?? frameMathBounds(f),
+          origFrameBounds: frameMathBounds(f),
           origStates: allDescendantAnims(resizeHit.groupId).map(cloneTransformState),
           onObjCanvas: true,
         };
@@ -7958,7 +8123,8 @@ objCanvas.addEventListener('mousedown', e => {
           multi: true,
           handle: resizeHit.handle,
           startMathX: mathX, startMathY: mathY,
-          origBounds: frameMathBounds(f),
+          origBounds: multiSelectionMathBounds() ?? frameMathBounds(f),
+          origFrameBounds: frameMathBounds(f),
           origStates: multiSelectionMembers().map(cloneTransformState),
           onObjCanvas: true,
         };
@@ -8240,7 +8406,8 @@ isolCanvas.addEventListener('mousedown', e => {
           ...cloneTransformState(resizeHit.anim),
           handle: resizeHit.handle,
           startMathX: mathX, startMathY: mathY,
-          origBounds: frameMathBounds(frame),
+          origBounds: objectMathBounds(resizeHit.anim) ?? frameMathBounds(frame),
+          origFrameBounds: frameMathBounds(frame),
           onIsolCanvas: true,
         };
       } else if (resizeHit.groupId != null) {
@@ -8249,7 +8416,8 @@ isolCanvas.addEventListener('mousedown', e => {
           groupId: resizeHit.groupId,
           handle: resizeHit.handle,
           startMathX: mathX, startMathY: mathY,
-          origBounds: frameMathBounds(f),
+          origBounds: groupMathBounds(resizeHit.groupId) ?? frameMathBounds(f),
+          origFrameBounds: frameMathBounds(f),
           origStates: allDescendantAnims(resizeHit.groupId).map(cloneTransformState),
           onIsolCanvas: true,
         };
@@ -8259,7 +8427,8 @@ isolCanvas.addEventListener('mousedown', e => {
           multi: true,
           handle: resizeHit.handle,
           startMathX: mathX, startMathY: mathY,
-          origBounds: frameMathBounds(f),
+          origBounds: multiSelectionMathBounds() ?? frameMathBounds(f),
+          origFrameBounds: frameMathBounds(f),
           origStates: multiSelectionMembers().map(cloneTransformState),
           onIsolCanvas: true,
         };
@@ -8573,6 +8742,7 @@ function drawHandleDot(canvasPt, color, r) {
 }
 
 function drawHandles(anim) {
+  if (isTextAnim(anim) || isPrimitiveAnim(anim)) return;
   const dpr = devicePixelRatio;
   const activeArc = activeArcIndex(anim);
 
@@ -9470,40 +9640,10 @@ function drawFreshFreeformPlacement(anim, previewPoint, cw, dpr) {
   }
 }
 
-function drawLineConnectorChoices(start, end, choices, color, cw, dpr, hoverIdx = null) {
-  if (!start || !end || !choices || choices.length === 0) return;
-  const curveOrder = [2, 1, 4, 3];
-  for (const idx of curveOrder) {
-    const choice = choices[idx];
-    if (!choice?.seg?.compiled) continue;
-    const active = hoverIdx === idx;
-    drawCompiledCurve(choice.seg.compiled, color, active ? cw * 0.95 : cw * 0.58, active ? 0.78 : 0.34);
-  }
-  const straight = choices[0];
-  if (straight?.seg?.compiled) {
-    const active = hoverIdx === 0;
-    drawCompiledCurve(straight.seg.compiled, color, active ? cw * 1.45 : cw * 1.18, active ? 0.95 : 0.72);
-  }
-}
-
 function drawPolylinePlacement(anim, previewPoint, cw, dpr) {
   for (let i = 0; i < anim.segments.length; i++) drawSegment(anim, i);
   for (const anchor of anim.anchors)
     drawAnchorDot(toCanvas(anchor.re, anchor.im), anim.color, 5 * dpr);
-
-  if (lineConnectorChoice?.anim === anim) {
-    drawLineConnectorChoices(
-      lineConnectorChoice.start,
-      lineConnectorChoice.end,
-      lineConnectorChoice.choices,
-      anim.color,
-      cw,
-      dpr,
-      lineConnectorChoiceHover?.idx ?? null
-    );
-    drawAnchorDot(toCanvas(lineConnectorChoice.end.re, lineConnectorChoice.end.im), anim.color, 5 * dpr);
-    return;
-  }
 
   if (!previewPoint || !previewPoint.ok || !previewPoint.ok()) return;
   const [px, py] = toCanvas(previewPoint.re, previewPoint.im);
@@ -9516,31 +9656,6 @@ function drawPolylinePlacement(anim, previewPoint, cw, dpr) {
     ctx.arc(px, py, 6 * dpr, 0, Math.PI * 2);
     ctx.stroke();
     ctx.restore();
-    return;
-  }
-
-  if (anim.extensionAnchorIdx == null && lineToolModeForPlacement(anim) !== LINE_TOOL_MODE_POLYLINE) {
-    if (polylineHasOpenDisconnectedStart(anim)) {
-      const src = anim.anchors[anim.anchors.length - 1];
-      if (src) {
-        if (lineToolModeForPlacement(anim) === LINE_TOOL_MODE_CURVES) {
-          drawLineConnectorChoices(src, previewPoint, buildLineConnectorChoices(src, previewPoint), anim.color, cw, dpr);
-        } else {
-          const [sx, sy] = toCanvas(src.re, src.im);
-          ctx.save();
-          ctx.globalAlpha = 0.55;
-          ctx.strokeStyle = anim.color;
-          ctx.lineWidth = cw;
-          ctx.setLineDash([4 * dpr, 4 * dpr]);
-          ctx.beginPath();
-          ctx.moveTo(sx, sy);
-          ctx.lineTo(px, py);
-          ctx.stroke();
-          ctx.restore();
-        }
-      }
-    }
-    drawAnchorDot([px, py], anim.color, 5 * dpr);
     return;
   }
 
@@ -9844,8 +9959,16 @@ function multiSelectionFrameMetrics() {
 
 function selectionFrameMetrics(anim) {
   const arcBounds = selectedArcCanvasBounds(anim);
-  const bounds = arcBounds || selectedObjectCanvasBounds(anim);
+  let bounds = arcBounds || selectedObjectCanvasBounds(anim);
   if (!bounds) return null;
+  // Expand bounds to encompass plus-sign buttons when in edit mode
+  if (!arcBounds && editModeAnimId === anim.id) {
+    const arm = 7 * devicePixelRatio;
+    for (const pp of getPlusPositions(anim)) {
+      bounds = includeCanvasPoint(bounds, [pp.cx - arm, pp.cy - arm]);
+      bounds = includeCanvasPoint(bounds, [pp.cx + arm, pp.cy + arm]);
+    }
+  }
   const dpr = devicePixelRatio;
   const lineWidth = isPrimitiveAnim(anim) ? primitiveStrokeWidth(anim) : (1 + 5 * (anim.thickness / 10)) * dpr;
   return frameMetricsFromCanvasBounds(bounds, lineWidth);
@@ -9924,7 +10047,7 @@ function pointInRect(px, py, rect) {
 
 function querySideActionButtonHover(cx, cy) {
   const anim = selectedObjectAnim();
-  if (anim && isAnimEffectivelyVisible(anim) && !anim.inPlacementMode) {
+  if (anim && isAnimEffectivelyVisible(anim) && !anim.inPlacementMode && !hasActiveArcSelection(anim)) {
     for (const btn of selectionSideActionButtons(anim)) {
       if (pointInRect(cx, cy, btn)) return { anim, kind: btn.kind };
     }
@@ -10095,10 +10218,9 @@ function rgbaCss(rgb, alpha) {
 function gradientFillStyleForBounds(anim, bounds) {
   if (!bounds) return null;
   const stops = gradientColorStops(anim);
-  const x1 = bounds.left, y1 = bounds.top;
-  const x2 = Math.abs(bounds.right - bounds.left) < 1 ? bounds.left + 1 : bounds.right;
-  const y2 = Math.abs(bounds.bottom - bounds.top) < 1 ? bounds.top : bounds.bottom;
-  const grad = ctx.createLinearGradient(x1, y1, x2, y2);
+  const angle = anim.gradientAngle ?? Math.PI / 4;
+  const axis = makeLinearGradientAxis(bounds, angle);
+  const grad = ctx.createLinearGradient(axis.x1, axis.y1, axis.x2, axis.y2);
   grad.addColorStop(0, rgbaCss(stops.color1, stops.opacity1));
   grad.addColorStop(1, rgbaCss(stops.color2, stops.opacity2));
   return grad;
@@ -11662,7 +11784,7 @@ function drawSelectedObjectBounds(anim) {
     ctx.stroke();
   }
   ctx.shadowBlur = 0;
-  drawSelectionSideActionButtons(anim);
+  if (!arcSelected) drawSelectionSideActionButtons(anim);
   ctx.restore();
 }
 
@@ -11866,8 +11988,11 @@ function drawCommittedAnimation(anim, { deferOverlay = false } = {}) {
   const _topoFade = activeArc === null && drillObjectArc?.animId === anim.id ? drillObjectArc : null;
   const softColor = activeArc !== null ? softenedSelectionColor(anim.color) : null;
   if (canFillAnim(anim)) {
-    if (animFillStyle(anim) === 'gradient') {
+    const _fStyle = animFillStyle(anim);
+    if (_fStyle === 'gradient') {
       drawGradientFill(anim);
+    } else if (_fStyle === 'pattern') {
+      drawCurvePattern(anim);
     } else if (animFillColor(anim)) {
       const softFill = activeArc !== null && animFillColor(anim)
         ? softenedSelectionColor(animFillColor(anim))
@@ -12171,6 +12296,7 @@ function drawAnimations() {
   drawSelectedGroupBounds();
   drawSelectedMultiSelectionBounds();
   drawPlacementMatchButton();
+  drawContourSelectOverlay();
 
   // Rubber-band selection rectangle
   if (rubberBand) {
@@ -12264,64 +12390,6 @@ function makeObjectIcon(kind, className = 'anim-kind-icon') {
   return svg;
 }
 
-function makeLineToolModeIcon(mode) {
-  const svg = makeSvgEl('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' });
-  if (mode === LINE_TOOL_MODE_POLYLINE) {
-    svg.append(
-      makeSvgEl('polyline', { points: '4,17 8.5,9 13,15 20,6' }),
-      makeSvgEl('circle', { cx: 4, cy: 17, r: 1.45 }),
-      makeSvgEl('circle', { cx: 8.5, cy: 9, r: 1.45 }),
-      makeSvgEl('circle', { cx: 13, cy: 15, r: 1.45 }),
-      makeSvgEl('circle', { cx: 20, cy: 6, r: 1.45 })
-    );
-  } else if (mode === LINE_TOOL_MODE_SEGMENTS) {
-    svg.append(
-      makeSvgEl('line', { x1: 5, y1: 16.5, x2: 11, y2: 10.5 }),
-      makeSvgEl('line', { x1: 13, y1: 18, x2: 19, y2: 12 }),
-      makeSvgEl('circle', { cx: 5, cy: 16.5, r: 1.35 }),
-      makeSvgEl('circle', { cx: 11, cy: 10.5, r: 1.35 }),
-      makeSvgEl('circle', { cx: 13, cy: 18, r: 1.35 }),
-      makeSvgEl('circle', { cx: 19, cy: 12, r: 1.35 })
-    );
-  } else {
-    svg.append(
-      makeSvgEl('path', { d: 'M4 17L20 7', 'stroke-width': 2.6 }),
-      makeSvgEl('path', { d: 'M4 17Q11 8 20 7', 'stroke-width': 1.4 }),
-      makeSvgEl('path', { d: 'M4 17Q9 3.5 20 7', 'stroke-width': 1.2 }),
-      makeSvgEl('path', { d: 'M4 17Q13 20 20 7', 'stroke-width': 1.4 }),
-      makeSvgEl('path', { d: 'M4 17Q18 23 20 7', 'stroke-width': 1.2 }),
-      makeSvgEl('circle', { cx: 4, cy: 17, r: 1.45 }),
-      makeSvgEl('circle', { cx: 20, cy: 7, r: 1.45 })
-    );
-  }
-  return svg;
-}
-
-function activeLineToolOptionsAnim() {
-  return animations.find(a => a.inPlacementMode && isPolylineAnim(a) && a.extensionAnchorIdx == null) || null;
-}
-
-function renderLineToolOptions(parent) {
-  const modes = [
-    { mode: LINE_TOOL_MODE_POLYLINE, title: 'Connected line segments' },
-    { mode: LINE_TOOL_MODE_SEGMENTS, title: 'Separate straight segments' },
-    { mode: LINE_TOOL_MODE_CURVES, title: 'Separate segments with curve choices' },
-  ];
-  const activeMode = currentLineToolMode();
-  for (const item of modes) {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'line-tool-mode-btn' + (item.mode === activeMode ? ' active' : '');
-    btn.title = item.title;
-    btn.setAttribute('aria-label', item.title);
-    btn.appendChild(makeLineToolModeIcon(item.mode));
-    btn.addEventListener('click', e => {
-      e.stopPropagation();
-      setLineToolMode(item.mode);
-    });
-    parent.appendChild(btn);
-  }
-}
 
 function makeVisibilityIcon(visible) {
   const svg = makeSvgEl('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' });
@@ -12833,8 +12901,62 @@ function appendHslColorPicker(parent, activeColor, onChange, options = {}) {
   previewRow.className = 'color-preview-row';
   const preview = document.createElement('div');
   preview.className = 'color-preview-box';
-  const previewValue = document.createElement('div');
+  const previewValue = document.createElement('input');
+  previewValue.type = 'text';
   previewValue.className = 'color-preview-value';
+  previewValue.spellcheck = false;
+  previewValue.autocomplete = 'off';
+  let _hexFocused = false;
+  let _hexUndoPushed = false;
+  let _hexBeforeEdit = '';
+  previewValue.addEventListener('mousedown', e => e.stopPropagation());
+  previewValue.addEventListener('focus', () => {
+    _hexFocused = true; _hexUndoPushed = false;
+    _hexBeforeEdit = currentHex().toUpperCase();
+    requestAnimationFrame(() => previewValue.select());
+  });
+  previewValue.addEventListener('input', () => {
+    const val = previewValue.value.trim();
+    const norm = normalizeColorString(val) || normalizeColorString('#' + val);
+    if (!norm) return;
+    if (!_hexUndoPushed && options.withUndo) { pushUndo(); _hexUndoPushed = true; }
+    const hsl = colorToHsl(norm, fallbackHue);
+    state.huePercent = Math.round(hueAngleToPercent(hsl.h));
+    state.saturation  = Math.round(clamp(hsl.s, 0, 100));
+    state.lightness   = Math.round(clamp(hsl.l, 0, 100));
+    const hue = huePercentToAngle(state.huePercent);
+    drawHueWheel(hueWheel, state.huePercent);
+    lightnessControl?.setTrack(lightnessSliderTrack(hue, state.saturation));
+    saturationControl?.setTrack(saturationSliderTrack(hue, state.lightness));
+    const hex = currentHex();
+    preview.style.background = hex;
+    options.onPreviewChange?.(hex);
+    onChange(hex, { fromHueClick: false });
+  });
+  previewValue.addEventListener('keydown', e => {
+    e.stopPropagation();
+    if (e.key === 'Enter') { previewValue.blur(); }
+    else if (e.key === 'Escape') {
+      const hsl = colorToHsl(_hexBeforeEdit, fallbackHue);
+      state.huePercent = Math.round(hueAngleToPercent(hsl.h));
+      state.saturation  = Math.round(clamp(hsl.s, 0, 100));
+      state.lightness   = Math.round(clamp(hsl.l, 0, 100));
+      _hexFocused = false;
+      previewValue.blur();
+    }
+  });
+  previewValue.addEventListener('blur', () => {
+    _hexFocused = false; _hexUndoPushed = false;
+    const val = previewValue.value.trim();
+    const norm = normalizeColorString(val) || normalizeColorString('#' + val);
+    if (norm) {
+      const hsl = colorToHsl(norm, fallbackHue);
+      state.huePercent = Math.round(hueAngleToPercent(hsl.h));
+      state.saturation  = Math.round(clamp(hsl.s, 0, 100));
+      state.lightness   = Math.round(clamp(hsl.l, 0, 100));
+    }
+    applyColor(false);
+  });
   previewRow.append(preview, previewValue);
 
   const wheelRowWrap = document.createElement('div');
@@ -12866,7 +12988,7 @@ function appendHslColorPicker(parent, activeColor, onChange, options = {}) {
     lightnessControl?.setTrack(lightnessSliderTrack(hue, state.saturation));
     saturationControl?.setTrack(saturationSliderTrack(hue, state.lightness));
     preview.style.background = hex;
-    previewValue.textContent = hex.toUpperCase();
+    if (!_hexFocused) previewValue.value = hex.toUpperCase();
     options.onPreviewChange?.(hex);
   }
 
@@ -12902,6 +13024,22 @@ function makeFillStyleIcon(style) {
     svg.appendChild(rect);
     return svg;
   }
+  if (style === 'contour-gradient') {
+    // Waving flag shape — fill between two wavy boundaries
+    svg.appendChild(makeSvgEl('path', {
+      d: 'M4,9 Q12,5 20,9 L20,15 Q12,11 4,15 Z',
+      fill: 'currentColor', opacity: 0.18, stroke: 'none'
+    }));
+    svg.appendChild(makeSvgEl('path', {
+      d: 'M4,9 Q12,5 20,9',
+      fill: 'none', stroke: 'currentColor', 'stroke-width': 2.2, 'stroke-linecap': 'round'
+    }));
+    svg.appendChild(makeSvgEl('path', {
+      d: 'M4,15 Q12,11 20,15',
+      fill: 'none', stroke: 'currentColor', 'stroke-width': 1.5, 'stroke-linecap': 'round', opacity: 0.4
+    }));
+    return svg;
+  }
   svg.appendChild(rect);
   const addLine = (x1, y1, x2, y2) => svg.appendChild(makeSvgEl('line', { x1, y1, x2, y2 }));
   if (style === 'circular') {
@@ -12929,6 +13067,17 @@ function makeFillStyleIcon(style) {
   }
   if (style === 'diagUp' || style === 'diagCross') {
     addLine(4, 17, 17, 4); addLine(4, 11, 11, 4); addLine(10, 20, 20, 10);
+  }
+  if (style === 'lines' || style === 'pattern') {
+    addLine(5, 9, 15, 19); addLine(9, 5, 19, 15); addLine(2, 13, 11, 22); addLine(13, 2, 22, 11);
+  }
+  if (style === 'crosshatch') {
+    addLine(5, 9, 15, 19); addLine(9, 5, 19, 15); addLine(2, 13, 11, 22); addLine(13, 2, 22, 11);
+    addLine(5, 15, 15, 5); addLine(9, 19, 19, 9); addLine(2, 11, 11, 2); addLine(13, 22, 22, 13);
+  }
+  if (style === 'dots') {
+    [7, 12, 17].forEach(cx => [7, 12, 17].forEach(cy =>
+      svg.appendChild(makeSvgEl('circle', { cx, cy, r: 1.6, style: 'fill:currentColor;stroke:none;' }))));
   }
   return svg;
 }
@@ -13008,72 +13157,190 @@ function _appendAllRegionColor(parent, anim) {
   parent.appendChild(root);
 }
 
+function appendDirectionWheel(container, getAngle, onChange) {
+  const SIZE = 58;
+  const dpr = window.devicePixelRatio || 1;
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(SIZE * dpr);
+  canvas.height = Math.round(SIZE * dpr);
+  canvas.style.width = SIZE + 'px';
+  canvas.style.height = SIZE + 'px';
+  canvas.className = 'direction-wheel-canvas';
+
+  function drawWheel(angle) {
+    const wctx = canvas.getContext('2d');
+    const CX = SIZE / 2, CY = SIZE / 2;
+    const R = SIZE / 2 - 3;
+    wctx.clearRect(0, 0, canvas.width, canvas.height);
+    wctx.save();
+    // Background fill
+    wctx.beginPath();
+    wctx.arc(CX * dpr, CY * dpr, R * dpr, 0, Math.PI * 2);
+    wctx.fillStyle = '#1e1e2e';
+    wctx.fill();
+    // Parallel chords (perpendicular to gradient direction)
+    const N = 7;
+    for (let i = 0; i < N; i++) {
+      const t = (i - (N - 1) / 2) / ((N - 1) / 2 + 0.6) * R;
+      const halfLen = Math.sqrt(Math.max(0, R * R - t * t));
+      if (halfLen < 0.5) continue;
+      const pcx = CX + t * Math.cos(angle);
+      const pcy = CY + t * Math.sin(angle);
+      const pux = -Math.sin(angle), puy = Math.cos(angle);
+      const isCenter = i === Math.floor(N / 2);
+      wctx.strokeStyle = isCenter ? '#585b70' : '#313244';
+      wctx.lineWidth = (isCenter ? 1.5 : 1) * dpr;
+      wctx.beginPath();
+      wctx.moveTo((pcx + halfLen * pux) * dpr, (pcy + halfLen * puy) * dpr);
+      wctx.lineTo((pcx - halfLen * pux) * dpr, (pcy - halfLen * puy) * dpr);
+      wctx.stroke();
+    }
+    // Direction arrow
+    const ar = R * 0.58;
+    const ax1 = CX - ar * Math.cos(angle), ay1 = CY - ar * Math.sin(angle);
+    const ax2 = CX + ar * Math.cos(angle), ay2 = CY + ar * Math.sin(angle);
+    wctx.strokeStyle = '#89b4fa';
+    wctx.lineWidth = 2 * dpr;
+    wctx.lineCap = 'round';
+    wctx.beginPath();
+    wctx.moveTo(ax1 * dpr, ay1 * dpr);
+    wctx.lineTo(ax2 * dpr, ay2 * dpr);
+    wctx.stroke();
+    const hl = R * 0.22, ha = Math.PI / 5;
+    wctx.beginPath();
+    wctx.moveTo(ax2 * dpr, ay2 * dpr);
+    wctx.lineTo((ax2 - hl * Math.cos(angle - ha)) * dpr, (ay2 - hl * Math.sin(angle - ha)) * dpr);
+    wctx.moveTo(ax2 * dpr, ay2 * dpr);
+    wctx.lineTo((ax2 - hl * Math.cos(angle + ha)) * dpr, (ay2 - hl * Math.sin(angle + ha)) * dpr);
+    wctx.stroke();
+    // Border
+    wctx.strokeStyle = '#45475a';
+    wctx.lineWidth = 1.5 * dpr;
+    wctx.beginPath();
+    wctx.arc(CX * dpr, CY * dpr, R * dpr, 0, Math.PI * 2);
+    wctx.stroke();
+    wctx.restore();
+  }
+
+  drawWheel(getAngle());
+
+  let dragging = false;
+
+  function angleFromEvent(e) {
+    const rect = canvas.getBoundingClientRect();
+    const raw = Math.atan2(e.clientY - (rect.top + rect.height / 2),
+                           e.clientX - (rect.left + rect.width / 2));
+    // Snap to 45° increments within 8°
+    const snap = Math.PI / 4;
+    const nearest = Math.round(raw / snap) * snap;
+    return Math.abs(raw - nearest) < 8 * Math.PI / 180 ? nearest : raw;
+  }
+
+  const onMove = e => {
+    if (!dragging) return;
+    if (!document.contains(canvas)) { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); return; }
+    const a = angleFromEvent(e);
+    onChange(a);
+    drawWheel(a);
+  };
+  const onUp = () => {
+    if (!dragging) return;
+    dragging = false;
+    saveProject();
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+  };
+
+  canvas.addEventListener('mousedown', e => {
+    e.stopPropagation();
+    dragging = true;
+    pushUndo();
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    const a = angleFromEvent(e);
+    onChange(a);
+    drawWheel(a);
+  });
+
+  container.appendChild(canvas);
+}
+
 function appendRegionColorExpansion(parent, region, group) {
   const style = region.fillStyle || 'solid';
-  const isGradient = style === 'gradient';
+  const GRADIENT_FAMILY = ['gradient', 'contour-gradient'];
+  const isGradientFamily = GRADIENT_FAMILY.includes(style);
+  const hasColor2 = isGradientFamily || style === 'pattern';
+  const isGroupRegion = !!groups.find(g => g.id === group.id);
+  const _dropperSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21l1.5-4.5L15.5 6l3 3L8 20.5z"/><path d="M18.5 6l1.5-1.5c.8-.8.8-2.2 0-3s-2.2-.8-3 0L15.5 3"/></svg>`;
+
+  // If contour selection is active for this region, lock to the Style tab
+  const activeTab = (contourSelectMode?.regionId === region.id) ? 3
+    : (gradientColorTab >= 1 && gradientColorTab <= 3 ? gradientColorTab : 1);
+
   const root = document.createElement('div');
   root.className = 'color-expansion';
   root.addEventListener('mousedown', e => e.stopPropagation());
   root.addEventListener('click', e => e.stopPropagation());
-  const styleRow = document.createElement('div');
-  styleRow.className = 'fill-style-row';
-  [{ key: 'solid', title: 'Solid' }, { key: 'gradient', title: 'Gradient' }].forEach(({ key, title }) => {
+
+  // Three-tab bar: Color 1 | Color 2 | Style
+  const tabBar = document.createElement('div');
+  tabBar.className = 'gradient-stop-tab-bar';
+  [{ tab: 1, label: 'Color 1' }, { tab: 2, label: 'Color 2' }, { tab: 3, label: 'Style' }].forEach(({ tab, label }) => {
     const btn = document.createElement('button');
-    btn.className = 'fill-style-btn' + (style === key ? ' active' : '');
-    btn.title = title;
-    btn.appendChild(makeFillStyleIcon(key));
+    btn.type = 'button';
+    btn.className = 'gradient-stop-tab' + (activeTab === tab ? ' active' : '');
+    btn.textContent = label;
     btn.addEventListener('click', e => {
       e.stopPropagation();
-      if (style !== key) {
-        pushUndo();
-        region.fillStyle = key;
-        if (key === 'gradient' && !region.gradientToColor) {
-          region.gradientToColor = region.fillColor || '#ffffff';
-          if (!isFinite(region.gradientToOpacity)) region.gradientToOpacity = 0;
-        }
-        saveProject(); renderAnimList(); draw();
-      }
+      gradientColorTab = tab;
+      openColorMenuRegionId = region.id;
+      openColorMenuRegionGroupId = group.id;
+      renderAnimList();
     });
-    styleRow.appendChild(btn);
+    tabBar.appendChild(btn);
   });
-  root.appendChild(styleRow);
+  root.appendChild(tabBar);
+
   const panel = document.createElement('div');
   panel.className = 'color-tab-content fill-active';
-  if (isGradient) {
-    const stopTabBar = document.createElement('div');
-    stopTabBar.className = 'gradient-stop-tab-bar';
-    [1, 2].forEach(tab => {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'gradient-stop-tab' + (gradientColorTab === tab ? ' active' : '');
-      btn.textContent = `Color ${tab}`;
-      btn.addEventListener('click', e => {
+
+  if (activeTab === 1) {
+    // ── Color 1 ─────────────────────────────────────────────────────────────
+    const c1 = region.fillColor || '#ffffff';
+    let c1Preview = normalizeColorString(c1) || c1;
+    let c1Opacity = null;
+    const c1PreviewRow = appendHslColorPicker(panel, c1, (color, meta = {}) => {
+      region.fillColor = color;
+      saveProject(); if (meta.fromHueClick) renderAnimList(); draw();
+    }, { withUndo: true, fallbackHue: colorToHsl(c1).h,
+      onPreviewChange(hex) { c1Preview = hex; c1Opacity?.setTrack(opacitySliderTrack(hex)); } });
+    c1Opacity = appendSliderRow(panel, 'Opacity', 0, 100, 1, Math.round((region.fillOpacity ?? 0.3) * 100),
+      v => `${Math.round(v)}%`, v => { region.fillOpacity = clamp(parseFloat(v) / 100, 0, 1); saveProject(); draw(); },
+      false, { colorTrack: opacitySliderTrack(c1Preview) });
+    {
+      const _isActive = eyedropperTarget === 'region-fill' && eyedropperRegionId === region.id;
+      const dropBtn = document.createElement('button');
+      dropBtn.className = 'eyedropper-btn' + (_isActive ? ' active' : '');
+      dropBtn.title = _isActive ? 'Click canvas to sample (Escape to cancel)' : 'Pick color from canvas';
+      dropBtn.innerHTML = _dropperSvg + (_isActive ? ' Sampling…' : ' Sample');
+      dropBtn.addEventListener('click', e => {
         e.stopPropagation();
-        gradientColorTab = tab;
-        openColorMenuRegionId = region.id;
-        openColorMenuRegionGroupId = group.id;
+        if (_isActive) { deactivateEyedropper(); } else {
+          eyedropperTarget = 'region-fill'; eyedropperAnimId = group.id;
+          eyedropperRegionId = region.id; eyedropperCurveId = null; updateCursor();
+        }
         renderAnimList();
       });
-      stopTabBar.appendChild(btn);
-    });
-    panel.appendChild(stopTabBar);
-    if (gradientColorTab === 1) {
-      const c1 = region.fillColor || '#ffffff';
-      let c1Preview = normalizeColorString(c1) || c1;
-      let c1Opacity = null;
-      appendHslColorPicker(panel, c1, (color, meta = {}) => {
-        region.fillColor = color;
-        saveProject(); if (meta.fromHueClick) renderAnimList(); draw();
-      }, { withUndo: true, fallbackHue: colorToHsl(c1).h,
-        onPreviewChange(hex) { c1Preview = hex; c1Opacity?.setTrack(opacitySliderTrack(hex)); } });
-      c1Opacity = appendSliderRow(panel, 'Opacity', 0, 100, 1, Math.round((region.fillOpacity ?? 0.3) * 100),
-        v => `${Math.round(v)}%`, v => { region.fillOpacity = clamp(parseFloat(v) / 100, 0, 1); saveProject(); draw(); },
-        false, { colorTrack: opacitySliderTrack(c1Preview) });
-    } else {
+      c1PreviewRow.appendChild(dropBtn);
+    }
+
+  } else if (activeTab === 2) {
+    // ── Color 2 ─────────────────────────────────────────────────────────────
+    if (hasColor2) {
       const c2Init = region.gradientToColor || region.fillColor || '#000000';
       let c2Preview = normalizeColorString(c2Init) || c2Init;
       let c2Opacity = null;
-      appendHslColorPicker(panel, c2Init, (color, meta = {}) => {
+      const c2PreviewRow = appendHslColorPicker(panel, c2Init, (color, meta = {}) => {
         region.gradientToColor = color;
         saveProject(); if (meta.fromHueClick) renderAnimList(); draw();
       }, { withUndo: true, fallbackHue: colorToHsl(region.fillColor || '#ffffff').h,
@@ -13081,40 +13348,231 @@ function appendRegionColorExpansion(parent, region, group) {
       c2Opacity = appendSliderRow(panel, 'Opacity', 0, 100, 1, Math.round((region.gradientToOpacity ?? 0) * 100),
         v => `${Math.round(v)}%`, v => { region.gradientToOpacity = clamp(parseFloat(v) / 100, 0, 1); saveProject(); draw(); },
         false, { colorTrack: opacitySliderTrack(c2Preview) });
-    }
-  } else {
-    const c = region.fillColor || '#ffffff';
-    let opacityPreview = normalizeColorString(c) || c;
-    let opacityControl = null;
-    appendHslColorPicker(panel, c, (color, meta = {}) => {
-      region.fillColor = color;
-      saveProject(); if (meta.fromHueClick) renderAnimList(); draw();
-    }, { withUndo: true, fallbackHue: colorToHsl(c).h,
-      onPreviewChange(hex) { opacityPreview = hex; opacityControl?.setTrack(opacitySliderTrack(hex)); } });
-    opacityControl = appendSliderRow(panel, 'Opacity', 0, 100, 1, Math.round((region.fillOpacity ?? 0.3) * 100),
-      v => `${Math.round(v)}%`, v => { region.fillOpacity = clamp(parseFloat(v) / 100, 0, 1); saveProject(); draw(); },
-      false, { colorTrack: opacitySliderTrack(opacityPreview) });
-  }
-  {
-    const _dropperSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21l1.5-4.5L15.5 6l3 3L8 20.5z"/><path d="M18.5 6l1.5-1.5c.8-.8.8-2.2 0-3s-2.2-.8-3 0L15.5 3"/></svg>`;
-    const _isActive = eyedropperTarget === 'region-fill' && eyedropperAnimId === group.id && eyedropperRegionId === region.id;
-    const dropBtn = document.createElement('button');
-    dropBtn.className = 'eyedropper-btn' + (_isActive ? ' active' : '');
-    dropBtn.title = _isActive ? 'Click a canvas to sample color (Escape to cancel)' : 'Pick color from canvas';
-    dropBtn.innerHTML = _dropperSvg + (_isActive ? ' Sampling…' : ' Sample color');
-    dropBtn.addEventListener('click', e => {
-      e.stopPropagation();
-      if (_isActive) { deactivateEyedropper(); } else {
-        eyedropperTarget = 'region-fill';
-        eyedropperAnimId = group.id;
-        eyedropperRegionId = region.id;
-        eyedropperCurveId = null;
-        updateCursor();
+      {
+        const _isActive = eyedropperTarget === 'region-fill2' && eyedropperRegionId === region.id;
+        const dropBtn = document.createElement('button');
+        dropBtn.className = 'eyedropper-btn' + (_isActive ? ' active' : '');
+        dropBtn.title = _isActive ? 'Click canvas to sample (Escape to cancel)' : 'Pick color from canvas';
+        dropBtn.innerHTML = _dropperSvg + (_isActive ? ' Sampling…' : ' Sample');
+        dropBtn.addEventListener('click', e => {
+          e.stopPropagation();
+          if (_isActive) { deactivateEyedropper(); } else {
+            eyedropperTarget = 'region-fill2'; eyedropperAnimId = group.id;
+            eyedropperRegionId = region.id; eyedropperCurveId = null; updateCursor();
+          }
+          renderAnimList();
+        });
+        c2PreviewRow.appendChild(dropBtn);
       }
-      renderAnimList();
+    } else {
+      const note = document.createElement('div');
+      note.style.cssText = 'padding: 16px 10px; font-size: 0.7rem; color: #6c7086; text-align: center; line-height: 1.6;';
+      note.textContent = 'Switch to Gradient in the Style tab to enable a second color.';
+      panel.appendChild(note);
+    }
+
+  } else {
+    // ── Style ────────────────────────────────────────────────────────────────
+    // Top-level: Solid | Gradient | Pattern
+    const styleRow = document.createElement('div');
+    styleRow.className = 'fill-style-row';
+    [{ key: 'solid', title: 'Solid' }, { key: 'gradient', title: 'Gradient' }, { key: 'pattern', title: 'Pattern' }].forEach(({ key, title }) => {
+      const btn = document.createElement('button');
+      const isActive = key === 'gradient' ? isGradientFamily : style === key;
+      btn.className = 'fill-style-btn' + (isActive ? ' active' : '');
+      btn.title = title;
+      btn.appendChild(makeFillStyleIcon(key));
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const newStyle = key === 'gradient' ? (isGradientFamily ? style : 'gradient') : key;
+        if (style !== newStyle) {
+          pushUndo(); region.fillStyle = newStyle;
+          if (newStyle !== 'solid' && !region.gradientToColor) {
+            region.gradientToColor = region.fillColor || '#ffffff';
+            if (!isFinite(region.gradientToOpacity)) region.gradientToOpacity = 0;
+          }
+          saveProject(); renderAnimList(); draw();
+        }
+      });
+      styleRow.appendChild(btn);
     });
-    panel.appendChild(dropBtn);
+    panel.appendChild(styleRow);
+
+    // Gradient sub-type: Linear | Contour
+    if (isGradientFamily) {
+      const subRow = document.createElement('div');
+      subRow.className = 'fill-style-row';
+      subRow.style.marginTop = '4px';
+      [{ key: 'gradient', title: 'Linear' }, { key: 'contour-gradient', title: 'Contour' }].forEach(({ key, title }) => {
+        const btn = document.createElement('button');
+        btn.className = 'fill-style-btn' + (style === key ? ' active' : '');
+        btn.title = title;
+        btn.appendChild(makeFillStyleIcon(key));
+        btn.addEventListener('click', e => {
+          e.stopPropagation();
+          if (style !== key) {
+            pushUndo(); region.fillStyle = key;
+            if (!region.gradientToColor) {
+              region.gradientToColor = region.fillColor || '#ffffff';
+              if (!isFinite(region.gradientToOpacity)) region.gradientToOpacity = 0;
+            }
+            saveProject(); renderAnimList(); draw();
+          }
+        });
+        subRow.appendChild(btn);
+      });
+      panel.appendChild(subRow);
+    }
+
+    // Direction wheel for linear gradient
+    if (style === 'gradient') {
+      const wheelRow = document.createElement('div');
+      wheelRow.className = 'direction-wheel-row';
+      const lbl = document.createElement('span');
+      lbl.className = 'direction-wheel-label';
+      lbl.textContent = 'Direction';
+      wheelRow.appendChild(lbl);
+      appendDirectionWheel(wheelRow,
+        () => region.gradientAngle ?? Math.PI / 4,
+        a => { region.gradientAngle = a; draw(); });
+      panel.appendChild(wheelRow);
+    }
+
+    // Pattern type, direction, and spacing controls
+    if (style === 'pattern') {
+      const patternType = region.patternType || 'lines';
+      const typeRow = document.createElement('div');
+      typeRow.className = 'fill-style-row';
+      typeRow.style.marginTop = '4px';
+      [{ key: 'lines', title: 'Lines' }, { key: 'dots', title: 'Dots' }, { key: 'crosshatch', title: 'Crosshatch' }].forEach(({ key, title }) => {
+        const btn = document.createElement('button');
+        btn.className = 'fill-style-btn' + (patternType === key ? ' active' : '');
+        btn.title = title;
+        btn.appendChild(makeFillStyleIcon(key));
+        btn.addEventListener('click', e => {
+          e.stopPropagation();
+          if (region.patternType !== key) {
+            pushUndo(); region.patternType = key;
+            saveProject(); renderAnimList(); draw();
+          }
+        });
+        typeRow.appendChild(btn);
+      });
+      panel.appendChild(typeRow);
+
+      const wheelRow = document.createElement('div');
+      wheelRow.className = 'direction-wheel-row';
+      const lbl = document.createElement('span');
+      lbl.className = 'direction-wheel-label';
+      lbl.textContent = 'Angle';
+      wheelRow.appendChild(lbl);
+      appendDirectionWheel(wheelRow,
+        () => region.patternAngle ?? 0,
+        a => { region.patternAngle = a; draw(); });
+      panel.appendChild(wheelRow);
+
+      appendSliderRow(panel, 'Spacing', 4, 48, 1, region.patternSpacing ?? 12,
+        v => `${Math.round(v)}px`,
+        v => { region.patternSpacing = parseFloat(v); saveProject(); draw(); });
+    }
+
+    // Boundary assignment (contour gradient only)
+    if (style === 'contour-gradient' && region.boundary?.length) {
+      const arcSection = document.createElement('div');
+      arcSection.className = 'contour-arc-section';
+      const isSelecting = contourSelectMode?.regionId === region.id;
+
+      if (isSelecting) {
+        const activeMode = contourSelectMode;
+        const sideColor = activeMode.side === 'b1' ? '#89b4fa' : '#fab387';
+        const sideLabel = activeMode.side === 'b1' ? 'Boundary 1' : 'Boundary 2';
+
+        const modeLabel = document.createElement('div');
+        modeLabel.className = 'contour-mode-label';
+        modeLabel.style.color = sideColor;
+        modeLabel.textContent = `Setting ${sideLabel}`;
+        arcSection.appendChild(modeLabel);
+
+        const countLabel = document.createElement('div');
+        countLabel.className = 'contour-mode-count';
+        const nNodes = activeMode.nodeIndices.length;
+        countLabel.textContent = nNodes === 0
+          ? 'Click junction nodes on canvas'
+          : nNodes === 1
+            ? '1 node — click another to form an arc, or click again to undo'
+            : `${nNodes} nodes selected`;
+        arcSection.appendChild(countLabel);
+
+        const canSet = nNodes >= 2;
+        const actionRow = document.createElement('div');
+        actionRow.className = 'contour-mode-actions';
+
+        const setBtn = document.createElement('button');
+        setBtn.className = 'contour-confirm-btn';
+        setBtn.textContent = 'Set';
+        setBtn.disabled = !canSet;
+        setBtn.addEventListener('click', e => {
+          e.stopPropagation();
+          if (!canSet) return;
+          pushUndo();
+          const edges = contourModeEdgesFromNodes(region.boundary, activeMode.nodeIndices, getCurvesMapForContourMode());
+          if (activeMode.side === 'b1') region.fill1Arcs = edges.length ? edges : null;
+          else region.fill2Arcs = edges.length ? edges : null;
+          contourSelectMode = null;
+          saveProject(); renderAnimList(); draw();
+        });
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.className = 'contour-cancel-btn';
+        cancelBtn.textContent = 'Cancel';
+        cancelBtn.addEventListener('click', e => {
+          e.stopPropagation();
+          contourSelectMode = null;
+          renderAnimList(); draw();
+        });
+
+        actionRow.append(setBtn, cancelBtn);
+        arcSection.appendChild(actionRow);
+      } else {
+        const heading = document.createElement('div');
+        heading.className = 'contour-arc-heading';
+        heading.textContent = 'Boundaries';
+        arcSection.appendChild(heading);
+
+        ['b1', 'b2'].forEach(side => {
+          const row = document.createElement('div');
+          row.className = 'contour-arc-row';
+          const arcs = side === 'b1' ? region.fill1Arcs : region.fill2Arcs;
+          const label = document.createElement('span');
+          label.className = 'contour-arc-label';
+          label.textContent = side === 'b1' ? 'Boundary 1' : 'Boundary 2';
+          const status = document.createElement('span');
+          status.className = 'contour-arc-status';
+          status.textContent = arcs?.length ? `${arcs.length} arc${arcs.length === 1 ? '' : 's'}` : 'auto';
+          const btn = document.createElement('button');
+          btn.className = `contour-set-btn ${side}`;
+          btn.textContent = 'Set';
+          btn.title = `Draw ${side === 'b1' ? 'Boundary 1' : 'Boundary 2'} on canvas`;
+          btn.addEventListener('click', e => {
+            e.stopPropagation();
+            gradientColorTab = 3;
+            contourSelectMode = {
+              regionId: region.id,
+              groupId: isGroupRegion ? group.id : null,
+              animId: isGroupRegion ? null : group.id,
+              side, nodeIndices: []
+            };
+            renderAnimList(); draw();
+          });
+          row.append(label, status, btn);
+          arcSection.appendChild(row);
+        });
+      }
+
+      panel.appendChild(arcSection);
+    }
   }
+
   root.appendChild(panel);
   parent.appendChild(root);
 }
@@ -13233,208 +13691,215 @@ function appendGroupColorExpansion(parent, group) {
 }
 
 function appendColorExpansion(parent, anim) {
-  if (colorEditTarget === 'fill' && !canFillAnim(anim)) colorEditTarget = 'outline';
   const fillEnabled = canFillAnim(anim);
+  if (colorEditTarget !== 'outline' && !fillEnabled) colorEditTarget = 'outline';
+
   const isOutline = colorEditTarget === 'outline';
-  const fillActive = fillEnabled && !!animFillColor(anim);
+  const fillStyle = animFillStyle(anim);
+  const isGradient = !isOutline && fillStyle === 'gradient';
+  const isPattern = !isOutline && fillStyle === 'pattern';
+  const hasColor2 = isGradient || isPattern;
+  if (isGradient) ensureGradientDefaults(anim);
 
   const root = document.createElement('div');
   root.className = 'color-expansion';
   root.addEventListener('mousedown', e => e.stopPropagation());
   root.addEventListener('click', e => e.stopPropagation());
 
-  // ── Tab bar ──
+  // ── Tab bar: Outline | Fill 1 | Fill 2 | Style ──
   const tabBar = document.createElement('div');
   tabBar.className = 'color-tab-bar';
 
-  const outlineTab = document.createElement('button');
-  outlineTab.type = 'button';
-  outlineTab.className = 'color-tab' + (isOutline ? ' active' : '');
-  outlineTab.textContent = 'Outline';
-  outlineTab.addEventListener('click', e => {
-    e.stopPropagation();
-    colorEditTarget = 'outline';
-    openColorMenuAnimId = anim.id;
-    renderAnimList();
-  });
+  const makeTab = (label, active, enabled, onClick) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'color-tab' + (active ? ' active' : '');
+    btn.style.cssText = 'flex:1;padding:4px 6px;';
+    btn.textContent = label;
+    btn.disabled = !enabled;
+    btn.addEventListener('click', e => { e.stopPropagation(); onClick(); });
+    return btn;
+  };
 
-  const fillTab = document.createElement('button');
-  fillTab.type = 'button';
-  fillTab.className = 'color-tab' + (!isOutline ? ' active' : '');
-  fillTab.textContent = 'Fill';
-  fillTab.disabled = !fillEnabled;
-  fillTab.addEventListener('click', e => {
-    e.stopPropagation();
-    if (!fillEnabled) return;
-    colorEditTarget = 'fill';
-    openColorMenuAnimId = anim.id;
-    renderAnimList();
-  });
+  tabBar.appendChild(makeTab('Outline', isOutline, true, () => {
+    colorEditTarget = 'outline'; openColorMenuAnimId = anim.id; renderAnimList();
+  }));
+  tabBar.appendChild(makeTab('Fill 1', !isOutline && objectFillTab === 1, fillEnabled, () => {
+    colorEditTarget = 'fill'; objectFillTab = 1; openColorMenuAnimId = anim.id; renderAnimList();
+  }));
+  tabBar.appendChild(makeTab('Fill 2', !isOutline && objectFillTab === 2, fillEnabled, () => {
+    colorEditTarget = 'fill'; objectFillTab = 2; openColorMenuAnimId = anim.id; renderAnimList();
+  }));
+  tabBar.appendChild(makeTab('Style', !isOutline && objectFillTab === 3, fillEnabled, () => {
+    colorEditTarget = 'fill'; objectFillTab = 3; openColorMenuAnimId = anim.id; renderAnimList();
+  }));
 
-  tabBar.append(outlineTab, fillTab);
   root.appendChild(tabBar);
 
-  // ── Tab content panel ──
   const panel = document.createElement('div');
-  panel.className = 'color-tab-content' + (!isOutline ? ' fill-active' : '');
-
+  panel.className = 'color-tab-content';
   if (isOutline) {
-    appendSliderRow(panel, 'Thickness', 1, 10, 1, anim.thickness ?? 2, v => `${Math.round(v)}`, v => {
-      anim.thickness = parseInt(v, 10);
-    }, false, { valAlign: 'center' });
+    panel.style.borderRadius = '0 6px 6px 6px';
+  } else if (objectFillTab === 3) {
+    panel.style.borderRadius = '6px 0 6px 6px';
   } else {
-    const styleRow = document.createElement('div');
-    styleRow.className = 'fill-style-row';
-    if (!fillActive) styleRow.style.opacity = '0.45';
-    FILL_STYLES.forEach(({ key, title }) => {
-      const btn = document.createElement('button');
-      btn.className = 'fill-style-btn' + (animFillStyle(anim) === key ? ' active' : '');
-      btn.title = title;
-      btn.disabled = !fillActive;
-      btn.appendChild(makeFillStyleIcon(key));
-      btn.addEventListener('click', e => {
-        e.stopPropagation();
-        if (!fillActive) return;
-        if (animFillStyle(anim) !== key) {
-          pushUndo();
-          anim.fillStyle = key;
-          if (key === 'gradient') ensureGradientDefaults(anim);
-          saveProject();
-          renderAnimList(); draw();
-        }
-      });
-      styleRow.appendChild(btn);
-    });
-    panel.appendChild(styleRow);
+    panel.style.borderRadius = '6px 6px 6px 6px';
   }
-
-  const isGradientFill = !isOutline && animFillStyle(anim) === 'gradient';
-  if (isGradientFill) ensureGradientDefaults(anim);
 
   const DROPPER_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21l1.5-4.5L15.5 6l3 3L8 20.5z"/><path d="M18.5 6l1.5-1.5c.8-.8.8-2.2 0-3s-2.2-.8-3 0L15.5 3"/></svg>`;
 
-  function appendDropperBtn(targetPanel, targetKey, opts = {}) {
+  function appendDropperBtn(targetPanel, targetKey) {
     const isActive = eyedropperTarget === targetKey && eyedropperAnimId === anim.id;
     const btn = document.createElement('button');
     btn.className = 'eyedropper-btn' + (isActive ? ' active' : '');
     btn.title = isActive ? 'Click a canvas to sample color (Escape to cancel)' : 'Pick color from canvas';
-    const label = opts.compact ? ' Sample' : ' Sample color';
-    btn.innerHTML = DROPPER_SVG + (isActive ? ' Sampling…' : label);
+    btn.innerHTML = DROPPER_SVG + (isActive ? ' Sampling…' : ' Sample');
     btn.addEventListener('click', e => {
       e.stopPropagation();
       if (isActive) { deactivateEyedropper(); } else {
-        eyedropperTarget = targetKey;
-        eyedropperAnimId = anim.id;
-        updateCursor();
+        eyedropperTarget = targetKey; eyedropperAnimId = anim.id; updateCursor();
       }
       renderAnimList();
     });
     targetPanel.appendChild(btn);
   }
 
-  if (isGradientFill) {
-    // ── Color 1 / Color 2 sub-tabs ──
-    const stopTabBar = document.createElement('div');
-    stopTabBar.className = 'gradient-stop-tab-bar';
-    [1, 2].forEach(tab => {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'gradient-stop-tab' + (gradientColorTab === tab ? ' active' : '');
-      btn.textContent = `Color ${tab}`;
-      btn.addEventListener('click', e => {
-        e.stopPropagation();
-        gradientColorTab = tab;
-        openColorMenuAnimId = anim.id;
-        renderAnimList();
-      });
-      stopTabBar.appendChild(btn);
+  if (isOutline) {
+    // ── Outline: color + opacity + thickness ──
+    let outPreview = normalizeColorString(anim.color) || anim.color;
+    let outOpacity = null;
+    const outRow = appendHslColorPicker(panel, anim.color, (color, meta = {}) => {
+      if (!sameColor(anim.color, color)) anim.color = color;
+      saveProject(); if (meta.fromHueClick) renderAnimList(); draw();
+    }, {
+      withUndo: true, fallbackHue: colorToHsl(anim.color).h,
+      onPreviewChange(hex) { outPreview = hex; outOpacity?.setTrack(opacitySliderTrack(hex)); },
     });
-    panel.appendChild(stopTabBar);
+    appendDropperBtn(outRow, 'outline');
+    outOpacity = appendSliderRow(panel, 'Opacity', 0, 100, 1, Math.round(animOutlineOpacity(anim) * 100),
+      v => `${Math.round(v)}%`, v => { anim.outlineOpacity = clamp(parseFloat(v) / 100, 0, 1); saveProject(); },
+      false, { colorTrack: opacitySliderTrack(outPreview) });
+    appendSliderRow(panel, 'Thickness', 1, 10, 1, anim.thickness ?? 2, v => `${Math.round(v)}`, v => {
+      anim.thickness = parseInt(v, 10); saveProject();
+    }, false, { valAlign: 'center' });
 
-    if (gradientColorTab === 1) {
-      const c1 = animFillColor(anim) || anim.color;
-      let c1Preview = normalizeColorString(c1) || c1;
-      let c1Opacity = null;
-      const c1PreviewRow = appendHslColorPicker(panel, c1, (color, meta = {}) => {
-        if (fillEnabled && !sameColor(animFillColor(anim), color)) {
-          anim.fillColor = color;
-          if (!anim.fillStyle) anim.fillStyle = 'solid';
-        }
-        saveProject();
-        if (meta.fromHueClick) renderAnimList();
-        draw();
-      }, {
-        withUndo: true,
-        fallbackHue: colorToHsl(anim.color).h,
-        onPreviewChange(hex) { c1Preview = hex; c1Opacity?.setTrack(opacitySliderTrack(hex)); },
-      });
-      appendDropperBtn(c1PreviewRow, 'fill', { compact: true });
-      c1Opacity = appendSliderRow(panel, 'Opacity', 0, 100, 1, Math.round(animFillOpacity(anim) * 100), v => `${Math.round(v)}%`, v => {
-        if (!animFillColor(anim) && fillEnabled) { anim.fillColor = c1; if (!anim.fillStyle) anim.fillStyle = 'solid'; }
-        anim.fillOpacity = clamp(parseFloat(v) / 100, 0, 1);
-        saveProject();
+  } else if (objectFillTab === 1) {
+    // ── Fill 1: fill color + opacity ──
+    const c1 = animFillColor(anim) || anim.color;
+    let c1Preview = normalizeColorString(c1) || c1;
+    let c1Opacity = null;
+    const c1Row = appendHslColorPicker(panel, c1, (color, meta = {}) => {
+      if (!sameColor(animFillColor(anim), color)) {
+        anim.fillColor = color;
+        if (!anim.fillStyle) anim.fillStyle = 'solid';
+      }
+      saveProject(); if (meta.fromHueClick) renderAnimList(); draw();
+    }, {
+      withUndo: true, fallbackHue: colorToHsl(anim.color).h,
+      onPreviewChange(hex) { c1Preview = hex; c1Opacity?.setTrack(opacitySliderTrack(hex)); },
+    });
+    appendDropperBtn(c1Row, 'fill');
+    c1Opacity = appendSliderRow(panel, 'Opacity', 0, 100, 1, Math.round(animFillOpacity(anim) * 100),
+      v => `${Math.round(v)}%`, v => {
+        if (!animFillColor(anim)) { anim.fillColor = c1; if (!anim.fillStyle) anim.fillStyle = 'solid'; }
+        anim.fillOpacity = clamp(parseFloat(v) / 100, 0, 1); saveProject();
       }, !fillEnabled, { colorTrack: opacitySliderTrack(c1Preview) });
-    } else {
+
+  } else if (objectFillTab === 2) {
+    // ── Fill 2: second color for gradient or pattern ──
+    if (hasColor2) {
       const c2Init = anim.gradientToColor || animFillColor(anim) || anim.color;
       let c2Preview = normalizeColorString(c2Init) || c2Init;
       let c2Opacity = null;
-      const c2PreviewRow = appendHslColorPicker(panel, c2Init, (color, meta = {}) => {
+      const c2Row = appendHslColorPicker(panel, c2Init, (color, meta = {}) => {
         if (!sameColor(anim.gradientToColor, color)) anim.gradientToColor = color;
-        saveProject();
-        if (meta.fromHueClick) renderAnimList();
-        draw();
+        saveProject(); if (meta.fromHueClick) renderAnimList(); draw();
       }, {
-        withUndo: true,
-        fallbackHue: colorToHsl(animFillColor(anim) || anim.color).h,
+        withUndo: true, fallbackHue: colorToHsl(animFillColor(anim) || anim.color).h,
         onPreviewChange(hex) { c2Preview = hex; c2Opacity?.setTrack(opacitySliderTrack(hex)); },
       });
-      appendDropperBtn(c2PreviewRow, 'gradientTo', { compact: true });
-      const toOpacityVal = anim.gradientToOpacity ?? 0;
-      c2Opacity = appendSliderRow(panel, 'Opacity', 0, 100, 1, Math.round(toOpacityVal * 100), v => `${Math.round(v)}%`, v => {
-        anim.gradientToOpacity = clamp(parseFloat(v) / 100, 0, 1);
-        saveProject();
-      }, false, { colorTrack: opacitySliderTrack(c2Preview) });
-    }
-  } else {
-    // ── Single color picker (outline or non-gradient fill) ──
-    const activeColor = !isOutline ? (animFillColor(anim) || anim.color) : anim.color;
-    let opacityPreviewColor = normalizeColorString(activeColor) || activeColor;
-    let opacityControl = null;
-    const singlePreviewRow = appendHslColorPicker(panel, activeColor, (color, meta = {}) => {
-      if (!isOutline && fillEnabled) {
-        if (!sameColor(animFillColor(anim), color)) {
-          anim.fillColor = color;
-          if (!anim.fillStyle) anim.fillStyle = 'solid';
-        }
-      } else if (!sameColor(anim.color, color)) {
-        anim.color = color;
-      }
-      saveProject();
-      if (meta.fromHueClick) renderAnimList();
-      draw();
-    }, {
-      withUndo: true,
-      fallbackHue: colorToHsl(anim.color).h,
-      onPreviewChange(hex) {
-        opacityPreviewColor = hex;
-        opacityControl?.setTrack(opacitySliderTrack(hex));
-      },
-    });
-    appendDropperBtn(singlePreviewRow, colorEditTarget, { compact: true });
-    if (isOutline) {
-      opacityControl = appendSliderRow(panel, 'Opacity', 0, 100, 1, Math.round(animOutlineOpacity(anim) * 100), v => `${Math.round(v)}%`, v => {
-        anim.outlineOpacity = clamp(parseFloat(v) / 100, 0, 1);
-        saveProject();
-      }, false, { colorTrack: opacitySliderTrack(opacityPreviewColor) });
+      appendDropperBtn(c2Row, 'gradientTo');
+      c2Opacity = appendSliderRow(panel, 'Opacity', 0, 100, 1, Math.round((anim.gradientToOpacity ?? 0) * 100),
+        v => `${Math.round(v)}%`, v => { anim.gradientToOpacity = clamp(parseFloat(v) / 100, 0, 1); saveProject(); },
+        false, { colorTrack: opacitySliderTrack(c2Preview) });
     } else {
-      opacityControl = appendSliderRow(panel, 'Opacity', 0, 100, 1, Math.round(animFillOpacity(anim) * 100), v => `${Math.round(v)}%`, v => {
-        if (!animFillColor(anim) && fillEnabled) {
-          anim.fillColor = activeColor;
-          if (!anim.fillStyle) anim.fillStyle = 'solid';
+      const note = document.createElement('div');
+      note.style.cssText = 'padding: 16px 10px; font-size: 0.7rem; color: #6c7086; text-align: center; line-height: 1.6;';
+      note.textContent = 'Switch to Gradient or Pattern in the Style tab to enable a second color.';
+      panel.appendChild(note);
+    }
+
+  } else {
+    // ── Style tab ──
+    const styleRow = document.createElement('div');
+    styleRow.className = 'fill-style-row';
+    [{ key: 'solid', title: 'Solid' }, { key: 'gradient', title: 'Gradient' }, { key: 'pattern', title: 'Pattern' }].forEach(({ key, title }) => {
+      const btn = document.createElement('button');
+      btn.className = 'fill-style-btn' + (fillStyle === key ? ' active' : '');
+      btn.title = title;
+      btn.appendChild(makeFillStyleIcon(key));
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        if (fillStyle !== key) {
+          pushUndo(); anim.fillStyle = key;
+          if (key === 'gradient') ensureGradientDefaults(anim);
+          if ((key === 'gradient' || key === 'pattern') && !anim.gradientToColor) {
+            anim.gradientToColor = animFillColor(anim) || anim.color;
+            if (!isFinite(anim.gradientToOpacity)) anim.gradientToOpacity = 0;
+          }
+          saveProject(); renderAnimList(); draw();
         }
-        anim.fillOpacity = clamp(parseFloat(v) / 100, 0, 1);
-        saveProject();
-      }, !fillEnabled, { colorTrack: opacitySliderTrack(opacityPreviewColor) });
+      });
+      styleRow.appendChild(btn);
+    });
+    panel.appendChild(styleRow);
+
+    if (isGradient) {
+      const wheelRow = document.createElement('div');
+      wheelRow.className = 'direction-wheel-row';
+      const lbl = document.createElement('span');
+      lbl.className = 'direction-wheel-label';
+      lbl.textContent = 'Direction';
+      wheelRow.appendChild(lbl);
+      appendDirectionWheel(wheelRow,
+        () => anim.gradientAngle ?? Math.PI / 4,
+        a => { anim.gradientAngle = a; saveProject(); draw(); });
+      panel.appendChild(wheelRow);
+    }
+
+    if (isPattern) {
+      const patternType = anim.patternType || 'lines';
+      const typeRow = document.createElement('div');
+      typeRow.className = 'fill-style-row';
+      typeRow.style.marginTop = '4px';
+      [{ key: 'lines', title: 'Lines' }, { key: 'dots', title: 'Dots' }, { key: 'crosshatch', title: 'Crosshatch' }].forEach(({ key, title }) => {
+        const btn = document.createElement('button');
+        btn.className = 'fill-style-btn' + (patternType === key ? ' active' : '');
+        btn.title = title;
+        btn.appendChild(makeFillStyleIcon(key));
+        btn.addEventListener('click', e => {
+          e.stopPropagation();
+          if ((anim.patternType || 'lines') !== key) {
+            pushUndo(); anim.patternType = key; saveProject(); renderAnimList(); draw();
+          }
+        });
+        typeRow.appendChild(btn);
+      });
+      panel.appendChild(typeRow);
+
+      const wheelRow = document.createElement('div');
+      wheelRow.className = 'direction-wheel-row';
+      const lbl = document.createElement('span');
+      lbl.className = 'direction-wheel-label';
+      lbl.textContent = 'Angle';
+      wheelRow.appendChild(lbl);
+      appendDirectionWheel(wheelRow,
+        () => anim.patternAngle ?? 0,
+        a => { anim.patternAngle = a; saveProject(); draw(); });
+      panel.appendChild(wheelRow);
+
+      appendSliderRow(panel, 'Spacing', 4, 48, 1, anim.patternSpacing ?? 12,
+        v => `${Math.round(v)}px`, v => { anim.patternSpacing = parseFloat(v); saveProject(); draw(); });
     }
   }
 
@@ -14279,8 +14744,29 @@ function detectObjectTopology(anim) {
   }
   if (!halfEdges.length) return;
 
-  const outgoing = new Map();
+  // Collapse duplicate half-edges: when two curves share the same geometric edge
+  // (same junction nodes at both ends), each contributes a fwd/bwd pair giving
+  // 4 half-edges for one planar edge. Keep only the first pair per directed edge.
+  const seenEdgeKeys = new Set();
+  const discardedHE = new Set();
   for (const he of halfEdges) {
+    if (discardedHE.has(he)) continue;
+    const fromNid = keyToNode.get(`${he.animId}:${he.fromIdx}`);
+    const toNid   = keyToNode.get(`${he.animId}:${he.toIdx}`);
+    if (fromNid === undefined || toNid === undefined) { discardedHE.add(he); continue; }
+    const edgeKey = `${fromNid}\0${toNid}`;
+    if (seenEdgeKeys.has(edgeKey)) {
+      discardedHE.add(he);
+      if (he.twin) discardedHE.add(he.twin);
+    } else {
+      seenEdgeKeys.add(edgeKey);
+    }
+  }
+  const activeHalfEdges = halfEdges.filter(he => !discardedHE.has(he));
+  if (!activeHalfEdges.length) return;
+
+  const outgoing = new Map();
+  for (const he of activeHalfEdges) {
     const nid = keyToNode.get(`${he.animId}:${he.fromIdx}`);
     if (nid === undefined) continue;
     if (!outgoing.has(nid)) outgoing.set(nid, []);
@@ -14299,7 +14785,7 @@ function detectObjectTopology(anim) {
   };
 
   const faces = [];
-  for (const startHE of halfEdges) {
+  for (const startHE of activeHalfEdges) {
     if (startHE.visited) continue;
     const face = [];
     let he = startHE, steps = 0;
@@ -14340,8 +14826,67 @@ function nodeNumToLetter(n) {
   return result;
 }
 
+function primitiveToTopologyPath(c) {
+  const kind = animKind(c);
+  if (kind === 'rectangle') {
+    const corners = primitiveRectangleCorners(c);
+    if (corners.length < 4) return null;
+    const anchors = [...corners, new Cx(corners[0].re, corners[0].im)];
+    const segments = anchors.slice(0, -1).map((p, i) => makeStraightSegment(p, anchors[i + 1]));
+    return { id: c.id, kind: POLYLINE_KIND, closed: true, anchors, segments, color: c.color,
+             anchorLocked: [], anchorLabels: [], activeSegments: new Set(),
+             gradientFromArcs: new Set(), gradientToArcs: new Set() };
+  }
+  if (kind === 'line') {
+    const p0 = c.anchors?.[0], p1 = c.anchors?.[1];
+    if (!p0 || !p1) return null;
+    return { id: c.id, kind: 'freeform', closed: false, anchors: [p0, p1],
+             segments: [makeStraightSegment(p0, p1)], color: c.color,
+             anchorLocked: [], anchorLabels: [], activeSegments: new Set(),
+             gradientFromArcs: new Set(), gradientToArcs: new Set() };
+  }
+  return null; // circle/ellipse: no meaningful corners for topology
+}
+
+function isCornerAnchor(c, i) {
+  const n = c.anchors.length;
+  const a = c.anchors[i];
+  if (!a || n < 2) return false;
+  let inRe, inIm;
+  if (i > 0) {
+    const seg = c.segments[i - 1];
+    if (!seg?.h1) return false;
+    inRe = a.re - seg.h1.re; inIm = a.im - seg.h1.im;
+  } else if (c.closed) {
+    const prev = c.anchors[n - 1];
+    if (!prev) return false;
+    inRe = a.re - prev.re; inIm = a.im - prev.im;
+  } else {
+    return false;
+  }
+  let outRe, outIm;
+  if (i < n - 1) {
+    const seg = c.segments[i];
+    if (!seg?.h0) return false;
+    outRe = seg.h0.re - a.re; outIm = seg.h0.im - a.im;
+  } else if (c.closed) {
+    const next = c.anchors[0];
+    if (!next) return false;
+    outRe = next.re - a.re; outIm = next.im - a.im;
+  } else {
+    return false;
+  }
+  const inLen = Math.hypot(inRe, inIm), outLen = Math.hypot(outRe, outIm);
+  if (inLen < 1e-9 || outLen < 1e-9) return false;
+  const dot = (inRe * outRe + inIm * outIm) / (inLen * outLen);
+  return dot < 0.99;
+}
+
 function computeObjectTopologyData(anim) {
-  const curves = animCurves(anim).filter(c => !isPrimitiveAnim(c) && !isTextAnim(c));
+  const curves = animCurves(anim)
+    .filter(c => !isTextAnim(c))
+    .map(c => isPrimitiveAnim(c) ? primitiveToTopologyPath(c) : c)
+    .filter(Boolean);
   if (!curves.length) return { essentialPoints: [], topoArcs: [] };
 
   const EPSILON = 1e-6;
@@ -14377,6 +14922,9 @@ function computeObjectTopologyData(anim) {
   }
   for (const [root, cs] of _rootCurves) {
     if (cs.size >= 2) endpointRoots.add(root);
+  }
+  for (let j = 0; j < pts.length; j++) {
+    if (isCornerAnchor(pts[j].c, pts[j].i)) endpointRoots.add(find(j));
   }
 
   const rootToNum = new Map();
@@ -14505,9 +15053,30 @@ function detectRegionsForGroup(groupId) {
   }
   if (!halfEdges.length) return;
 
+  // Collapse duplicate half-edges: when two curves share the same geometric edge
+  // (same junction nodes at both ends), each contributes a fwd/bwd pair giving
+  // 4 half-edges for one planar edge. Keep only the first pair per directed edge.
+  const seenEdgeKeys = new Set();
+  const discardedHE = new Set();
+  for (const he of halfEdges) {
+    if (discardedHE.has(he)) continue;
+    const fromNid = keyToNode.get(`${he.animId}:${he.fromIdx}`);
+    const toNid   = keyToNode.get(`${he.animId}:${he.toIdx}`);
+    if (fromNid === undefined || toNid === undefined) { discardedHE.add(he); continue; }
+    const edgeKey = `${fromNid}\0${toNid}`;
+    if (seenEdgeKeys.has(edgeKey)) {
+      discardedHE.add(he);
+      if (he.twin) discardedHE.add(he.twin);
+    } else {
+      seenEdgeKeys.add(edgeKey);
+    }
+  }
+  const activeHalfEdges = halfEdges.filter(he => !discardedHE.has(he));
+  if (!activeHalfEdges.length) return;
+
   // Build per-node outgoing-edge lists sorted CCW (math y-up)
   const outgoing = new Map();
-  for (const he of halfEdges) {
+  for (const he of activeHalfEdges) {
     const nid = keyToNode.get(`${he.animId}:${he.fromIdx}`);
     if (nid === undefined) continue;
     if (!outgoing.has(nid)) outgoing.set(nid, []);
@@ -14528,7 +15097,7 @@ function detectRegionsForGroup(groupId) {
 
   // Trace all faces
   const faces = [];
-  for (const startHE of halfEdges) {
+  for (const startHE of activeHalfEdges) {
     if (startHE.visited) continue;
     const face = [];
     let he = startHE, steps = 0;
@@ -14590,6 +15159,398 @@ function computeRegionCanvasBounds(region, curvesMap) {
   return minX === Infinity ? null : { left: minX, right: maxX, top: minY, bottom: maxY };
 }
 
+// ── Contour boundary selection helpers ────────────────────────────────────────
+
+// Splits multi-segment boundary edges into individual single-segment edges so
+// that intermediate geometric corners (like node D, which is interior to a
+// multi-segment half-edge) become individually selectable in the contour UI.
+// Only expands POLYLINE_KIND curves: their intermediate anchors are true
+// geometric corners. Freeform arcs keep a single boundary edge so that only
+// the DCEL junction nodes are shown (matching the schematic).
+function expandedContourBoundary(boundary, curvesMap) {
+  const result = [];
+  for (const edge of boundary) {
+    const anim = curvesMap.get(edge.animId);
+    if (!anim || anim.kind !== POLYLINE_KIND) { result.push(edge); continue; }
+    const { startIdx, endIdx, animId } = edge;
+    const fwd = endIdx > startIdx;
+    const step = fwd ? 1 : -1;
+    let added = false;
+    for (let i = startIdx; i !== endIdx; i += step) {
+      result.push({ animId, startIdx: i, endIdx: i + step });
+      added = true;
+    }
+    if (!added) result.push(edge);
+  }
+  return result;
+}
+
+function junctionNodesForRegion(boundary, curvesMap) {
+  return expandedContourBoundary(boundary, curvesMap).map(edge => {
+    const anim = curvesMap.get(edge.animId);
+    if (!anim) return null;
+    const anchor = anim.anchors?.[edge.startIdx];
+    if (!anchor?.ok?.()) return null;
+    const [x, y] = toCanvas(anchor.re, anchor.im);
+    return { x, y };
+  });
+}
+
+function shortestPathEdgeIndices(N, fromIdx, toIdx) {
+  if (fromIdx === toIdx) return [];
+  const fwdLen = ((toIdx - fromIdx) + N) % N;
+  const bwdLen = N - fwdLen;
+  if (fwdLen <= bwdLen) {
+    return Array.from({ length: fwdLen }, (_, k) => (fromIdx + k) % N);
+  } else {
+    return Array.from({ length: bwdLen }, (_, k) => (toIdx + k) % N);
+  }
+}
+
+function contourModeEdgesFromNodes(boundary, nodeIndices, curvesMap) {
+  if (nodeIndices.length < 2) return [];
+  const expanded = curvesMap ? expandedContourBoundary(boundary, curvesMap) : boundary;
+  const N = expanded.length;
+  const seen = new Set();
+  const result = [];
+  for (let i = 0; i < nodeIndices.length - 1; i++) {
+    const from = nodeIndices[i], to = nodeIndices[i + 1];
+    if (from === to) continue;
+    const fwdLen = ((to - from) + N) % N;
+    const bwdLen = N - fwdLen;
+    const useFwd = fwdLen <= bwdLen;
+    if (useFwd) {
+      for (let k = 0; k < fwdLen; k++) {
+        const idx = (from + k) % N;
+        if (!seen.has(idx)) { seen.add(idx); result.push(expanded[idx]); }
+      }
+    } else {
+      // Backward path: traverse edges from-1, from-2, … each reversed so
+      // sampleBoundaryEdges reads them in the correct traversal direction.
+      for (let k = 0; k < bwdLen; k++) {
+        const idx = (from - 1 - k + N) % N;
+        if (!seen.has(idx)) {
+          seen.add(idx);
+          const e = expanded[idx];
+          result.push({ ...e, startIdx: e.endIdx, endIdx: e.startIdx });
+        }
+      }
+    }
+  }
+  return result;
+}
+
+function getCurvesMapForContourMode() {
+  const m = contourSelectMode;
+  if (!m) return null;
+  if (m.groupId) {
+    return new Map(allDescendantAnims(m.groupId).map(a => [a.id, a]));
+  } else {
+    const anim = animations.find(a => a.id === m.animId);
+    if (!anim) return null;
+    return new Map(animCurves(anim).map(c => [c.id, c]));
+  }
+}
+
+function getRegionForContourMode() {
+  const m = contourSelectMode;
+  if (!m) return null;
+  if (m.groupId) {
+    const group = groups.find(g => g.id === m.groupId);
+    return group?.regions?.find(r => r.id === m.regionId) ?? null;
+  } else {
+    const anim = animations.find(a => a.id === m.animId);
+    return anim?.regions?.find(r => r.id === m.regionId) ?? null;
+  }
+}
+
+function drawContourSelectOverlay() {
+  if (!contourSelectMode) return;
+  const { nodeIndices, side } = contourSelectMode;
+  const region = getRegionForContourMode();
+  const curvesMap = getCurvesMapForContourMode();
+  if (!region?.boundary?.length || !curvesMap) return;
+
+  const boundary = region.boundary;
+  const nodes = junctionNodesForRegion(boundary, curvesMap);
+  const dpr = devicePixelRatio;
+  const color = side === 'b1' ? '#89b4fa' : '#fab387';
+
+  ctx.save();
+
+  // Draw forming path
+  if (nodeIndices.length >= 2) {
+    const formingEdges = contourModeEdgesFromNodes(boundary, nodeIndices, curvesMap);
+    if (formingEdges.length > 0) {
+      const pts = sampleBoundaryEdges(formingEdges, curvesMap, 80);
+      if (pts.length >= 2) {
+        ctx.beginPath();
+        ctx.moveTo(pts[0][0], pts[0][1]);
+        for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 3 * dpr;
+        ctx.globalAlpha = 0.8;
+        ctx.setLineDash([]);
+        ctx.stroke();
+      }
+    }
+  }
+
+  // Draw junction nodes
+  const selectedSet = new Set(nodeIndices);
+  for (let i = 0; i < nodes.length; i++) {
+    const node = nodes[i];
+    if (!node) continue;
+    const isSelected = selectedSet.has(i);
+    const isLast = nodeIndices.length > 0 && nodeIndices[nodeIndices.length - 1] === i;
+    const r = isSelected ? 7 * dpr : 5 * dpr;
+    ctx.beginPath();
+    ctx.arc(node.x, node.y, r, 0, Math.PI * 2);
+    if (isSelected) {
+      ctx.fillStyle = color; ctx.globalAlpha = 0.9; ctx.fill();
+      if (isLast) {
+        ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5 * dpr; ctx.globalAlpha = 0.7; ctx.stroke();
+      }
+    } else {
+      ctx.fillStyle = '#45475a'; ctx.globalAlpha = 0.8; ctx.fill();
+      ctx.strokeStyle = '#cdd6f4'; ctx.lineWidth = 1.5 * dpr; ctx.globalAlpha = 0.45; ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  ctx.restore();
+}
+
+// ── End contour helpers ────────────────────────────────────────────────────────
+
+function sampleBoundaryEdges(edges, curvesMap, N) {
+  const raw = [];
+  for (const edge of edges) {
+    const anim = curvesMap.get(edge.animId);
+    if (!anim) continue;
+    const fwd = edge.endIdx > edge.startIdx;
+    const sMin = Math.min(edge.startIdx, edge.endIdx), sMax = Math.max(edge.startIdx, edge.endIdx);
+    const segs = fwd
+      ? Array.from({ length: sMax - sMin }, (_, k) => anim.segments[sMin + k])
+      : Array.from({ length: sMax - sMin }, (_, k) => anim.segments[sMax - 1 - k]);
+    for (const sg of segs) {
+      if (!sg?.compiled) continue;
+      const pts = fwd ? sampleCompiledAdaptive(sg.compiled) : [...sampleCompiledAdaptive(sg.compiled)].reverse();
+      for (const pt of pts) {
+        if (raw.length === 0 || pt[0] !== raw[raw.length - 1][0] || pt[1] !== raw[raw.length - 1][1]) raw.push(pt);
+      }
+    }
+  }
+  if (raw.length === 0) return [];
+  if (raw.length === 1) return Array(N).fill(raw[0]);
+  // Compute cumulative arc length then resample uniformly at N positions
+  const cumLen = [0];
+  for (let i = 1; i < raw.length; i++) {
+    const dx = raw[i][0] - raw[i - 1][0], dy = raw[i][1] - raw[i - 1][1];
+    cumLen.push(cumLen[i - 1] + Math.sqrt(dx * dx + dy * dy));
+  }
+  const totalLen = cumLen[cumLen.length - 1];
+  if (totalLen === 0) return Array(N).fill(raw[0]);
+  const result = [];
+  for (let i = 0; i < N; i++) {
+    const target = (i / (N - 1)) * totalLen;
+    let lo = 0, hi = cumLen.length - 1;
+    while (lo < hi - 1) { const mid = (lo + hi) >> 1; if (cumLen[mid] <= target) lo = mid; else hi = mid; }
+    const t = cumLen[hi] === cumLen[lo] ? 0 : (target - cumLen[lo]) / (cumLen[hi] - cumLen[lo]);
+    result.push([raw[lo][0] + t * (raw[hi][0] - raw[lo][0]), raw[lo][1] + t * (raw[hi][1] - raw[lo][1])]);
+  }
+  return result;
+}
+
+function drawTwoBoundaryBlend(ctx, pts1, pts2, color1, opacity1, color2, opacity2) {
+  const N = Math.min(pts1.length, pts2.length);
+  if (N < 2) return;
+  const c1 = parseColorToRgb(color1), c2 = parseColorToRgb(color2);
+  if (!c1 || !c2) return;
+  const edist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+  // Ensure both paths run in the same geometric direction so quads don't cross.
+  // The DCEL may traverse one arc backward relative to the other; if reversing
+  // pts2 gives smaller total endpoint distance, it is the correct orientation.
+  let p2 = pts2;
+  if (edist(pts1[0], p2[N - 1]) + edist(pts1[N - 1], p2[0]) <
+      edist(pts1[0], p2[0])    + edist(pts1[N - 1], p2[N - 1])) {
+    p2 = [...p2].reverse();
+  }
+  // 50% blend used for quads whose gradient axis is degenerate (both paths meet
+  // at a shared endpoint, e.g. the tips of a crescent or corners of a box).
+  const midColor = rgbaCss(
+    { r: (c1.r + c2.r) / 2, g: (c1.g + c2.g) / 2, b: (c1.b + c2.b) / 2 },
+    (opacity1 + opacity2) / 2
+  );
+  for (let i = 0; i < N - 1; i++) {
+    const p1a = pts1[i], p1b = pts1[i + 1], p2a = p2[i], p2b = p2[i + 1];
+    const mx1 = (p1a[0] + p1b[0]) * 0.5, my1 = (p1a[1] + p1b[1]) * 0.5;
+    const mx2 = (p2a[0] + p2b[0]) * 0.5, my2 = (p2a[1] + p2b[1]) * 0.5;
+    ctx.beginPath();
+    ctx.moveTo(p1a[0], p1a[1]);
+    ctx.lineTo(p1b[0], p1b[1]);
+    ctx.lineTo(p2b[0], p2b[1]);
+    ctx.lineTo(p2a[0], p2a[1]);
+    ctx.closePath();
+    if (edist([mx1, my1], [mx2, my2]) < 0.5) {
+      ctx.fillStyle = midColor;
+    } else {
+      const grad = ctx.createLinearGradient(mx1, my1, mx2, my2);
+      grad.addColorStop(0, rgbaCss(c1, opacity1));
+      grad.addColorStop(1, rgbaCss(c2, opacity2));
+      ctx.fillStyle = grad;
+    }
+    ctx.globalAlpha = 1;
+    ctx.fill();
+  }
+}
+
+function resolveContourBoundaries(region) {
+  const boundary = region.boundary;
+  if (!boundary?.length) return { b1: [], b2: [] };
+  const b1 = (region.fill1Arcs?.length ? region.fill1Arcs : null) ?? boundary.slice(0, Math.ceil(boundary.length / 2));
+  const b2 = (region.fill2Arcs?.length ? region.fill2Arcs : null) ?? boundary.slice(Math.ceil(boundary.length / 2));
+  return { b1, b2 };
+}
+
+function drawRegionPattern(ctx, region, curvesMap, opacity) {
+  const patternType = region.patternType || 'lines';
+  const angle = region.patternAngle ?? 0;
+  const spacing = (region.patternSpacing ?? 12) * devicePixelRatio;
+
+  ctx.save();
+  ctx.beginPath();
+  addRegionBoundaryToPathLike(ctx, region.boundary, curvesMap);
+  ctx.clip();
+
+  // Color 1: background fill
+  if (region.fillColor) {
+    const c1 = parseColorToRgb(region.fillColor);
+    if (c1) { ctx.fillStyle = rgbaCss(c1, opacity); ctx.globalAlpha = 1; ctx.fill(); }
+  }
+
+  // Color 2: pattern overlay
+  const patColor = region.gradientToColor;
+  const c2 = patColor ? parseColorToRgb(patColor) : null;
+  if (c2) {
+    const rgba = rgbaCss(c2, region.gradientToOpacity ?? opacity);
+    const bounds = computeRegionCanvasBounds(region, curvesMap);
+    if (bounds) {
+      const cx = (bounds.left + bounds.right) / 2, cy = (bounds.top + bounds.bottom) / 2;
+      const diagHalf = Math.hypot(bounds.right - bounds.left, bounds.bottom - bounds.top) / 2;
+      const span = diagHalf + spacing;
+      const steps = Math.ceil(diagHalf / spacing) + 2;
+      ctx.globalAlpha = 1;
+
+      const drawLines = a => {
+        const pux = Math.cos(a + Math.PI / 2), puy = Math.sin(a + Math.PI / 2);
+        const lx = Math.cos(a), ly = Math.sin(a);
+        ctx.strokeStyle = rgba; ctx.lineWidth = Math.max(devicePixelRatio, spacing * 0.1); ctx.lineCap = 'butt';
+        ctx.beginPath();
+        for (let i = -steps; i <= steps; i++) {
+          const px = cx + i * spacing * pux, py = cy + i * spacing * puy;
+          ctx.moveTo(px - span * lx, py - span * ly);
+          ctx.lineTo(px + span * lx, py + span * ly);
+        }
+        ctx.stroke();
+      };
+
+      if (patternType === 'lines' || patternType === 'crosshatch') drawLines(angle);
+      if (patternType === 'crosshatch') drawLines(angle + Math.PI / 2);
+
+      if (patternType === 'dots') {
+        const r = Math.max(devicePixelRatio, spacing * 0.2);
+        const pux = Math.cos(angle + Math.PI / 2), puy = Math.sin(angle + Math.PI / 2);
+        const lx = Math.cos(angle), ly = Math.sin(angle);
+        ctx.fillStyle = rgba;
+        ctx.beginPath();
+        for (let i = -steps; i <= steps; i++) {
+          for (let j = -steps; j <= steps; j++) {
+            const px = cx + i * spacing * pux + j * spacing * lx;
+            const py = cy + i * spacing * puy + j * spacing * ly;
+            ctx.moveTo(px + r, py); ctx.arc(px, py, r, 0, Math.PI * 2);
+          }
+        }
+        ctx.fill();
+      }
+    }
+  }
+  ctx.restore();
+}
+
+function drawCurvePattern(anim) {
+  if (!animFillColor(anim) || !anim.closed || !findLoopRange(anim)) return;
+  const patternType = anim.patternType || 'lines';
+  const angle = anim.patternAngle ?? 0;
+  const spacing = (anim.patternSpacing ?? 12) * devicePixelRatio;
+  const opacity = animFillOpacity(anim);
+
+  ctx.save();
+  ctx.beginPath();
+  if (!addCurveFillPath(ctx, anim, true)) { ctx.restore(); return; }
+  ctx.clip();
+
+  const c1 = parseColorToRgb(animFillColor(anim));
+  if (c1) { ctx.fillStyle = rgbaCss(c1, opacity); ctx.globalAlpha = 1; ctx.fill(); }
+
+  const patColor = anim.gradientToColor;
+  const c2 = patColor ? parseColorToRgb(patColor) : null;
+  if (c2) {
+    const rgba = rgbaCss(c2, anim.gradientToOpacity ?? opacity);
+    const bounds = selectedObjectCanvasBounds(anim);
+    if (bounds) {
+      const cx = (bounds.left + bounds.right) / 2, cy = (bounds.top + bounds.bottom) / 2;
+      const diagHalf = Math.hypot(bounds.right - bounds.left, bounds.bottom - bounds.top) / 2;
+      const span = diagHalf + spacing;
+      const steps = Math.ceil(diagHalf / spacing) + 2;
+      ctx.globalAlpha = 1;
+
+      const drawLines = a => {
+        const pux = Math.cos(a + Math.PI / 2), puy = Math.sin(a + Math.PI / 2);
+        const lx = Math.cos(a), ly = Math.sin(a);
+        ctx.strokeStyle = rgba; ctx.lineWidth = Math.max(devicePixelRatio, spacing * 0.1); ctx.lineCap = 'butt';
+        ctx.beginPath();
+        for (let i = -steps; i <= steps; i++) {
+          const px = cx + i * spacing * pux, py = cy + i * spacing * puy;
+          ctx.moveTo(px - span * lx, py - span * ly);
+          ctx.lineTo(px + span * lx, py + span * ly);
+        }
+        ctx.stroke();
+      };
+
+      if (patternType === 'lines' || patternType === 'crosshatch') drawLines(angle);
+      if (patternType === 'crosshatch') drawLines(angle + Math.PI / 2);
+
+      if (patternType === 'dots') {
+        const r = Math.max(devicePixelRatio, spacing * 0.2);
+        const pux = Math.cos(angle + Math.PI / 2), puy = Math.sin(angle + Math.PI / 2);
+        const lx = Math.cos(angle), ly = Math.sin(angle);
+        ctx.fillStyle = rgba;
+        ctx.beginPath();
+        for (let i = -steps; i <= steps; i++) {
+          for (let j = -steps; j <= steps; j++) {
+            const px = cx + i * spacing * pux + j * spacing * lx;
+            const py = cy + i * spacing * puy + j * spacing * ly;
+            ctx.moveTo(px + r, py); ctx.arc(px, py, r, 0, Math.PI * 2);
+          }
+        }
+        ctx.fill();
+      }
+    }
+  }
+  ctx.restore();
+}
+
+function makeLinearGradientAxis(bounds, angle) {
+  const cx = (bounds.left + bounds.right) / 2;
+  const cy = (bounds.top + bounds.bottom) / 2;
+  const span = Math.hypot((bounds.right - bounds.left) / 2, (bounds.bottom - bounds.top) / 2) || 1;
+  return {
+    x1: cx - span * Math.cos(angle), y1: cy - span * Math.sin(angle),
+    x2: cx + span * Math.cos(angle), y2: cy + span * Math.sin(angle),
+  };
+}
+
 function drawGroupRegionFills() {
   for (const group of groups) {
     if (!group.regions?.length || isGroupEffectivelyHidden(group.id)) continue;
@@ -14598,22 +15559,34 @@ function drawGroupRegionFills() {
       if (!region.fillColor) continue;
       const opacity = region.fillOpacity ?? 0.3;
       ctx.save();
-      ctx.beginPath();
-      addRegionBoundaryToPathLike(ctx, region.boundary, curvesMap);
-      if (region.fillStyle === 'gradient') {
-        const bounds = computeRegionCanvasBounds(region, curvesMap);
-        const c1 = parseColorToRgb(region.fillColor);
-        const c2 = parseColorToRgb(region.gradientToColor || region.fillColor);
-        if (bounds && c1 && c2) {
-          const gx2 = Math.abs(bounds.right - bounds.left) < 1 ? bounds.left + 1 : bounds.right;
-          const gy2 = Math.abs(bounds.bottom - bounds.top) < 1 ? bounds.top : bounds.bottom;
-          const grad = ctx.createLinearGradient(bounds.left, bounds.top, gx2, gy2);
-          grad.addColorStop(0, rgbaCss(c1, opacity));
-          grad.addColorStop(1, rgbaCss(c2, region.gradientToOpacity ?? 0));
-          ctx.fillStyle = grad; ctx.globalAlpha = 1;
+      if (region.fillStyle === 'contour-gradient') {
+        const { b1, b2 } = resolveContourBoundaries(region);
+        const pts1 = sampleBoundaryEdges(b1, curvesMap, 120);
+        const pts2 = sampleBoundaryEdges(b2, curvesMap, 120);
+        ctx.beginPath();
+        addRegionBoundaryToPathLike(ctx, region.boundary, curvesMap);
+        ctx.clip();
+        drawTwoBoundaryBlend(ctx, pts1, pts2, region.fillColor, opacity,
+          region.gradientToColor || region.fillColor, region.gradientToOpacity ?? 0);
+      } else if (region.fillStyle === 'pattern') {
+        drawRegionPattern(ctx, region, curvesMap, opacity);
+      } else {
+        ctx.beginPath();
+        addRegionBoundaryToPathLike(ctx, region.boundary, curvesMap);
+        if (region.fillStyle === 'gradient') {
+          const bounds = computeRegionCanvasBounds(region, curvesMap);
+          const c1 = parseColorToRgb(region.fillColor);
+          const c2 = parseColorToRgb(region.gradientToColor || region.fillColor);
+          if (bounds && c1 && c2) {
+            const { x1, y1, x2, y2 } = makeLinearGradientAxis(bounds, region.gradientAngle ?? Math.PI / 4);
+            const grad = ctx.createLinearGradient(x1, y1, x2, y2);
+            grad.addColorStop(0, rgbaCss(c1, opacity));
+            grad.addColorStop(1, rgbaCss(c2, region.gradientToOpacity ?? 0));
+            ctx.fillStyle = grad; ctx.globalAlpha = 1;
+          } else { ctx.fillStyle = region.fillColor; ctx.globalAlpha = opacity; }
         } else { ctx.fillStyle = region.fillColor; ctx.globalAlpha = opacity; }
-      } else { ctx.fillStyle = region.fillColor; ctx.globalAlpha = opacity; }
-      ctx.fill();
+        ctx.fill();
+      }
       ctx.restore();
     }
     // Hover highlight
@@ -14650,22 +15623,33 @@ function drawObjectRegionFills() {
       const _rGradToOp = _useRegion ? (region.gradientToOpacity ?? 0) : (anim.gradientToOpacity ?? 0);
       const opacity = _rOpBase * (_fadeTopo ? 0.45 : (_selRegionId !== null && region.id !== _selRegionId ? 0.35 : 1));
       ctx.save();
-      ctx.beginPath();
-      addRegionBoundaryToPathLike(ctx, region.boundary, curvesMap);
-      if (_rStyle === 'gradient') {
-        const bounds = computeRegionCanvasBounds(region, curvesMap);
-        const c1 = parseColorToRgb(_rFill);
-        const c2 = parseColorToRgb(_rGradTo || _rFill);
-        if (bounds && c1 && c2) {
-          const gx2 = Math.abs(bounds.right - bounds.left) < 1 ? bounds.left + 1 : bounds.right;
-          const gy2 = Math.abs(bounds.bottom - bounds.top) < 1 ? bounds.top : bounds.bottom;
-          const grad = ctx.createLinearGradient(bounds.left, bounds.top, gx2, gy2);
-          grad.addColorStop(0, rgbaCss(c1, opacity));
-          grad.addColorStop(1, rgbaCss(c2, _rGradToOp));
-          ctx.fillStyle = grad; ctx.globalAlpha = 1;
+      if (_rStyle === 'contour-gradient') {
+        const { b1, b2 } = resolveContourBoundaries(region);
+        const pts1 = sampleBoundaryEdges(b1, curvesMap, 120);
+        const pts2 = sampleBoundaryEdges(b2, curvesMap, 120);
+        ctx.beginPath();
+        addRegionBoundaryToPathLike(ctx, region.boundary, curvesMap);
+        ctx.clip();
+        drawTwoBoundaryBlend(ctx, pts1, pts2, _rFill, opacity, _rGradTo || _rFill, _rGradToOp);
+      } else if (_rStyle === 'pattern') {
+        drawRegionPattern(ctx, region, curvesMap, opacity);
+      } else {
+        ctx.beginPath();
+        addRegionBoundaryToPathLike(ctx, region.boundary, curvesMap);
+        if (_rStyle === 'gradient') {
+          const bounds = computeRegionCanvasBounds(region, curvesMap);
+          const c1 = parseColorToRgb(_rFill);
+          const c2 = parseColorToRgb(_rGradTo || _rFill);
+          if (bounds && c1 && c2) {
+            const { x1, y1, x2, y2 } = makeLinearGradientAxis(bounds, region.gradientAngle ?? Math.PI / 4);
+            const grad = ctx.createLinearGradient(x1, y1, x2, y2);
+            grad.addColorStop(0, rgbaCss(c1, opacity));
+            grad.addColorStop(1, rgbaCss(c2, _rGradToOp));
+            ctx.fillStyle = grad; ctx.globalAlpha = 1;
+          } else { ctx.fillStyle = _rFill; ctx.globalAlpha = opacity; }
         } else { ctx.fillStyle = _rFill; ctx.globalAlpha = opacity; }
-      } else { ctx.fillStyle = _rFill; ctx.globalAlpha = opacity; }
-      ctx.fill();
+        ctx.fill();
+      }
       ctx.restore();
     }
   }
@@ -14887,6 +15871,53 @@ function linkObjectCurves(anim) {
   curves.forEach(a => recompileAnim(a));
 
   detectObjectTopology(anim);
+}
+
+function snapMergedCorners(anim) {
+  const LINK_THRESH_PX = 20 * devicePixelRatio;
+  const mathThresh = Math.max(snapCurveThreshold(), LINK_THRESH_PX / scale);
+  const curves = animCurves(anim).filter(c => !isTextAnim(c) && c.segments?.length > 0);
+  if (curves.length < 2) return;
+  curves.forEach(c => recompileAnim(c));
+
+  const pts = [];
+  for (const c of curves) {
+    for (let i = 0; i < c.anchors.length; i++) pts.push({ c, i });
+  }
+
+  const uf = pts.map((_, j) => j);
+  const find = j => { while (uf[j] !== j) { uf[j] = uf[uf[j]]; j = uf[j]; } return j; };
+  const union = (a, b) => { a = find(a); b = find(b); if (a !== b) uf[b] = a; };
+
+  for (let a = 0; a < pts.length; a++) {
+    const pa = pts[a].c.anchors[pts[a].i];
+    if (!pa) continue;
+    for (let b = a + 1; b < pts.length; b++) {
+      const pb = pts[b].c.anchors[pts[b].i];
+      if (!pb) continue;
+      const dist = Math.hypot(pa.re - pb.re, pa.im - pb.im);
+      // Within-curve: only exact matches (keeps closing anchor pairs in sync)
+      // Cross-curve: use snap threshold
+      if (dist < (pts[a].c === pts[b].c ? 1e-6 : mathThresh)) union(a, b);
+    }
+  }
+
+  const groups = new Map();
+  for (let j = 0; j < pts.length; j++) {
+    const root = find(j);
+    if (!groups.has(root)) groups.set(root, []);
+    groups.get(root).push(j);
+  }
+  for (const members of groups.values()) {
+    if (new Set(members.map(j => pts[j].c)).size < 2) continue;
+    const centRe = members.reduce((s, j) => s + pts[j].c.anchors[pts[j].i].re, 0) / members.length;
+    const centIm = members.reduce((s, j) => s + pts[j].c.anchors[pts[j].i].im, 0) / members.length;
+    for (const j of members) {
+      pts[j].c.anchors[pts[j].i].re = centRe;
+      pts[j].c.anchors[pts[j].i].im = centIm;
+    }
+  }
+  curves.forEach(c => recompileAnim(c));
 }
 
 function linkGroupCurves(groupId, skipUndo = false) {
@@ -15606,7 +16637,7 @@ function updateGroupObjectsButton() {
   btn.disabled = false;
   const groupActive = isGroupSelectionActive();
   const objectDetailOpen = (selectedId != null || editModeAnimId != null) && !groupActive;
-  const shouldShow = !activeLineToolOptionsAnim() && !groupActive && (groupSelectionMode || !objectDetailOpen);
+  const shouldShow = !groupActive && (groupSelectionMode || !objectDetailOpen);
   btn.style.display = shouldShow ? 'block' : 'none';
   if (mergeBtn) {
     const showMerge = isMultiSelectionActive() && !groupSelectionMode && !groupActive;
@@ -15874,13 +16905,6 @@ function renderObjectTray(detailAnim) {
   tilesEl.innerHTML = '';
   tilesEl.style.height = '';
   tilesEl.scrollTop = 0;
-  const lineOptionsAnim = activeLineToolOptionsAnim();
-  tilesEl.classList.toggle('line-tool-options-host', !!lineOptionsAnim);
-  if (lineOptionsAnim) {
-    renderLineToolOptions(tilesEl);
-    updateTilesMoreIndicator();
-    return;
-  }
 
   const path = activeTrayGroupPath(detailAnim);
   const childGroupId = path.length ? path[path.length - 1] : null;
@@ -15918,6 +16942,72 @@ function renderObjectTray(detailAnim) {
     if (!didFocus) tilesEl.scrollLeft = clampObjectTrayScroll(tilesEl, previousScrollLeft);
   }
   updateTilesMoreIndicator();
+}
+
+function drawPrimitiveSchematic(canvasEl, anim) {
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvasEl.width, H = canvasEl.height;
+  const pctx = canvasEl.getContext('2d');
+  pctx.clearRect(0, 0, W, H);
+  const p0 = anim.anchors[0], p1 = anim.anchors[1];
+  if (!p0 || !p1) return;
+  const kind = animKind(anim);
+  const color = anim.color || '#89b4fa';
+  const fillC = animFillColor(anim);
+  const fillO = animFillOpacity(anim);
+  const outO  = animOutlineOpacity(anim);
+  const lw    = 1.5 * dpr;
+  const PAD   = 14 * dpr;
+  pctx.lineWidth = lw;
+  pctx.lineJoin  = 'round';
+
+  if (kind === 'rectangle') {
+    const minRe = Math.min(p0.re, p1.re), maxRe = Math.max(p0.re, p1.re);
+    const minIm = Math.min(p0.im, p1.im), maxIm = Math.max(p0.im, p1.im);
+    const rangeRe = Math.max(maxRe - minRe, 1e-6);
+    const rangeIm = Math.max(maxIm - minIm, 1e-6);
+    const sc  = Math.min((W - PAD * 2) / rangeRe, (H - PAD * 2) / rangeIm);
+    const rx  = (W - rangeRe * sc) / 2;
+    const ry  = (H - rangeIm * sc) / 2;
+    const rw  = rangeRe * sc;
+    const rh  = rangeIm * sc;
+    if (fillC && fillO > 0) {
+      pctx.fillStyle = fillC;
+      pctx.globalAlpha = fillO;
+      pctx.fillRect(rx, ry, rw, rh);
+      pctx.globalAlpha = 1;
+    }
+    if (outO > 0) {
+      pctx.strokeStyle = color;
+      pctx.globalAlpha = outO;
+      pctx.strokeRect(rx + lw / 2, ry + lw / 2, rw - lw, rh - lw);
+      pctx.globalAlpha = 1;
+    }
+  } else if (kind === 'circle') {
+    const radius = Math.hypot(p1.re - p0.re, p1.im - p0.im);
+    const sc = Math.min(W - PAD * 2, H - PAD * 2) / (2 * Math.max(radius, 1e-6));
+    const cx = W / 2, cy = H / 2, r = radius * sc;
+    pctx.beginPath();
+    pctx.arc(cx, cy, Math.max(r - lw / 2, 1), 0, Math.PI * 2);
+    if (fillC && fillO > 0) {
+      pctx.fillStyle = fillC; pctx.globalAlpha = fillO; pctx.fill(); pctx.globalAlpha = 1;
+    }
+    if (outO > 0) {
+      pctx.strokeStyle = color; pctx.globalAlpha = outO; pctx.stroke(); pctx.globalAlpha = 1;
+    }
+  } else if (kind === 'ellipse') {
+    const erx = Math.abs(p1.re - p0.re), ery = Math.abs(p1.im - p0.im);
+    const sc  = Math.min((W - PAD * 2) / (2 * Math.max(erx, 1e-6)), (H - PAD * 2) / (2 * Math.max(ery, 1e-6)));
+    const cx = W / 2, cy = H / 2;
+    pctx.beginPath();
+    pctx.ellipse(cx, cy, Math.max(erx * sc - lw / 2, 1), Math.max(ery * sc - lw / 2, 1), 0, 0, Math.PI * 2);
+    if (fillC && fillO > 0) {
+      pctx.fillStyle = fillC; pctx.globalAlpha = fillO; pctx.fill(); pctx.globalAlpha = 1;
+    }
+    if (outO > 0) {
+      pctx.strokeStyle = color; pctx.globalAlpha = outO; pctx.stroke(); pctx.globalAlpha = 1;
+    }
+  }
 }
 
 function drawCurveSchematic(canvas, anim) {
@@ -16031,7 +17121,10 @@ function drawObjectSchematic(canvasEl, anim, opts = {}) {
   const ctx = canvasEl.getContext('2d');
   ctx.clearRect(0, 0, W, H);
 
-  const curves = animCurves(anim).filter(c => !isPrimitiveAnim(c) && !isTextAnim(c));
+  const curves = animCurves(anim)
+    .filter(c => !isTextAnim(c))
+    .map(c => isPrimitiveAnim(c) ? primitiveToTopologyPath(c) : c)
+    .filter(Boolean);
   if (!curves.length) return;
 
   let minRe = Infinity, maxRe = -Infinity, minIm = Infinity, maxIm = -Infinity;
@@ -16460,16 +17553,6 @@ function renderAnimListLegacy() {
   const detailAnim = animations.find(a => a.id === selectedId) ||
                      animations.find(a => a.id === editModeAnimId);
   tilesEl.innerHTML = '';
-  const lineOptionsAnim = activeLineToolOptionsAnim();
-  tilesEl.classList.toggle('line-tool-options-host', !!lineOptionsAnim);
-  if (lineOptionsAnim) {
-    renderLineToolOptions(tilesEl);
-    _tilesVisibleRows = 1;
-    tilesEl.style.height = '66px';
-    tilesEl.scrollTop = 0;
-    updateTilesMoreIndicator();
-    updateGroupObjectsButton();
-  } else {
   // ── Breadcrumb ──
   const breadcrumbEl = document.getElementById('tiles-breadcrumb');
   breadcrumbEl.innerHTML = '';
@@ -16688,7 +17771,6 @@ function renderAnimListLegacy() {
   }
   updateTilesMoreIndicator();
   updateGroupObjectsButton();
-  }
 
   // ── Detail panel ──
   const detailEl = document.getElementById('object-detail');
@@ -16702,7 +17784,7 @@ function renderAnimListLegacy() {
   }
 
   const anim = detailAnim;
-  if (!anim) { updateToolPanel(); setView('tiles'); return; }
+  if (!anim || (anim.inPlacementMode && animKind(anim) !== 'freeform')) { updateToolPanel(); setView('tiles'); return; }
   setView('detail');
 
   if (!anim.activeSegments) anim.activeSegments = new Set();
@@ -16760,6 +17842,10 @@ function renderAnimListLegacy() {
   }
 
   if (isTextAnim(anim)) {
+    const _textWrap = document.createElement('div');
+    _textWrap.style.cssText = 'padding:8px 8px 0; display:flex; flex-direction:column; gap:6px; flex-shrink:0;';
+
+    // ── Textarea ──
     const textArea = document.createElement('textarea');
     textArea.className = 'text-edit-area';
     textArea.dataset.textEditAnimId = String(anim.id);
@@ -16773,18 +17859,115 @@ function renderAnimListLegacy() {
     textArea.addEventListener('blur', () => { if (activeTextEditUndoAnimId === anim.id) activeTextEditUndoAnimId = null; });
     textArea.addEventListener('input', () => { anim.text = textArea.value; updateCanvasTextEditorFromAnim(anim); draw(); });
     textArea.addEventListener('change', () => renderAnimList());
-    detailEl.appendChild(textArea);
-    appendSliderRow(detailEl, 'Font size', 8, 144, 1, anim.fontSize ?? 36, v => `${Math.round(v)}`, v => {
-      anim.fontSize = parseInt(v, 10); updateCanvasTextEditorFromAnim(anim);
+    _textWrap.appendChild(textArea);
+
+    // ── Font controls row: family | size | bold | italic ──
+    const _fontRow = document.createElement('div');
+    _fontRow.style.cssText = 'display:flex; gap:4px; align-items:center;';
+
+    const _familySel = document.createElement('select');
+    _familySel.style.cssText = 'flex:1; min-width:0; background:#11111b; border:1px solid #313244; color:#cdd6f4; border-radius:6px; padding:4px 6px; font-size:0.75rem; cursor:pointer;';
+    FONT_FAMILIES.forEach(({ value, label }) => {
+      const opt = document.createElement('option');
+      opt.value = value; opt.textContent = label; opt.style.fontFamily = value;
+      if (value === (anim.fontFamily || 'sans-serif')) opt.selected = true;
+      _familySel.appendChild(opt);
     });
+    _familySel.addEventListener('change', () => {
+      pushUndo(); anim.fontFamily = _familySel.value;
+      updateCanvasTextEditorFromAnim(anim); saveProject(); draw();
+    });
+    _fontRow.appendChild(_familySel);
+
+    const _sizeInput = document.createElement('input');
+    _sizeInput.type = 'number'; _sizeInput.min = 8; _sizeInput.max = 200; _sizeInput.step = 1;
+    _sizeInput.value = anim.fontSize ?? 36;
+    _sizeInput.style.cssText = 'width:52px; background:#11111b; border:1px solid #313244; color:#cdd6f4; border-radius:6px; padding:4px 6px; font-size:0.75rem; text-align:center;';
+    _sizeInput.addEventListener('input', () => {
+      const v = parseInt(_sizeInput.value, 10);
+      if (isFinite(v) && v >= 1) { anim.fontSize = v; updateCanvasTextEditorFromAnim(anim); draw(); }
+    });
+    _sizeInput.addEventListener('change', () => { pushUndo(); saveProject(); renderAnimList(); });
+    _fontRow.appendChild(_sizeInput);
+
+    const _makeFontToggle = (label, getter, setter) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = label;
+      const _active = () => getter();
+      const _update = () => { btn.style.background = _active() ? '#45475a' : '#1e1e2e'; btn.style.color = _active() ? '#cdd6f4' : '#6c7086'; };
+      btn.style.cssText = 'width:28px; height:28px; border:1px solid #313244; border-radius:6px; cursor:pointer; font-size:0.8rem; flex-shrink:0;';
+      _update();
+      btn.addEventListener('click', e => {
+        e.stopPropagation(); pushUndo(); setter(!getter());
+        _update(); updateCanvasTextEditorFromAnim(anim); saveProject(); draw();
+      });
+      return btn;
+    };
+    const _boldBtn = _makeFontToggle('B', () => anim.fontBold, v => { anim.fontBold = v; });
+    _boldBtn.style.fontWeight = 'bold';
+    const _italicBtn = _makeFontToggle('I', () => anim.fontItalic, v => { anim.fontItalic = v; });
+    _italicBtn.style.fontStyle = 'italic';
+    _fontRow.append(_boldBtn, _italicBtn);
+    _textWrap.appendChild(_fontRow);
+
+    // ── Alignment row ──
+    const _alignRow = document.createElement('div');
+    _alignRow.style.cssText = 'display:flex; gap:2px;';
+    const _alignOpts = [
+      { value: 'left',   svg: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><line x1="3" y1="18" x2="18" y2="18"/></svg>' },
+      { value: 'center', svg: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="6" y1="12" x2="18" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg>' },
+      { value: 'right',  svg: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="9" y1="12" x2="21" y2="12"/><line x1="6" y1="18" x2="21" y2="18"/></svg>' },
+    ];
+    const _alignBtns = _alignOpts.map(({ value, svg }) => {
+      const btn = document.createElement('button');
+      btn.type = 'button'; btn.innerHTML = svg; btn.title = value.charAt(0).toUpperCase() + value.slice(1);
+      const _isActive = () => (anim.textAlign || 'left') === value;
+      const _update = () => { btn.style.background = _isActive() ? '#45475a' : '#1e1e2e'; btn.style.color = _isActive() ? '#cdd6f4' : '#6c7086'; };
+      btn.style.cssText = 'flex:1; height:28px; border:1px solid #313244; border-radius:6px; cursor:pointer; display:flex; align-items:center; justify-content:center;';
+      _update();
+      btn.addEventListener('click', e => {
+        e.stopPropagation(); pushUndo(); anim.textAlign = value;
+        _alignBtns.forEach(b => { const v = _alignOpts[_alignBtns.indexOf(b)].value; b.style.background = v === value ? '#45475a' : '#1e1e2e'; b.style.color = v === value ? '#cdd6f4' : '#6c7086'; });
+        updateCanvasTextEditorFromAnim(anim); saveProject(); draw();
+      });
+      return btn;
+    });
+    _alignBtns.forEach(b => _alignRow.appendChild(b));
+    _textWrap.appendChild(_alignRow);
+
+    detailEl.appendChild(_textWrap);
+
+    // ── Color expansion ──
+    openColorMenuAnimId = anim.id;
+    appendColorExpansion(detailEl, anim);
+
     updateToolPanel(); return;
   }
 
   if (isPrimitiveAnim(anim)) {
-    const detailsDiv = document.createElement('div');
-    detailsDiv.style.padding = '6px 8px';
-    appendPrimitiveDetailRows(detailsDiv, anim);
-    detailEl.appendChild(detailsDiv);
+    // ── Schematic ──
+    {
+      const _dpr = window.devicePixelRatio || 1;
+      const _schemW = Math.max((detailEl.clientWidth || 264) - 16, 80);
+      const _schemH = 120;
+      const _schemWrap = document.createElement('div');
+      _schemWrap.style.cssText = 'padding:8px 8px 4px; background:#11111b; border-bottom:1px solid #1e1e2e;';
+      const _schemCanvas = document.createElement('canvas');
+      _schemCanvas.width = Math.round(_schemW * _dpr);
+      _schemCanvas.height = Math.round(_schemH * _dpr);
+      _schemCanvas.style.width = _schemW + 'px';
+      _schemCanvas.style.height = _schemH + 'px';
+      _schemCanvas.style.cssText += 'display:block; border-radius:5px;';
+      drawPrimitiveSchematic(_schemCanvas, anim);
+      _schemWrap.appendChild(_schemCanvas);
+      detailEl.appendChild(_schemWrap);
+    }
+
+    // ── Color expansion ──
+    openColorMenuAnimId = anim.id;
+    appendColorExpansion(detailEl, anim);
+
     updateToolPanel(); return;
   }
 
@@ -16797,7 +17980,7 @@ function renderAnimListLegacy() {
   const { essentialPoints, topoArcs } = computeObjectTopologyData(anim);
   const _topoMap = new Map(animCurves(anim).map(c => [c.id, c]));
 
-  const segmentLabel = isPolylineAnim(anim) ? 'Segment' : 'Arc';
+  const segmentLabel = animCurves(anim).every(c => isPolylineAnim(c)) ? 'Segment' : 'Arc';
   const curveColor = !anim.visible ? '#585b70' : anim.color;
 
   // ── Shared geometric schematic ──
@@ -16866,12 +18049,46 @@ function renderAnimListLegacy() {
     _arcExp.className = 'color-expansion';
     _arcExp.addEventListener('mousedown', e => e.stopPropagation());
     _arcExp.addEventListener('click', e => e.stopPropagation());
+    const _selCurveForArc = animCurves(anim).find(c => c.id === _selArcForPanel.curveId) ?? null;
     const _arcTabBar = document.createElement('div'); _arcTabBar.className = 'color-tab-bar';
     const _arcTab = document.createElement('div'); _arcTab.className = 'color-tab active'; _arcTab.style.cursor = 'default';
-    _arcTab.textContent = `Arc ${_arcDisplayLabel}`;
-    _arcTabBar.appendChild(_arcTab); _arcExp.appendChild(_arcTabBar);
+    const { fromIdx: _arcFromIdx, toIdx: _arcToIdx } = _selArcForPanel;
+    const _arcLo = Math.min(_arcFromIdx, _arcToIdx), _arcHi = Math.max(_arcFromIdx, _arcToIdx);
+    const _arcOverrides = _selCurveForArc?.arcOverrideSegments;
+    const _arcIsPolyline = !_arcOverrides || (() => {
+      for (let _si = _arcLo; _si < _arcHi; _si++) { if (_arcOverrides.has(_si)) return false; }
+      return true;
+    })();
+    _arcTab.textContent = `${_arcIsPolyline ? 'Segment' : 'Arc'} ${_arcDisplayLabel}`;
+    _arcTabBar.appendChild(_arcTab);
+    if (_selCurveForArc) {
+      const _arcToggleBtn = document.createElement('button');
+      _arcToggleBtn.className = 'arc-type-toggle-btn';
+      _arcToggleBtn.textContent = _arcIsPolyline ? '→ Arc' : '→ Segment';
+      _arcToggleBtn.title = _arcIsPolyline ? 'Convert to Bézier arc (handles become free)' : 'Straighten to line segment';
+      _arcToggleBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        pushUndo();
+        if (_arcIsPolyline) {
+          if (!_selCurveForArc.arcOverrideSegments) _selCurveForArc.arcOverrideSegments = new Set();
+          for (let _si = _arcLo; _si < _arcHi; _si++) _selCurveForArc.arcOverrideSegments.add(_si);
+        } else {
+          for (let _si = _arcLo; _si < _arcHi; _si++) {
+            _selCurveForArc.arcOverrideSegments?.delete(_si);
+            const _seg = _selCurveForArc.segments[_si];
+            const _p0 = _selCurveForArc.anchors[_si], _p1 = _selCurveForArc.anchors[_si + 1];
+            if (!_seg || !_p0 || !_p1) continue;
+            const _s = makeStraightSegment(_p0, _p1);
+            _seg.h0 = _s.h0; _seg.h1 = _s.h1;
+          }
+        }
+        recompileAnim(_selCurveForArc);
+        saveProject(); renderAnimList(); draw();
+      });
+      _arcTabBar.appendChild(_arcToggleBtn);
+    }
+    _arcExp.appendChild(_arcTabBar);
     const _arcPanel = document.createElement('div'); _arcPanel.className = 'color-tab-content';
-    const _selCurveForArc = animCurves(anim).find(c => c.id === _selArcForPanel.curveId) ?? null;
     const _arcInitColor = _selCurveForArc?.color ?? anim.color ?? '#89b4fa';
     let _arcOpacityCtrl = null;
     let _arcPreviewHex = normalizeColorString(_arcInitColor) || _arcInitColor;
@@ -17208,7 +18425,7 @@ function _skipOld() { // dead code stub — body deleted
     };
 
     let visibleArcNum = 0;
-    const segmentLabel = isPolylineAnim(anim) ? 'Segment' : 'Arc';
+    const segmentLabel = animCurves(anim).every(c => isPolylineAnim(c)) ? 'Segment' : 'Arc';
     const appendArcItem = segIdx => {
       const seg = anim.segments[segIdx];
       if (!seg) return;
@@ -17415,11 +18632,6 @@ function updateTilesMoreIndicator() {
   const tilesEl = document.getElementById('object-tiles');
   const aboveEl = document.getElementById('tiles-more-above');
   const belowEl = document.getElementById('tiles-more');
-  if (tilesEl.classList.contains('line-tool-options-host')) {
-    aboveEl.style.display = 'none';
-    belowEl.style.display = 'none';
-    return;
-  }
   const count = directChildItems(currentDrillGroupId()).length;
   if (count <= _tilesVisibleRows * 5) { aboveEl.style.display = 'none'; belowEl.style.display = 'none'; return; }
   const rowH = 72; // 67px tile-wrap + 5px gap
@@ -17934,7 +19146,6 @@ document.getElementById('object-tiles').addEventListener('wheel', e => {
 }, { passive: false });
 document.getElementById('object-tiles').addEventListener('click', e => {
   if (e.target !== e.currentTarget) return;
-  if (e.currentTarget.classList.contains('line-tool-options-host')) return;
   openColorMenuAnimId = null;
   const placing = animations.find(a => a.inPlacementMode);
   if (placing) {
