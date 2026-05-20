@@ -5395,6 +5395,27 @@ function duplicateAnimation() {
 // ════════════════════════════════════════════════════════
 
 function makeTransformedAnimation(src, transformPoint, rotation) {
+  const curveIdMap = new Map();
+  const newCurves = src.curves ? src.curves.map(c => {
+    const newId = Date.now() + Math.random();
+    curveIdMap.set(c.id, newId);
+    return {
+      ...c,
+      id: newId,
+      anchors: c.anchors.map(transformPoint),
+      segments: c.segments.map(s => s ? ({ h0: transformPoint(s.h0), h1: transformPoint(s.h1), eccentricity: s.eccentricity, compiled: null, compiledRef: null }) : null),
+      anchorLocked: c.anchorLocked ? [...c.anchorLocked] : [],
+      activeSegments: new Set(),
+      expandedAnchors: new Set(),
+      expandedArcs: new Set(),
+      gradientFromArcs: new Set(c.gradientFromArcs instanceof Set ? c.gradientFromArcs : []),
+      gradientToArcs: new Set(c.gradientToArcs instanceof Set ? c.gradientToArcs : []),
+    };
+  }) : null;
+  const newRegions = src.regions ? src.regions.map(r => ({
+    ...r,
+    boundary: r.boundary.map(edge => ({ ...edge, animId: curveIdMap.get(edge.animId) ?? edge.animId })),
+  })) : [];
   return {
     id: Date.now() + Math.random(),
     letter: nextLetter(),
@@ -5437,19 +5458,8 @@ function makeTransformedAnimation(src, transformPoint, rotation) {
     expanded: false,
     expandedAnchors: new Set(),
     expandedArcs: new Set(),
-    curves: src.curves ? src.curves.map(c => ({
-      ...c,
-      id: Date.now() + Math.random(),
-      anchors: c.anchors.map(transformPoint),
-      segments: c.segments.map(s => s ? ({ h0: transformPoint(s.h0), h1: transformPoint(s.h1), eccentricity: s.eccentricity, compiled: null, compiledRef: null }) : null),
-      anchorLocked: c.anchorLocked ? [...c.anchorLocked] : [],
-      activeSegments: new Set(),
-      expandedAnchors: new Set(),
-      expandedArcs: new Set(),
-      gradientFromArcs: new Set(c.gradientFromArcs instanceof Set ? c.gradientFromArcs : []),
-      gradientToArcs: new Set(c.gradientToArcs instanceof Set ? c.gradientToArcs : []),
-    })) : null,
-    regions: [],
+    curves: newCurves,
+    regions: newRegions,
   };
 }
 
@@ -5534,6 +5544,24 @@ function createSideActionCopy(src, kind) {
   animations.push(anim);
   recompileAnim(anim);
   if (anim.curves) for (const c of anim.curves) recompileAnim(c);
+  if (anim.curves && src.regions?.length) {
+    detectObjectTopology(anim);
+    const idMap = new Map(src.curves.map((c, i) => [c.id, anim.curves[i].id]));
+    anim.regions.forEach((r, i) => {
+      const s = src.regions[i];
+      if (!s) return;
+      r.fillColor = s.fillColor;
+      r.fillOpacity = s.fillOpacity;
+      r.fillStyle = s.fillStyle;
+      r.gradientToColor = s.gradientToColor;
+      r.gradientToOpacity = s.gradientToOpacity;
+      r.patternType = s.patternType;
+      r.patternAngle = s.patternAngle;
+      r.patternSpacing = s.patternSpacing;
+      r.fill1Arcs = s.fill1Arcs ? s.fill1Arcs.map(e => ({ ...e, animId: idMap.get(e.animId) ?? e.animId })) : null;
+      r.fill2Arcs = s.fill2Arcs ? s.fill2Arcs.map(e => ({ ...e, animId: idMap.get(e.animId) ?? e.animId })) : null;
+    });
+  }
 
   selectedGroupId = null;
   selectedId = src.id;
