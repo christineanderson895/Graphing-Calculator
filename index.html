@@ -8334,6 +8334,7 @@ window.addEventListener('mouseup', e => {
       return;
     }
     // Nothing hit: clear selection.
+    if (editModeAnimId !== null) exitEditMode();
     tilesDrillPath = [];
     selectedId = null; selectedGroupId = null; sceneIndicatorAnimId = null;
     drillObjectArc = null; selectedObjectNode = null; selectedObjectRegionId = null;
@@ -8507,7 +8508,8 @@ canvas.addEventListener('auxclick', e => {
 
 canvas.addEventListener('mouseleave', () => {
   placementPreviewPos = null;
-  rubberBand = null;
+  // rubberBand is intentionally NOT cleared here — window-level mousemove keeps tracking it,
+  // so dragging past the canvas edge continues to work correctly.
   pendingBodyDrag = null;
   pendingRubberBand = null;
   if (anchorHover || handleHover || segmentHover || resizeHover || rotateHover || sideActionHover || frameHover || plusHover || lockHover || fillHover) {
