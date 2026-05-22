@@ -1139,6 +1139,23 @@
       font-size: 0.7rem; color: #6c7086;
       padding: 4px 6px; font-style: italic;
     }
+    .bend-slider {
+      -webkit-appearance: none; appearance: none;
+      width: 100%; height: 4px; border-radius: 2px;
+      background: #45475a; outline: none; cursor: default;
+    }
+    .bend-slider::-webkit-slider-thumb {
+      -webkit-appearance: none; appearance: none;
+      width: 12px; height: 12px; border-radius: 50%;
+      background: #cba6f7; cursor: default;
+    }
+    .bend-slider::-moz-range-thumb {
+      width: 12px; height: 12px; border-radius: 50%;
+      background: #cba6f7; border: none; cursor: default;
+    }
+    .bend-slider::-moz-range-track {
+      background: #45475a; height: 4px; border-radius: 2px;
+    }
 
     /* ── Tree items ── */
     .tree-item { display: flex; flex-direction: column; }
@@ -3610,6 +3627,54 @@ function buildFreeformPlacementSegs(anchors, eccPct) {
   return segs;
 }
 
+// Compute the meeting-point M for a pending freeform arc.
+// Build a Bézier segment from A0 to A1 controlled by a bend modifier (-1 to 1).
+// bend=0: natural default (straight line for seg 0; G1 smooth continuation for seg 1+).
+// bend=±1: handles length L perpendicular to chord (seg 0); h1 at A1±L·perp (seg 1+).
+// prevOutDir null → segment 0 (symmetric); set → G1 continuity, h0 direction fixed.
+function buildFreeformSeg(A0, A1, prevOutDir, bend) {
+  const dre = A1.re - A0.re, dim = A1.im - A0.im;
+  const L = Math.hypot(dre, dim);
+  if (L < 1e-9) return makeSeg(new Cx(A0.re, A0.im), new Cx(A0.re, A0.im));
+  const cu = new Cx(dre / L, dim / L);
+  const pu = new Cx(-cu.im, cu.re);
+  const absB = Math.abs(bend);
+  let h0, h1;
+  if (prevOutDir === null) {
+    h0 = new Cx(
+      A0.re + (1 - absB) * 0.5 * L * cu.re + bend * L * pu.re,
+      A0.im + (1 - absB) * 0.5 * L * cu.im + bend * L * pu.im
+    );
+    h1 = new Cx(
+      A1.re - (1 - absB) * 0.5 * L * cu.re + bend * L * pu.re,
+      A1.im - (1 - absB) * 0.5 * L * cu.im + bend * L * pu.im
+    );
+  } else {
+    const cosT = prevOutDir.re * cu.re + prevOutDir.im * cu.im;
+    const sinT = prevOutDir.re * pu.re + prevOutDir.im * pu.im;
+    const h1nDirRe = -cosT * cu.re + sinT * pu.re;
+    const h1nDirIm = -cosT * cu.im + sinT * pu.im;
+    if (bend <= 0) {
+      // bendMod >= 0: both handles grow linearly from L/2 to L
+      const hLen = L * (1 + absB) / 2;
+      h0 = new Cx(A0.re + hLen * prevOutDir.re, A0.im + hLen * prevOutDir.im);
+      h1 = new Cx(A1.re + hLen * h1nDirRe, A1.im + hLen * h1nDirIm);
+    } else {
+      // bendMod < 0: h0 grows to L, h1 fixed at L/2, direction rotates toward -cu
+      h0 = new Cx(A0.re + (L * (1 + absB) / 2) * prevOutDir.re, A0.im + (L * (1 + absB) / 2) * prevOutDir.im);
+      const lerpRe = (1 - absB) * h1nDirRe - absB * cu.re;
+      const lerpIm = (1 - absB) * h1nDirIm - absB * cu.im;
+      const lerpLen = Math.hypot(lerpRe, lerpIm);
+      h1 = lerpLen > 1e-9
+        ? new Cx(A1.re + (L / 2) * lerpRe / lerpLen, A1.im + (L / 2) * lerpIm / lerpLen)
+        : new Cx(A1.re - (L / 2) * cu.re, A1.im - (L / 2) * cu.im);
+    }
+  }
+  const seg = makeSeg(h0, h1);
+  seg.eccentricity = 1;
+  return seg;
+}
+
 function makeStraightSegment(p0, p1) {
   return makeSeg(lerpCx(p0, p1, 1 / 3), lerpCx(p0, p1, 2 / 3));
 }
@@ -3758,6 +3823,7 @@ let canvasTextEditor = null;
 let activeTextEditUndoAnimId = null;
 let eccentricitySliderActiveKey  = null; // {animId, segIdx} | null — whose ecc slider is focused
 let freeformPlacementEccentricity = 50;  // 0–100, persisted; controls eccentricity during freeform drawing
+let freeformBendModifier = 0; // -1 to 1; shifts M perpendicularly from natural position; resets on each anchor commit
 
 // Canvas drag state
 let placementPreviewPos = null; // Cx | null — cursor pos during placement
@@ -3783,6 +3849,7 @@ let lockHover    = null; // {anim, anchorIdx} | null — interior anchor lock to
 let rubberBand   = null; // {startX,startY,curX,curY,ctrl} | null — drag-region selection
 let splitArcMode = null; // {anim, segIdx} | null — pending arc split waiting for canvas click
 let pendingBodyDrag = null; // {anim, startMathX, startMathY, startClientX, startClientY, dragContext, groupId, onSelect} — deferred select+move
+let pendingRubberBand = null; // {startX, startY, startClientX, startClientY} — upgrades pendingBodyDrag to rubber-band when an object is already selected
 let fillHover    = null;    // anim | null — unselected object fill under cursor (for grab cursor)
 // curvePicker removed — arc type is now auto-selected during placement
 
@@ -5029,12 +5096,12 @@ document.addEventListener('keydown', e => {
   const _freeformPlacing = animations.find(a => a.inPlacementMode && animKind(a) === 'freeform');
   if (_freeformPlacing && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
     e.preventDefault();
-    const delta = e.key === 'ArrowRight' ? 5 : -5;
-    freeformPlacementEccentricity = Math.max(0, Math.min(100, freeformPlacementEccentricity + delta));
-    saveFreeformPlacementState();
+    if (e.key === 'ArrowRight') freeformBendModifier = Math.min(1, freeformBendModifier + 0.1);
+    if (e.key === 'ArrowLeft')  freeformBendModifier = Math.max(-1, freeformBendModifier - 0.1);
     renderAnimList(); draw();
     return;
   }
+
   if (e.key === 'ArrowLeft')  { e.preventDefault(); originX += scale; draw(); }
   if (e.key === 'ArrowRight') { e.preventDefault(); originX -= scale; draw(); }
   if (e.key === 'ArrowUp')    { e.preventDefault(); originY += scale; draw(); }
@@ -5241,14 +5308,6 @@ function finalizePlacement(anim) {
   if (!anim || !anim.inPlacementMode) return;
   if (isPrimitiveAnim(anim)) { finalizePrimitivePlacement(anim); return; }
   if (isPolylineAnim(anim)) { finalizePolylinePlacement(anim); return; }
-  // Strip the direction point (anchor[0]) and its straight segment (segment[0]).
-  // anchor[0] was only used to establish the outgoing tangent at anchor[1]; it is
-  // not part of the curve and must not appear in the finalized result.
-  if (anim.anchors.length >= 1) {
-    anim.anchors.shift();
-    if (anim.segments.length >= 1) anim.segments.shift();
-    if (anim.anchorLocked.length >= 1) anim.anchorLocked.shift();
-  }
   if (anim.anchors.length === 0) {
     animations = animations.filter(a => a.id !== anim.id);
     renderAnimList(); draw(); updateCursor(); return;
@@ -7025,13 +7084,11 @@ function placementClickHandler(anim, snapped, mathX, mathY) {
   const isExtension = anim.extensionAnchorIdx != null;
   const nearIdx = nearestPlacementAnchorIndex(anim, mathX, mathY, undefined, snapped);
 
-  if (n === 0) { pushUndo(); anch.push(snapped); anim.anchorLocked.push(true); renderAnimList(); draw(); return; }
-  if (n === 1) {
-    if (nearIdx === 0) { finalizePlacement(anim); return; }
+  if (n === 0) {
+    // First click: place the first real anchor; reset M for the pending arc
     pushUndo();
     anch.push(snapped); anim.anchorLocked.push(true);
-    rebuildFreshPlacementSegments(anim);
-    updatePlacementMatchCandidate(anim);
+    freeformBendModifier = 0;
     renderAnimList(); draw(); return;
   }
 
@@ -7054,12 +7111,12 @@ function placementClickHandler(anim, snapped, mathX, mathY) {
     renderAnimList(); draw(); return;
   }
 
-  // Fresh placement: rebuild the initial spline from the anchor sequence.
+  // Fresh placement: commit one segment per click using the current M.
   const endIdx = n - 1;
   const looping = nearIdx >= 0;
   const target = looping ? new Cx(anch[nearIdx].re, anch[nearIdx].im) : snapped;
 
-  // Clicking at the same position as the last placed anchor ends placement ("same anchor twice")
+  // Clicking at the same position as the last placed anchor ends placement
   if (looping) {
     const last = anch[endIdx];
     if (last && Math.abs(target.re - last.re) < 1e-9 && Math.abs(target.im - last.im) < 1e-9) {
@@ -7067,9 +7124,19 @@ function placementClickHandler(anim, snapped, mathX, mathY) {
     }
   }
 
+  // Derive prevOutDir from the last committed segment (null for the very first arc)
+  const prevOutDir = segs.length > 0
+    ? tangentAtBezierEnd(anch[endIdx], segs[segs.length - 1].h1)
+    : null;
+
+  const A0 = anch[endIdx];
+  const newSeg = buildFreeformSeg(A0, target, prevOutDir, -freeformBendModifier);
+
   pushUndo();
   anch.push(target); anim.anchorLocked.push(true);
-  rebuildFreshPlacementSegments(anim);
+  segs.push(newSeg);
+  recompileAnim(anim);
+  freeformBendModifier = 0;
   updatePlacementMatchCandidate(anim);
   renderAnimList(); draw(); return;
 }
@@ -7415,6 +7482,24 @@ canvas.addEventListener('mousedown', e => {
     pushUndo();
     setAnchorLocked(lockHit.anim, lockHit.anchorIdx, !isAnchorLocked(lockHit.anim, lockHit.anchorIdx));
     renderAnimList(); draw(); return;
+  }
+
+  // ── Rubber-band setup ──
+  // When any object is selected or in edit mode, intercept here so a drag can start a
+  // rubber-band rectangle instead of interacting with the object. In edit mode, still
+  // allow anchor/handle drags to pass through.
+  if ((selectedId !== null || editModeAnimId !== null) && !isGroupSelectionActive() && !isMultiSelectionActive()) {
+    let _rbSkip = false;
+    if (editModeAnimId !== null) {
+      const _aHit = anchorHover ?? queryAnchorHover(mathX, mathY);
+      const _hHit = !_aHit ? (handleHover ?? queryHandleHover(mathX, mathY)) : null;
+      _rbSkip = !!_aHit || !!_hHit;
+    }
+    if (!_rbSkip) {
+      pendingRubberBand = { startX: cx, startY: cy, startClientX: e.clientX, startClientY: e.clientY, clickCx: cx, clickCy: cy, clickMathX: mathX, clickMathY: mathY, savedEditModeAnimId: editModeAnimId };
+      e.preventDefault();
+      return;
+    }
   }
 
   // ── Topology feature selection from canvas ──
@@ -7877,6 +7962,27 @@ window.addEventListener('mousemove', e => {
     draw(); return;
   }
 
+  // Non-edit rubber-band: mousedown skipped all hit tests and set pendingRubberBand.
+  // Drag past threshold → start rubber-band; otherwise block all drag handlers.
+  if (pendingRubberBand) {
+    const _rbDist = Math.hypot(e.clientX - pendingRubberBand.startClientX, e.clientY - pendingRubberBand.startClientY);
+    if (_rbDist > 4) {
+      const _prb = pendingRubberBand;
+      pendingRubberBand = null;
+      if (_prb.savedEditModeAnimId !== null && editModeAnimId !== null) exitEditMode();
+      selectedId = null;
+      selectedGroupId = null;
+      clearMultiSelection();
+      clearGroupMode();
+      clearSelectionShearGuides();
+      sideActionHover = null;
+      animations.forEach(a => { a.expanded = false; a.expandedArcs = new Set(); a.expandedAnchors = new Set(); });
+      rubberBand = { mode: 'objects', startX: _prb.startX, startY: _prb.startY, curX: cx, curY: cy, ctrl: false };
+      renderAnimList(); draw(); return;
+    }
+    return; // still pending: block all drag handlers
+  }
+
   if (handleDrag) {
     const { anim, segIdx, side, anchorIdx } = handleDrag;
     const snapped = snapPointToLattice(new Cx(mathX, mathY));
@@ -8206,6 +8312,37 @@ window.addEventListener('mouseup', e => {
     pendingBodyDrag = null;
     return;
   }
+  if (pendingRubberBand) {
+    const _prb = pendingRubberBand;
+    pendingRubberBand = null;
+    // Tiny click: replay non-control hit tests to select object or clear selection.
+    const _rSeg = querySegmentHover(_prb.clickCx, _prb.clickCy);
+    if (_rSeg && !objectGroupId(_rSeg.anim) && !isGroupSelectionActive() && !isMultiSelectionActive()) {
+      enterEditMode(_rSeg.anim, new Set());
+      _rSeg.anim.expanded = true;
+      animations.forEach(a => { if (a.id !== _rSeg.anim.id) { a.expanded = false; a.expandedArcs = new Set(); a.expandedAnchors = new Set(); } });
+      _rSeg.anim.expandedArcs = new Set();
+      _rSeg.anim.expandedAnchors = new Set();
+      renderAnimList(); draw(); updateCursor();
+      scrollToShowExpanded(_rSeg.anim.id);
+      return;
+    }
+    const _rFill = queryFillHit(_prb.clickCx, _prb.clickCy);
+    if (_rFill && !objectGroupId(_rFill) && !isGroupSelectionActive() && !isMultiSelectionActive()) {
+      selectFromScene(_rFill);
+      renderAnimList(); draw(); updateCursor();
+      return;
+    }
+    // Nothing hit: clear selection.
+    tilesDrillPath = [];
+    selectedId = null; selectedGroupId = null; sceneIndicatorAnimId = null;
+    drillObjectArc = null; selectedObjectNode = null; selectedObjectRegionId = null;
+    clearMultiSelection(); clearGroupMode(); clearSelectionShearGuides();
+    sideActionHover = null;
+    animations.forEach(a => { a.expanded = false; a.expandedArcs = new Set(); a.expandedAnchors = new Set(); });
+    renderAnimList(); draw(); updateCursor();
+    return;
+  }
   if (splitDragging) { splitDragging = false; suppressExpensiveFills = false; document.getElementById('split-handle').classList.remove('dragging'); resize(); return; }
   if (hSplitDragging) { hSplitDragging = false; document.getElementById('h-split-handle').classList.remove('dragging'); return; }
   if (isolDragging) { isolDragging = false; updateCursor(); return; }
@@ -8372,6 +8509,7 @@ canvas.addEventListener('mouseleave', () => {
   placementPreviewPos = null;
   rubberBand = null;
   pendingBodyDrag = null;
+  pendingRubberBand = null;
   if (anchorHover || handleHover || segmentHover || resizeHover || rotateHover || sideActionHover || frameHover || plusHover || lockHover || fillHover) {
     anchorHover = null; handleHover = null; segmentHover = null; resizeHover = null; rotateHover = null; sideActionHover = null; frameHover = null; plusHover = null; lockHover = null; fillHover = null;
     updateCursor(); draw();
@@ -9932,43 +10070,19 @@ function drawTentativeFreeformExtension(anchors, segs, previewPoint, color, cw, 
 // Ghost eccentricity percentages shown as fan during freeform placement (segments 1+)
 // Ghost eccentricity fan removed — no longer drawn during placement
 
-// Build just the tentative (preview) segment from the last anchor to previewPoint.
-// Uses the outgoing direction of the last committed segment for tangent continuity.
+// Build the tentative (preview) segment from the last anchor to previewPoint.
 function buildFreeformTentativeSeg(anim, previewPoint) {
   const anchors = anim.anchors;
   const n = anchors.length;
   if (n === 0) return null;
-  const tentA0 = anchors[n - 1];
-  const dx = previewPoint.re - tentA0.re, dy = previewPoint.im - tentA0.im;
-  const L = Math.hypot(dx, dy);
-  if (L < 1e-9) return null;
-  const pct = freeformPlacementEccentricity;
-  const HL = pct <= 50 ? L / 2 : L * (0.5 + (pct - 50) / 100);
-  let h0, h1;
+  const A0 = anchors[n - 1];
+  if (Math.hypot(previewPoint.re - A0.re, previewPoint.im - A0.im) < 1e-9) return null;
 
-  if (n === 1) {
-    return null; // direction point only — no preview arc until P0 is placed
-  } else {
-    // Outgoing direction at tentA0 = normalize(tentA0 - h1 of last committed seg)
-    const lastSeg = anim.segments[n - 2];
-    if (!lastSeg) return null;
-    const outRe = tentA0.re - lastSeg.h1.re, outIm = tentA0.im - lastSeg.h1.im;
-    const outLen = Math.hypot(outRe, outIm);
-    const prevOutDir = outLen > 1e-9
-      ? new Cx(outRe / outLen, outIm / outLen)
-      : new Cx(dx / L, dy / L);
-    h0 = new Cx(tentA0.re + HL * prevOutDir.re, tentA0.im + HL * prevOutDir.im);
-    // Mirror h0 across perpendicular bisector of tentA0 → previewPoint
-    const Mre = (tentA0.re + previewPoint.re) / 2, Mim = (tentA0.im + previewPoint.im) / 2;
-    const dRe = dx / L, dIm = dy / L;
-    const vRe = h0.re - Mre, vIm = h0.im - Mim;
-    const dot = vRe * dRe + vIm * dIm;
-    h1 = new Cx(Mre + vRe - 2 * dot * dRe, Mim + vIm - 2 * dot * dIm);
-  }
+  const prevOutDir = anim.segments.length > 0
+    ? tangentAtBezierEnd(A0, anim.segments[anim.segments.length - 1].h1)
+    : null;
 
-  const seg = makeSeg(h0, h1);
-  seg.eccentricity = percentToEccentricity(Math.min(pct, 50));
-  return seg;
+  return buildFreeformSeg(A0, previewPoint, prevOutDir, -freeformBendModifier);
 }
 
 function drawFreshFreeformPlacement(anim, previewPoint, cw, dpr) {
@@ -9989,8 +10103,8 @@ function drawFreshFreeformPlacement(anim, previewPoint, cw, dpr) {
   const lastAnchor = anchors[n - 1];
   const cursorAtEnd = hasPreview && Math.hypot(previewPoint.re - lastAnchor.re, previewPoint.im - lastAnchor.im) < 1e-7;
 
-  // Draw committed segments — skip segment[0] (direction segment, never shown)
-  for (let i = 1; i < anim.segments.length; i++) {
+  // Draw all committed segments
+  for (let i = 0; i < anim.segments.length; i++) {
     const seg = anim.segments[i];
     if (!seg || !seg.compiled) continue;
     ctx.save(); ctx.globalAlpha = 0.85;
@@ -9998,8 +10112,7 @@ function drawFreshFreeformPlacement(anim, previewPoint, cw, dpr) {
     ctx.restore();
   }
 
-  // Draw the tentative (preview) arc from last anchor to cursor
-  // buildFreeformTentativeSeg returns null when n===1 (direction dot only)
+  // Draw tentative arc from last anchor to cursor
   if (hasPreview && !cursorAtEnd) {
     const tentSeg = buildFreeformTentativeSeg(anim, previewPoint);
     if (tentSeg) {
@@ -10010,16 +10123,9 @@ function drawFreshFreeformPlacement(anim, previewPoint, cw, dpr) {
     }
   }
 
-  // anchor[0] is the direction point — draw it smaller and dimmer
+  // Draw all placed anchors normally
   for (let i = 0; i < anchors.length; i++) {
-    const pt = toCanvas(anchors[i].re, anchors[i].im);
-    if (i === 0) {
-      ctx.save(); ctx.globalAlpha = 0.45;
-      drawAnchorDot(pt, anim.color, 3 * dpr);
-      ctx.restore();
-    } else {
-      drawAnchorDot(pt, anim.color, 5 * dpr);
-    }
+    drawAnchorDot(toCanvas(anchors[i].re, anchors[i].im), anim.color, 5 * dpr);
   }
 
   if (hasPreview) {
@@ -18259,10 +18365,36 @@ function renderAnimListLegacy() {
 
     const hintEl = document.createElement('div');
     hintEl.className = 'placement-hint';
-    hintEl.style.cssText = 'padding:0; margin-bottom:2px;';
-    hintEl.textContent = `Click to place anchors. ← → adjust curve (${Math.round(freeformPlacementEccentricity)}%). Esc to finish.`;
+    hintEl.style.cssText = 'padding:0; margin-bottom:6px;';
+    hintEl.textContent = 'Click to place anchors. ← → adjust bend. Esc to finish.';
     wrap.appendChild(hintEl);
 
+    const bendBlock = document.createElement('div');
+    bendBlock.style.cssText = 'display:flex; flex-direction:column; gap:6px;';
+
+    const bendLabel = document.createElement('div');
+    bendLabel.textContent = 'Bend modifier';
+    bendLabel.style.cssText = 'font-size:11px; color:#a6adc8;';
+    bendBlock.appendChild(bendLabel);
+
+    const bendSlider = document.createElement('input');
+    bendSlider.type = 'range';
+    bendSlider.min = '-1'; bendSlider.max = '1'; bendSlider.step = '0.01';
+    bendSlider.value = String(freeformBendModifier);
+    bendSlider.className = 'bend-slider';
+    bendSlider.tabIndex = -1;
+    bendBlock.appendChild(bendSlider);
+
+    const tickRow = document.createElement('div');
+    tickRow.style.cssText = 'display:flex; justify-content:space-between; font-size:10px; color:#6c7086;';
+    ['-1', '0', '1'].forEach(t => {
+      const s = document.createElement('span');
+      s.textContent = t;
+      tickRow.appendChild(s);
+    });
+    bendBlock.appendChild(tickRow);
+
+    wrap.appendChild(bendBlock);
     detailEl.appendChild(wrap);
     updateToolPanel(); return;
   }
@@ -19500,6 +19632,7 @@ document.querySelectorAll('.tool-btn').forEach(btn => {
   btn.addEventListener('click', e => {
     e.stopPropagation();
     startPlacementFromTool(btn.dataset.tool);
+    btn.blur();
   });
 });
 
