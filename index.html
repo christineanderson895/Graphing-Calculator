@@ -4060,6 +4060,7 @@ function restoreSnapshot(snap) {
     };
     if (!anim.inPlacementMode) recompileAnim(anim);
     if (anim.curves) { for (const c of anim.curves) recompileAnim(c); }
+    if (!anim.inPlacementMode) detectObjectTopology(anim);
     return anim;
   });
   cleanupSingletonGroups();
@@ -5276,6 +5277,7 @@ function finalizePrimitivePlacement(anim) {
   anim.expanded = false;
   anim.activeSegments = new Set();
   placementPreviewPos = null;
+  detectObjectTopology(anim);
   enterEditMode(anim);
   renderAnimList(); updateCursor();
   saveProject();
@@ -5333,6 +5335,7 @@ function finalizePlacement(anim) {
   recompileAnim(anim);
   placementPreviewPos = null;
   placementMatchCandidate = null;
+  detectObjectTopology(anim);
   enterEditMode(anim);
   renderAnimList(); updateCursor();
   saveProject();
@@ -6184,9 +6187,21 @@ function textFillHit(anim, cx, cy) {
   return animHasVisibleFill(anim) && isTextAnim(anim) && textHitDistance(anim, cx, cy) === 0;
 }
 
+function buildTopologyCurvesMap(anim) {
+  const entries = animCurves(anim).map(c => {
+    if (isPrimitiveAnim(c)) {
+      const path = primitiveToTopologyPath(c);
+      if (path) { recompileAnim(path); return [c.id, path]; }
+      return null;
+    }
+    return [c.id, c];
+  }).filter(Boolean);
+  return new Map(entries);
+}
+
 function hitTestObjectRegion(anim, cx, cy) {
   if (!anim?.regions?.length || !isAnimEffectivelyVisible(anim) || anim.inPlacementMode) return null;
-  const curvesMap = new Map(animCurves(anim).map(c => [c.id, c]));
+  const curvesMap = buildTopologyCurvesMap(anim);
   for (const region of anim.regions) {
     const p = new Path2D();
     addRegionBoundaryToPathLike(p, region.boundary, curvesMap);
@@ -7160,22 +7175,36 @@ canvas.addEventListener('mousedown', e => {
     const curvesMapCsm = getCurvesMapForContourMode();
     const regionCsm = getRegionForContourMode();
     if (curvesMapCsm && regionCsm?.boundary?.length) {
-      const nodesCsm = junctionNodesForRegion(regionCsm.boundary, curvesMapCsm);
+      const expandedCsm = expandedContourBoundary(regionCsm.boundary, curvesMapCsm);
+      const arcGroupsCsm = computeArcGroups(expandedCsm, curvesMapCsm);
+      const junctionsCsm = junctionNodesForRegion(regionCsm.boundary, curvesMapCsm);
       const HIT_R = 18 * devicePixelRatio;
-      let closestIdx = -1, closestDist = HIT_R;
-      for (let ni = 0; ni < nodesCsm.length; ni++) {
-        const nd = nodesCsm[ni];
-        if (!nd) continue;
-        const d = Math.sqrt((ccx - nd.x) ** 2 + (ccy - nd.y) ** 2);
-        if (d < closestDist) { closestDist = d; closestIdx = ni; }
+      let closestJn = null, closestDist = HIT_R;
+      for (const jn of junctionsCsm) {
+        const d = Math.hypot(ccx - jn.x, ccy - jn.y);
+        if (d < closestDist) { closestDist = d; closestJn = jn; }
       }
-      if (closestIdx >= 0) {
+      if (closestJn) {
         const prev = contourSelectMode.nodeIndices;
-        if (prev.length > 0 && prev[prev.length - 1] === closestIdx) {
-          contourSelectMode = { ...contourSelectMode, nodeIndices: prev.slice(0, -1) };
+        let newGroupIdx;
+        if (prev.length === 0) {
+          // First click: use the longest arc at this junction (avoids short connectors)
+          newGroupIdx = closestJn.groupIndices.reduce((best, gi) => {
+            const g = arcGroupsCsm[gi], b = arcGroupsCsm[best];
+            return (g.endExpIdx - g.startExpIdx) > (b.endExpIdx - b.startExpIdx) ? gi : best;
+          }, closestJn.groupIndices[0]);
         } else {
-          contourSelectMode = { ...contourSelectMode, nodeIndices: [...prev, closestIdx] };
+          // Subsequent click: find first arc at this junction going CCW from last
+          const lastIdx = prev[prev.length - 1];
+          const N = arcGroupsCsm.length;
+          const targetSet = new Set(closestJn.groupIndices);
+          newGroupIdx = closestJn.groupIndices[0]; // fallback
+          for (let step = 1; step <= N; step++) {
+            const k = (lastIdx + step) % N;
+            if (targetSet.has(k)) { newGroupIdx = k; break; }
+          }
         }
+        contourSelectMode = { ...contourSelectMode, nodeIndices: [...prev, newGroupIdx] };
         renderAnimList(); draw();
       } else {
         // Clicked in dead space — cancel boundary selection
@@ -7505,7 +7534,7 @@ canvas.addEventListener('mousedown', e => {
   // ── Topology feature selection from canvas ──
   if (selectedId) {
     const _topoAnim = animations.find(a => a.id === selectedId);
-    if (_topoAnim && !isPrimitiveAnim(_topoAnim) && !isTextAnim(_topoAnim)) {
+    if (_topoAnim && !isTextAnim(_topoAnim)) {
       // If an arc is already selected and the cursor is over an anchor or handle, skip topo
       // detection so the click falls through to the drag handlers below.
       const _overInteractive =
@@ -7569,7 +7598,7 @@ canvas.addEventListener('mousedown', e => {
       }
       if (_tas.length) {
         const _arcHitThreshold = 10 * devicePixelRatio;
-        const _curvesById = new Map(animCurves(_topoAnim).map(c => [c.id, c]));
+        const _curvesById = buildTopologyCurvesMap(_topoAnim);
         let _bestArcHit = null, _bestArcDist = Infinity;
         for (const _a of _tas) {
           const _c = _curvesById.get(_a.curveId);
@@ -8315,7 +8344,53 @@ window.addEventListener('mouseup', e => {
   if (pendingRubberBand) {
     const _prb = pendingRubberBand;
     pendingRubberBand = null;
-    // Tiny click: replay non-control hit tests to select object or clear selection.
+    // Tiny click: replay topology arc/region hit tests first (when a topo object is selected).
+    if (selectedId && !isGroupSelectionActive() && !isMultiSelectionActive()) {
+      const _topoAnim = animations.find(a => a.id === selectedId);
+      if (_topoAnim && !isTextAnim(_topoAnim)) {
+        const { topoArcs: _tas } = computeObjectTopologyData(_topoAnim);
+        if (_tas.length) {
+          const _arcHitThreshold = 10 * devicePixelRatio;
+          const _curvesById = buildTopologyCurvesMap(_topoAnim);
+          let _bestArcHit = null, _bestArcDist = Infinity;
+          for (const _a of _tas) {
+            const _c = _curvesById.get(_a.curveId);
+            if (!_c) continue;
+            for (let _si = _a.fromIdx; _si < _a.toIdx; _si++) {
+              const _seg = _c.segments[_si];
+              if (!_seg?.compiled) continue;
+              const _dist = polylineHitInfo(sampleCompiledAdaptive(_seg.compiled), _prb.clickCx, _prb.clickCy).dist;
+              if (_dist < _bestArcDist) { _bestArcDist = _dist; _bestArcHit = _a; }
+            }
+          }
+          if (_bestArcHit && _bestArcDist <= _arcHitThreshold) {
+            selectedObjectNode = null; selectedObjectRegionId = null;
+            drillObjectArc = { animId: selectedId, label: _bestArcHit.label, curveId: _bestArcHit.curveId, fromIdx: _bestArcHit.fromIdx, toIdx: _bestArcHit.toIdx };
+            activeTopoTab = 'arc';
+            if (!_topoAnim.curves) {
+              if (editModeAnimId !== _topoAnim.id) enterEditMode(_topoAnim, new Set());
+              _topoAnim.activeSegments = new Set();
+              for (let _si2 = _bestArcHit.fromIdx; _si2 < _bestArcHit.toIdx; _si2++) _topoAnim.activeSegments.add(_si2);
+            } else {
+              const _hitCurve = animCurves(_topoAnim).find(c => c.id === _bestArcHit.curveId);
+              if (_hitCurve) {
+                _hitCurve.activeSegments = new Set();
+                for (let _si2 = _bestArcHit.fromIdx; _si2 < _bestArcHit.toIdx; _si2++) _hitCurve.activeSegments.add(_si2);
+              }
+            }
+            renderAnimList(); draw(); return;
+          }
+        }
+        const _hitReg = hitTestObjectRegion(_topoAnim, _prb.clickCx, _prb.clickCy);
+        if (_hitReg !== null) {
+          selectedObjectNode = null; drillObjectArc = null;
+          selectedObjectRegionId = { animId: selectedId, id: _hitReg };
+          activeTopoTab = 'region';
+          renderAnimList(); draw(); return;
+        }
+      }
+    }
+    // Replay non-control hit tests to select object or clear selection.
     const _rSeg = querySegmentHover(_prb.clickCx, _prb.clickCy);
     if (_rSeg && !objectGroupId(_rSeg.anim) && !isGroupSelectionActive() && !isMultiSelectionActive()) {
       enterEditMode(_rSeg.anim, new Set());
@@ -12121,7 +12196,7 @@ function drawTopoArcHandles(curve, fromIdx, toIdx) {
 }
 
 function drawNodeDots(anim) {
-  if (isPrimitiveAnim(anim) || isTextAnim(anim)) return;
+  if (isTextAnim(anim)) return;
   const { essentialPoints } = computeObjectTopologyData(anim);
   if (!essentialPoints.length) return;
   const dpr = devicePixelRatio;
@@ -12462,7 +12537,7 @@ function drawCommittedAnimation(anim, { deferOverlay = false } = {}) {
       } else {
         if (proxy.anchors.length === 1 && proxy.segments.length === 0) drawDot(proxy);
         const _fillOp = _isDimmed ? 0.45 : (_fadingReg ? 0.45 : 1);
-        if (canFillAnim(proxy) && (animFillColor(proxy) || (!anim.regions?.length && animFillColor(anim)))) {
+        if (!anim.regions?.length && canFillAnim(proxy) && (animFillColor(proxy) || animFillColor(anim))) {
           const _fillProxy = animFillColor(proxy) ? proxy : { ...proxy, fillColor: anim.fillColor, fillStyle: anim.fillStyle, fillOpacity: anim.fillOpacity };
           drawCurveFill(_fillProxy, null, _fillOp, []);
         }
@@ -14020,8 +14095,8 @@ function appendRegionColorExpansion(parent, region, group) {
         countLabel.textContent = nNodes === 0
           ? 'Click junction nodes on canvas'
           : nNodes === 1
-            ? '1 node — click another to form an arc, or click again to undo'
-            : `${nNodes} nodes selected`;
+            ? '1 node clicked — click the next junction (CCW) or same to close'
+            : `${nNodes} nodes clicked`;
         arcSection.appendChild(countLabel);
 
         const canSet = nNodes >= 2;
@@ -14069,7 +14144,7 @@ function appendRegionColorExpansion(parent, region, group) {
           label.textContent = side === 'b1' ? 'Boundary 1' : 'Boundary 2';
           const status = document.createElement('span');
           status.className = 'contour-arc-status';
-          status.textContent = arcs?.length ? `${arcs.length} arc${arcs.length === 1 ? '' : 's'}` : 'auto';
+          status.textContent = arcs?.length === 1 && arcs[0]?.isPoint ? 'point' : arcs?.length ? `${arcs.length} arc${arcs.length === 1 ? '' : 's'}` : 'auto';
           const btn = document.createElement('button');
           btn.className = `contour-set-btn ${side}`;
           btn.textContent = 'Set';
@@ -15234,14 +15309,121 @@ function getEdgeDepartureAngle(anim, fromIdx, toIdx) {
   return Math.atan2(dy, dx); // math y-up coords
 }
 
-function detectObjectTopology(anim) {
-  anim.regions = [];
-  const curves = animCurves(anim).filter(a =>
-    !isPrimitiveAnim(a) && !isTextAnim(a) &&
-    a.segments.length > 0
-  );
-  if (curves.length < 2) return;
+function sampledHalfEdgePath(he, curvesMap) {
+  const anim = curvesMap.get(he.animId);
+  if (!anim) return [];
+  const fwd = he.toIdx > he.fromIdx;
+  const sMin = Math.min(he.fromIdx, he.toIdx);
+  const sMax = Math.max(he.fromIdx, he.toIdx);
+  const pts = [];
+  const append = samples => {
+    for (const pt of samples) {
+      if (!pt) continue;
+      const last = pts[pts.length - 1];
+      if (!last || Math.hypot(last[0] - pt[0], last[1] - pt[1]) > 0.01) pts.push(pt);
+    }
+  };
+  if (fwd) {
+    for (let s = sMin; s < sMax; s++) {
+      const sg = anim.segments[s];
+      if (sg?.compiled) append(sampleCompiledAdaptive(sg.compiled));
+    }
+  } else {
+    for (let s = sMax - 1; s >= sMin; s--) {
+      const sg = anim.segments[s];
+      if (sg?.compiled) append([...sampleCompiledAdaptive(sg.compiled)].reverse());
+    }
+  }
+  return pts;
+}
 
+function polylineMaxDistanceToPolyline(samples, target) {
+  if (!samples.length || target.length < 2) return Infinity;
+  let maxDist = 0;
+  for (const pt of samples) {
+    if (!pt) continue;
+    let best = Infinity;
+    for (let i = 0; i + 1 < target.length; i++) {
+      best = Math.min(best, pointSegmentDistance(pt[0], pt[1], target[i], target[i + 1]));
+    }
+    maxDist = Math.max(maxDist, best);
+    if (!isFinite(maxDist)) break;
+  }
+  return maxDist;
+}
+
+function sampledPathsCoincident(a, b, tolerancePx) {
+  if (a.length < 2 || b.length < 2) return false;
+  return polylineMaxDistanceToPolyline(a, b) <= tolerancePx &&
+         polylineMaxDistanceToPolyline(b, a) <= tolerancePx;
+}
+
+function collapseCoincidentHalfEdges(activeHalfEdges, curvesMap, keyToNode) {
+  const kept = [];
+  const seen = new Set();
+  const repsByNodePair = new Map();
+  const tolerancePx = 0.75 * (window.devicePixelRatio || 1);
+  for (const he of activeHalfEdges) {
+    if (seen.has(he)) continue;
+    seen.add(he);
+    if (he.twin) seen.add(he.twin);
+
+    const fromNid = keyToNode.get(`${he.animId}:${he.fromIdx}`);
+    const toNid = keyToNode.get(`${he.animId}:${he.toIdx}`);
+    if (fromNid === undefined || toNid === undefined || fromNid === toNid || !he.twin) continue;
+
+    const canonicalHE = fromNid <= toNid ? he : he.twin;
+    const lo = Math.min(fromNid, toNid);
+    const hi = Math.max(fromNid, toNid);
+    const nodePairKey = `${lo}:${hi}`;
+    const samples = sampledHalfEdgePath(canonicalHE, curvesMap);
+    if (samples.length < 2) continue;
+
+    const reps = repsByNodePair.get(nodePairKey) ?? [];
+    if (reps.some(rep => sampledPathsCoincident(samples, rep.samples, tolerancePx))) continue;
+
+    reps.push({ samples });
+    repsByNodePair.set(nodePairKey, reps);
+    he.visited = false;
+    he.twin.visited = false;
+    kept.push(he, he.twin);
+  }
+  return kept;
+}
+
+function makeDetectedRegion(id, boundary, prior = null) {
+  return {
+    id,
+    boundary,
+    fillColor: prior?.fillColor ?? null,
+    fillOpacity: prior?.fillOpacity ?? 0,
+    fillStyle: prior?.fillStyle ?? 'solid',
+    gradientToColor: prior?.gradientToColor ?? null,
+    gradientToOpacity: prior?.gradientToOpacity ?? 0,
+    gradientAngle: prior?.gradientAngle,
+    patternType: prior?.patternType,
+    patternAngle: prior?.patternAngle,
+    patternSpacing: prior?.patternSpacing,
+  };
+}
+
+function detectObjectTopology(anim) {
+  const priorRegions = anim.regions ?? [];
+  anim.regions = [];
+  const rawCurves = animCurves(anim)
+    .filter(a => !isTextAnim(a))
+    .map(a => { if (isPrimitiveAnim(a)) { const p = primitiveToTopologyPath(a); if (p) recompileAnim(p); return p; } return a; })
+    .filter(a => a && a.segments.length > 0);
+  if (rawCurves.length < 1) return;
+  // For closed curves (segments.length >= anchors.length), always append a virtual copy of
+  // anchors[0] so the closing segment runs forward (fromIdx < toIdx) like every other segment.
+  const curves = rawCurves.map(a => {
+    if (a.segments.length < a.anchors.length || a.anchors.length < 2) return a;
+    return { ...a, anchors: [...a.anchors, a.anchors[0]] };
+  });
+
+  // All anchor points are nodes. Register every anchor, then merge spatially coincident
+  // anchors (across curves and within a curve's closing pair) via union-find.
   const EPSILON = 1e-6;
   const keyToNode = new Map();
   const nodePositions = [];
@@ -15250,47 +15432,37 @@ function detectObjectTopology(anim) {
   const ufUnion = (a, b) => { a = ufFind(a); b = ufFind(b); if (a !== b) ufParent[b] = a; };
   for (const a of curves) {
     for (let i = 0; i < a.anchors.length; i++) {
-      const pt = a.anchors[i];
       const key = `${a.id}:${i}`;
-      for (const b of curves) {
-        if (b === a) continue;
-        for (let j = 0; j < b.anchors.length; j++) {
-          const bKey = `${b.id}:${j}`;
-          const bp = b.anchors[j];
-          if (Math.hypot(bp.re - pt.re, bp.im - pt.im) < EPSILON) {
-            if (!keyToNode.has(key)) { const id = nodePositions.length; keyToNode.set(key, id); ufParent.push(id); nodePositions.push({ re: pt.re, im: pt.im }); }
-            if (!keyToNode.has(bKey)) { const id = nodePositions.length; keyToNode.set(bKey, id); ufParent.push(id); nodePositions.push({ re: bp.re, im: bp.im }); }
-            ufUnion(keyToNode.get(key), keyToNode.get(bKey));
-          }
-        }
-      }
+      if (!keyToNode.has(key)) { const id = nodePositions.length; keyToNode.set(key, id); ufParent.push(id); nodePositions.push(a.anchors[i]); }
     }
   }
   for (const a of curves) {
-    const n = a.anchors.length;
-    if (n < 2) continue;
-    const key0 = `${a.id}:0`, keyN = `${a.id}:${n - 1}`;
-    const p0 = a.anchors[0], pN = a.anchors[n - 1];
-    if (Math.hypot(pN.re - p0.re, pN.im - p0.im) < EPSILON) {
-      if (!keyToNode.has(key0)) { const id = nodePositions.length; keyToNode.set(key0, id); ufParent.push(id); nodePositions.push({ re: p0.re, im: p0.im }); }
-      if (!keyToNode.has(keyN)) { const id = nodePositions.length; keyToNode.set(keyN, id); ufParent.push(id); nodePositions.push({ re: pN.re, im: pN.im }); }
-      ufUnion(keyToNode.get(key0), keyToNode.get(keyN));
+    for (let i = 0; i < a.anchors.length; i++) {
+      const pi = a.anchors[i], ki = keyToNode.get(`${a.id}:${i}`);
+      for (const b of curves) {
+        const j0 = (b === a) ? i + 1 : 0;
+        for (let j = j0; j < b.anchors.length; j++) {
+          const pj = b.anchors[j];
+          if (Math.hypot(pj.re - pi.re, pj.im - pi.im) < EPSILON)
+            ufUnion(ki, keyToNode.get(`${b.id}:${j}`));
+        }
+      }
     }
   }
   for (const [k, v] of keyToNode) keyToNode.set(k, ufFind(v));
   const uniqueNodes = new Set(keyToNode.values());
   if (uniqueNodes.size < 2) return;
 
+  // One half-edge pair per compiled segment; skip self-loops (closing arc when first=last anchor).
   const halfEdges = [];
   for (const a of curves) {
-    const jIdxs = [];
-    for (let i = 0; i < a.anchors.length; i++) { if (keyToNode.has(`${a.id}:${i}`)) jIdxs.push(i); }
-    if (jIdxs.length < 2) continue;
-    for (let k = 0; k < jIdxs.length - 1; k++) {
-      const fromIdx = jIdxs[k], toIdx = jIdxs[k + 1];
-      let valid = true;
-      for (let si = fromIdx; si < toIdx; si++) { if (!a.segments[si]?.compiled) { valid = false; break; } }
-      if (!valid) continue;
+    for (let s = 0; s < a.segments.length; s++) {
+      if (!a.segments[s]?.compiled) continue;
+      const fromIdx = s, toIdx = s + 1;
+      if (toIdx >= a.anchors.length) continue;
+      const fromNid = keyToNode.get(`${a.id}:${fromIdx}`);
+      const toNid   = keyToNode.get(`${a.id}:${toIdx}`);
+      if (fromNid === undefined || toNid === undefined || fromNid === toNid) continue;
       const fwd = { animId: a.id, fromIdx, toIdx, depAngle: getEdgeDepartureAngle(a, fromIdx, toIdx), visited: false, twin: null };
       const bwd = { animId: a.id, fromIdx: toIdx, toIdx: fromIdx, depAngle: getEdgeDepartureAngle(a, toIdx, fromIdx), visited: false, twin: null };
       fwd.twin = bwd; bwd.twin = fwd;
@@ -15299,16 +15471,17 @@ function detectObjectTopology(anim) {
   }
   if (!halfEdges.length) return;
 
-  // Keep only half-edges that reference valid junction nodes. Each curve contributes
-  // its own half-edges independently — deduplication by node-pair alone incorrectly
-  // discards curve B's half-edges when B connects the same two junctions as A in the
-  // opposite direction (e.g. two open curves forming a closed loop together). Truly
-  // overlapping curves produce near-zero-area faces that the area threshold drops.
-  const activeHalfEdges = halfEdges.filter(he => {
+  // Keep each distinct geometric edge, but collapse duplicate coincident edges from
+  // separately drawn face outlines. Different curves with the same endpoints are still
+  // preserved when their sampled paths are not the same.
+  let activeHalfEdges = halfEdges.filter(he => {
     const fromNid = keyToNode.get(`${he.animId}:${he.fromIdx}`);
     const toNid   = keyToNode.get(`${he.animId}:${he.toIdx}`);
     return fromNid !== undefined && toNid !== undefined;
   });
+  if (!activeHalfEdges.length) return;
+  const curvesMap = new Map(curves.map(a => [a.id, a]));
+  activeHalfEdges = collapseCoincidentHalfEdges(activeHalfEdges, curvesMap, keyToNode);
   if (!activeHalfEdges.length) return;
 
   const outgoing = new Map();
@@ -15339,13 +15512,12 @@ function detectObjectTopology(anim) {
       he.visited = true;
       face.push({ animId: he.animId, startIdx: he.fromIdx, endIdx: he.toIdx });
       he = nextHE(he);
-      if (!he || ++steps > 500) break;
+      if (!he || ++steps > 2000) break;
     } while (he !== startHE);
     if (he === startHE && face.length >= 2) faces.push(face);
   }
   if (!faces.length) return;
 
-  const curvesMap = new Map(curves.map(a => [a.id, a]));
   let regionId = 0;
   for (const face of faces) {
     let area = 0, prevPt = null;
@@ -15360,7 +15532,11 @@ function detectObjectTopology(anim) {
     }
     area /= 2;
     if (area >= 0 || Math.abs(area) < 100) continue;
-    anim.regions.push({ id: regionId++, boundary: face, fillColor: null, fillOpacity: 0, fillStyle: 'solid', gradientToColor: null, gradientToOpacity: 0 });
+    anim.regions.push(makeDetectedRegion(regionId, face, priorRegions[regionId]));
+    regionId++;
+  }
+  if (anim.regions.length > 0) {
+    for (const c of rawCurves) { c.fillColor = null; c.fillOpacity = 0; c.fillStyle = 'solid'; }
   }
 }
 
@@ -15531,66 +15707,57 @@ function regionLabel(region, topoArcs) {
 function detectRegionsForGroup(groupId) {
   const grp = groups.find(g => g.id === groupId);
   if (!grp) return;
+  const priorRegions = grp.regions ?? [];
   grp.regions = [];
 
-  const curves = allDescendantAnims(groupId).filter(a =>
-    !isPrimitiveAnim(a) && !isTextAnim(a) &&
-    a.segments.length > 0 && !a.inPlacementMode
-  );
-  if (curves.length < 2) return;
+  const rawCurves = allDescendantAnims(groupId)
+    .filter(a => !isTextAnim(a) && !a.inPlacementMode)
+    .map(a => { if (isPrimitiveAnim(a)) { const p = primitiveToTopologyPath(a); if (p) recompileAnim(p); return p; } return a; })
+    .filter(a => a && a.segments.length > 0);
+  if (rawCurves.length < 1) return;
+  const curves = rawCurves.map(a => {
+    if (a.segments.length < a.anchors.length || a.anchors.length < 2) return a;
+    return { ...a, anchors: [...a.anchors, a.anchors[0]] };
+  });
 
-  // Find junction nodes: anchor positions shared across different curves (union-find)
   const EPSILON = 1e-6;
-  const keyToNode = new Map(); // "animId:anchorIdx" → nodeId
+  const keyToNode = new Map();
   const nodePositions = [];
   const ufParent = [];
   const ufFind = id => { while (ufParent[id] !== id) { ufParent[id] = ufParent[ufParent[id]]; id = ufParent[id]; } return id; };
   const ufUnion = (a, b) => { a = ufFind(a); b = ufFind(b); if (a !== b) ufParent[b] = a; };
   for (const a of curves) {
     for (let i = 0; i < a.anchors.length; i++) {
-      const pt = a.anchors[i];
       const key = `${a.id}:${i}`;
-      for (const b of curves) {
-        if (b === a) continue;
-        for (let j = 0; j < b.anchors.length; j++) {
-          const bKey = `${b.id}:${j}`;
-          const bp = b.anchors[j];
-          if (Math.hypot(bp.re - pt.re, bp.im - pt.im) < EPSILON) {
-            if (!keyToNode.has(key)) { const id = nodePositions.length; keyToNode.set(key, id); ufParent.push(id); nodePositions.push({ re: pt.re, im: pt.im }); }
-            if (!keyToNode.has(bKey)) { const id = nodePositions.length; keyToNode.set(bKey, id); ufParent.push(id); nodePositions.push({ re: bp.re, im: bp.im }); }
-            ufUnion(keyToNode.get(key), keyToNode.get(bKey));
-          }
-        }
-      }
+      if (!keyToNode.has(key)) { const id = nodePositions.length; keyToNode.set(key, id); ufParent.push(id); nodePositions.push(a.anchors[i]); }
     }
   }
-  // Self-merge near-coincident P0 and P_last (closed curves and auto-snapped open curves)
   for (const a of curves) {
-    const n = a.anchors.length;
-    if (n < 2) continue;
-    const key0 = `${a.id}:0`, keyN = `${a.id}:${n - 1}`;
-    const p0 = a.anchors[0], pN = a.anchors[n - 1];
-    if (Math.hypot(pN.re - p0.re, pN.im - p0.im) < EPSILON) {
-      if (!keyToNode.has(key0)) { const id = nodePositions.length; keyToNode.set(key0, id); ufParent.push(id); nodePositions.push({ re: p0.re, im: p0.im }); }
-      if (!keyToNode.has(keyN)) { const id = nodePositions.length; keyToNode.set(keyN, id); ufParent.push(id); nodePositions.push({ re: pN.re, im: pN.im }); }
-      ufUnion(keyToNode.get(key0), keyToNode.get(keyN));
+    for (let i = 0; i < a.anchors.length; i++) {
+      const pi = a.anchors[i], ki = keyToNode.get(`${a.id}:${i}`);
+      for (const b of curves) {
+        const j0 = (b === a) ? i + 1 : 0;
+        for (let j = j0; j < b.anchors.length; j++) {
+          const pj = b.anchors[j];
+          if (Math.hypot(pj.re - pi.re, pj.im - pi.im) < EPSILON)
+            ufUnion(ki, keyToNode.get(`${b.id}:${j}`));
+        }
+      }
     }
   }
   for (const [k, v] of keyToNode) keyToNode.set(k, ufFind(v));
   const uniqueNodes = new Set(keyToNode.values());
   if (uniqueNodes.size < 2) return;
 
-  // Build directed half-edges between consecutive junction anchors on each curve
   const halfEdges = [];
   for (const a of curves) {
-    const jIdxs = [];
-    for (let i = 0; i < a.anchors.length; i++) { if (keyToNode.has(`${a.id}:${i}`)) jIdxs.push(i); }
-    if (jIdxs.length < 2) continue;
-    for (let k = 0; k < jIdxs.length - 1; k++) {
-      const fromIdx = jIdxs[k], toIdx = jIdxs[k + 1];
-      let valid = true;
-      for (let si = fromIdx; si < toIdx; si++) { if (!a.segments[si]?.compiled) { valid = false; break; } }
-      if (!valid) continue;
+    for (let s = 0; s < a.segments.length; s++) {
+      if (!a.segments[s]?.compiled) continue;
+      const fromIdx = s, toIdx = s + 1;
+      if (toIdx >= a.anchors.length) continue;
+      const fromNid = keyToNode.get(`${a.id}:${fromIdx}`);
+      const toNid   = keyToNode.get(`${a.id}:${toIdx}`);
+      if (fromNid === undefined || toNid === undefined || fromNid === toNid) continue;
       const fwd = { animId: a.id, fromIdx, toIdx, depAngle: getEdgeDepartureAngle(a, fromIdx, toIdx), visited: false, twin: null };
       const bwd = { animId: a.id, fromIdx: toIdx, toIdx: fromIdx, depAngle: getEdgeDepartureAngle(a, toIdx, fromIdx), visited: false, twin: null };
       fwd.twin = bwd; bwd.twin = fwd;
@@ -15599,16 +15766,17 @@ function detectRegionsForGroup(groupId) {
   }
   if (!halfEdges.length) return;
 
-  // Keep only half-edges that reference valid junction nodes. Each curve contributes
-  // its own half-edges independently — deduplication by node-pair alone incorrectly
-  // discards curve B's half-edges when B connects the same two junctions as A in the
-  // opposite direction (e.g. two open curves forming a closed loop together). Truly
-  // overlapping curves produce near-zero-area faces that the area threshold drops.
-  const activeHalfEdges = halfEdges.filter(he => {
+  // Keep each distinct geometric edge, but collapse duplicate coincident edges from
+  // separately drawn face outlines. Different curves with the same endpoints are still
+  // preserved when their sampled paths are not the same.
+  let activeHalfEdges = halfEdges.filter(he => {
     const fromNid = keyToNode.get(`${he.animId}:${he.fromIdx}`);
     const toNid   = keyToNode.get(`${he.animId}:${he.toIdx}`);
     return fromNid !== undefined && toNid !== undefined;
   });
+  if (!activeHalfEdges.length) return;
+  const curvesMap = new Map(curves.map(a => [a.id, a]));
+  activeHalfEdges = collapseCoincidentHalfEdges(activeHalfEdges, curvesMap, keyToNode);
   if (!activeHalfEdges.length) return;
 
   // Build per-node outgoing-edge lists sorted CCW (math y-up)
@@ -15642,14 +15810,13 @@ function detectRegionsForGroup(groupId) {
       he.visited = true;
       face.push({ animId: he.animId, startIdx: he.fromIdx, endIdx: he.toIdx });
       he = nextHE(he);
-      if (!he || ++steps > 500) break;
+      if (!he || ++steps > 2000) break;
     } while (he !== startHE);
     if (he === startHE && face.length >= 2) faces.push(face);
   }
   if (!faces.length) return;
 
   // Keep only bounded interior faces: negative shoelace area in canvas coords (y-down)
-  const curvesMap = new Map(curves.map(a => [a.id, a]));
   let regionId = 0;
   for (const face of faces) {
     let area = 0, prevPt = null;
@@ -15664,7 +15831,8 @@ function detectRegionsForGroup(groupId) {
     }
     area /= 2;
     if (area >= 0 || Math.abs(area) < 100) continue; // discard outer face (positive) and degenerate faces
-    grp.regions.push({ id: regionId++, boundary: face, fillColor: null, fillOpacity: 0, fillStyle: 'solid', gradientToColor: null, gradientToOpacity: 0 });
+    grp.regions.push(makeDetectedRegion(regionId, face, priorRegions[regionId]));
+    regionId++;
   }
 }
 
@@ -15698,12 +15866,10 @@ function computeRegionCanvasBounds(region, curvesMap) {
 
 // ── Contour boundary selection helpers ────────────────────────────────────────
 
-// Splits multi-segment boundary edges into individual single-segment edges so
-// that intermediate geometric corners (like node D, which is interior to a
-// multi-segment half-edge) become individually selectable in the contour UI.
-// Only expands POLYLINE_KIND curves: their intermediate anchors are true
-// geometric corners. Freeform arcs keep a single boundary edge so that only
-// the DCEL junction nodes are shown (matching the schematic).
+// Expands multi-segment boundary edges into individual single-segment edges.
+// For POLYLINE_KIND curves every anchor is a geometric corner and gets its own
+// edge. For freeform Bézier curves the DCEL already emits one edge per segment
+// (all-anchors model), so expansion is a no-op — but we keep the pass uniform.
 function expandedContourBoundary(boundary, curvesMap) {
   const result = [];
   for (const edge of boundary) {
@@ -15722,15 +15888,51 @@ function expandedContourBoundary(boundary, curvesMap) {
   return result;
 }
 
+// Groups the flat expanded-edge list into contiguous same-curve arcs.
+// Returns [{x, y, startExpIdx, endExpIdx, animId}, …], one entry per arc.
+// x/y is the canvas position of the arc's first anchor (null if unresolvable).
+function computeArcGroups(expanded, curvesMap) {
+  const N = expanded.length;
+  if (!N) return [];
+  const groups = [];
+  let i = 0;
+  while (i < N) {
+    let j = i + 1;
+    while (j < N && expanded[j].animId === expanded[i].animId &&
+           expanded[j].startIdx === expanded[j - 1].endIdx) j++;
+    const anim = curvesMap.get(expanded[i].animId);
+    let x = null, y = null;
+    if (anim) {
+      const anchor = anim.anchors?.[expanded[i].startIdx];
+      if (anchor?.ok?.()) { [x, y] = toCanvas(anchor.re, anchor.im); }
+    }
+    groups.push({ x, y, startExpIdx: i, endExpIdx: j - 1, animId: expanded[i].animId });
+    i = j;
+  }
+  return groups;
+}
+
+// Returns one entry per unique junction position (deduplicating arc groups that
+// start at the same canvas location). Each entry: {x, y, groupIndices: [...]}.
+// nodeIndices in contourSelectMode are arc-group indices; junctions are only
+// used for dot placement and hit-testing.
 function junctionNodesForRegion(boundary, curvesMap) {
-  return expandedContourBoundary(boundary, curvesMap).map(edge => {
-    const anim = curvesMap.get(edge.animId);
-    if (!anim) return null;
-    const anchor = anim.anchors?.[edge.startIdx];
-    if (!anchor?.ok?.()) return null;
-    const [x, y] = toCanvas(anchor.re, anchor.im);
-    return { x, y };
-  });
+  const expanded = expandedContourBoundary(boundary, curvesMap);
+  const groups = computeArcGroups(expanded, curvesMap);
+  const MERGE_PX = 2;
+  const junctions = [];
+  for (let gi = 0; gi < groups.length; gi++) {
+    const { x, y } = groups[gi];
+    if (x === null) continue;
+    let merged = false;
+    for (const jn of junctions) {
+      if (Math.hypot(jn.x - x, jn.y - y) < MERGE_PX) {
+        jn.groupIndices.push(gi); merged = true; break;
+      }
+    }
+    if (!merged) junctions.push({ x, y, groupIndices: [gi] });
+  }
+  return junctions;
 }
 
 function shortestPathEdgeIndices(N, fromIdx, toIdx) {
@@ -15744,34 +15946,29 @@ function shortestPathEdgeIndices(N, fromIdx, toIdx) {
   }
 }
 
+// nodeIndices is a sequence of arc-group indices built by clicking junction nodes.
+// The path goes CCW (forward in boundary order): from nodeIndices[i] through all
+// arc groups until nodeIndices[i+1] (exclusive). Produces the boundary edges for
+// the selected path.
 function contourModeEdgesFromNodes(boundary, nodeIndices, curvesMap) {
   if (nodeIndices.length < 2) return [];
-  const expanded = curvesMap ? expandedContourBoundary(boundary, curvesMap) : boundary;
-  const N = expanded.length;
-  const seen = new Set();
+  const expanded = expandedContourBoundary(boundary, curvesMap);
+  const groups = computeArcGroups(expanded, curvesMap);
+  const N = groups.length;
+  if (!N) return [];
   const result = [];
+  const seen = new Set();
   for (let i = 0; i < nodeIndices.length - 1; i++) {
     const from = nodeIndices[i], to = nodeIndices[i + 1];
-    if (from === to) continue;
-    const fwdLen = ((to - from) + N) % N;
-    const bwdLen = N - fwdLen;
-    const useFwd = fwdLen <= bwdLen;
-    if (useFwd) {
-      for (let k = 0; k < fwdLen; k++) {
-        const idx = (from + k) % N;
-        if (!seen.has(idx)) { seen.add(idx); result.push(expanded[idx]); }
+    let k = from, steps = 0;
+    while ((k !== to || steps === 0) && steps < N) {
+      if (!seen.has(k)) {
+        seen.add(k);
+        const { startExpIdx, endExpIdx } = groups[k];
+        for (let ei = startExpIdx; ei <= endExpIdx; ei++) result.push(expanded[ei]);
       }
-    } else {
-      // Backward path: traverse edges from-1, from-2, … each reversed so
-      // sampleBoundaryEdges reads them in the correct traversal direction.
-      for (let k = 0; k < bwdLen; k++) {
-        const idx = (from - 1 - k + N) % N;
-        if (!seen.has(idx)) {
-          seen.add(idx);
-          const e = expanded[idx];
-          result.push({ ...e, startIdx: e.endIdx, endIdx: e.startIdx });
-        }
-      }
+      k = (k + 1) % N;
+      steps++;
     }
   }
   return result;
@@ -15809,13 +16006,13 @@ function drawContourSelectOverlay() {
   if (!region?.boundary?.length || !curvesMap) return;
 
   const boundary = region.boundary;
-  const nodes = junctionNodesForRegion(boundary, curvesMap);
+  const junctions = junctionNodesForRegion(boundary, curvesMap);
   const dpr = devicePixelRatio;
   const color = side === 'b1' ? '#89b4fa' : '#fab387';
 
   ctx.save();
 
-  // Draw forming path
+  // Draw path (requires at least 2 clicks to have any path)
   if (nodeIndices.length >= 2) {
     const formingEdges = contourModeEdgesFromNodes(boundary, nodeIndices, curvesMap);
     if (formingEdges.length > 0) {
@@ -15833,21 +16030,15 @@ function drawContourSelectOverlay() {
     }
   }
 
-  // Draw junction nodes
-  const selectedSet = new Set(nodeIndices);
-  for (let i = 0; i < nodes.length; i++) {
-    const node = nodes[i];
-    if (!node) continue;
-    const isSelected = selectedSet.has(i);
-    const isLast = nodeIndices.length > 0 && nodeIndices[nodeIndices.length - 1] === i;
+  // Draw junction dots (one per unique junction position)
+  const selectedGroupSet = new Set(nodeIndices);
+  for (const jn of junctions) {
+    const isSelected = jn.groupIndices.some(gi => selectedGroupSet.has(gi));
     const r = isSelected ? 7 * dpr : 5 * dpr;
     ctx.beginPath();
-    ctx.arc(node.x, node.y, r, 0, Math.PI * 2);
+    ctx.arc(jn.x, jn.y, r, 0, Math.PI * 2);
     if (isSelected) {
       ctx.fillStyle = color; ctx.globalAlpha = 0.9; ctx.fill();
-      if (isLast) {
-        ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5 * dpr; ctx.globalAlpha = 0.7; ctx.stroke();
-      }
     } else {
       ctx.fillStyle = '#45475a'; ctx.globalAlpha = 0.8; ctx.fill();
       ctx.strokeStyle = '#cdd6f4'; ctx.lineWidth = 1.5 * dpr; ctx.globalAlpha = 0.45; ctx.stroke();
@@ -15863,6 +16054,15 @@ function drawContourSelectOverlay() {
 function sampleBoundaryEdges(edges, curvesMap, N) {
   const raw = [];
   for (const edge of edges) {
+    if (edge.isPoint) {
+      const anim = curvesMap.get(edge.animId);
+      if (!anim) continue;
+      const anchor = anim.anchors?.[edge.startIdx];
+      if (!anchor?.ok?.()) continue;
+      const [x, y] = toCanvas(anchor.re, anchor.im);
+      raw.push([x, y]);
+      continue;
+    }
     const anim = curvesMap.get(edge.animId);
     if (!anim) continue;
     const fwd = edge.endIdx > edge.startIdx;
@@ -16151,7 +16351,7 @@ function drawObjectRegionFills() {
     if (!anim.regions?.length || !isAnimEffectivelyVisible(anim)) continue;
     const _fadeTopo = drillObjectArc?.animId === anim.id;
     const _selRegionId = selectedObjectRegionId?.animId === anim.id ? selectedObjectRegionId.id : null;
-    const curvesMap = new Map(animCurves(anim).map(c => [c.id, c]));
+    const curvesMap = buildTopologyCurvesMap(anim);
     for (const region of anim.regions) {
       const _rFill = region.fillColor || anim.fillColor;
       if (!_rFill) continue;
@@ -17766,63 +17966,64 @@ function drawObjectSchematic(canvasEl, anim, opts = {}) {
       ctx.restore();
     }
 
-    // Region number: centroid from arc midpoints (t=0.5 on each Bézier), then push away from boundary
-    let _sumX = 0, _sumY = 0, _cnt = 0;
-    for (const edge of region.boundary) {
-      const _c = curvesMap.get(edge.animId); if (!_c) continue;
-      const _sMin = Math.min(edge.startIdx, edge.endIdx), _sMax = Math.max(edge.startIdx, edge.endIdx);
-      for (let _s = _sMin; _s < _sMax; _s++) {
-        const _p0 = _c.anchors[_s], _p1 = _c.anchors[_s + 1], _seg = _c.segments[_s];
-        if (!_p0 || !_p1) continue;
-        const { x: _ax, y: _ay } = toC(_p0), { x: _bx, y: _by } = toC(_p1);
-        if (_seg?.h0 && _seg?.h1) {
-          const { x: _cx0, y: _cy0 } = toC(_seg.h0), { x: _cx1, y: _cy1 } = toC(_seg.h1);
-          _sumX += 0.125*_ax + 0.375*_cx0 + 0.375*_cx1 + 0.125*_bx;
-          _sumY += 0.125*_ay + 0.375*_cy0 + 0.375*_cy1 + 0.125*_by;
-        } else {
-          _sumX += (_ax + _bx) / 2; _sumY += (_ay + _by) / 2;
+    // Region number: pole of inaccessibility (center of largest inscribed circle)
+    const _ring = [];
+    for (const _e of region.boundary) {
+      const _ec = curvesMap.get(_e.animId); if (!_ec) continue;
+      const _fwd = _e.endIdx > _e.startIdx;
+      const _sMin = Math.min(_e.startIdx, _e.endIdx), _sMax = Math.max(_e.startIdx, _e.endIdx);
+      const _addS = (_s, _rev) => {
+        const _pa = _ec.anchors[_s], _pb = _ec.anchors[_s + 1], _sg = _ec.segments[_s];
+        if (!_pa || !_pb) return;
+        const { x: _ax, y: _ay } = toC(_pa), { x: _bx, y: _by } = toC(_pb);
+        const _N = 6;
+        for (let _k = _rev ? _N : 0; _rev ? _k >= 0 : _k <= _N; _k += _rev ? -1 : 1) {
+          const _t = _k / _N, _mt = 1 - _t;
+          if (_sg?.h0 && _sg?.h1) {
+            const { x: _hx0, y: _hy0 } = toC(_sg.h0), { x: _hx1, y: _hy1 } = toC(_sg.h1);
+            _ring.push([_mt*_mt*_mt*_ax + 3*_mt*_mt*_t*_hx0 + 3*_mt*_t*_t*_hx1 + _t*_t*_t*_bx,
+                        _mt*_mt*_mt*_ay + 3*_mt*_mt*_t*_hy0 + 3*_mt*_t*_t*_hy1 + _t*_t*_t*_by]);
+          } else { _ring.push([_mt*_ax + _t*_bx, _mt*_ay + _t*_by]); }
         }
-        _cnt++;
-      }
+      };
+      if (_fwd) { for (let _s = _sMin; _s < _sMax; _s++) _addS(_s, false); }
+      else { for (let _s = _sMax - 1; _s >= _sMin; _s--) _addS(_s, true); }
     }
-    if (_cnt > 0) {
-      let _rx = _sumX / _cnt, _ry = _sumY / _cnt;
-      // Push centroid away from boundary arc samples
-      let _pushX = 0, _pushY = 0;
-      for (const edge of region.boundary) {
-        const _c = curvesMap.get(edge.animId); if (!_c) continue;
-        const _sMin = Math.min(edge.startIdx, edge.endIdx), _sMax = Math.max(edge.startIdx, edge.endIdx);
-        for (let _s = _sMin; _s < _sMax; _s++) {
-          const _p0 = _c.anchors[_s], _p1 = _c.anchors[_s + 1], _seg = _c.segments[_s];
-          if (!_p0 || !_p1) continue;
-          const { x: _ax, y: _ay } = toC(_p0), { x: _bx, y: _by } = toC(_p1);
-          const _bdSamples = [];
-          if (_seg?.h0 && _seg?.h1) {
-            const { x: _cx0, y: _cy0 } = toC(_seg.h0), { x: _cx1, y: _cy1 } = toC(_seg.h1);
-            for (let _t = 0.2; _t <= 0.8; _t += 0.2) {
-              const _mt = 1 - _t;
-              _bdSamples.push([
-                _mt*_mt*_mt*_ax + 3*_mt*_mt*_t*_cx0 + 3*_mt*_t*_t*_cx1 + _t*_t*_t*_bx,
-                _mt*_mt*_mt*_ay + 3*_mt*_mt*_t*_cy0 + 3*_mt*_t*_t*_cy1 + _t*_t*_t*_by,
-              ]);
-            }
-          } else {
-            _bdSamples.push([(_ax + _bx) / 2, (_ay + _by) / 2]);
-          }
-          for (const [_sx, _sy] of _bdSamples) {
-            const _dx = _rx - _sx, _dy = _ry - _sy;
-            const _d2 = _dx * _dx + _dy * _dy;
-            if (_d2 > 0.01) { _pushX += _dx / _d2; _pushY += _dy / _d2; }
-          }
+    if (_ring.length >= 3) {
+      // Polylabel: signed distance from point to polygon ring
+      const _pSegD2 = (_px, _py, _ax, _ay, _bx, _by) => {
+        let _dx = _bx - _ax, _dy = _by - _ay;
+        if (_dx || _dy) { const _t2 = Math.max(0, Math.min(1, ((_px-_ax)*_dx+(_py-_ay)*_dy)/(_dx*_dx+_dy*_dy))); _dx = _px-_ax-_t2*_dx; _dy = _py-_ay-_t2*_dy; }
+        else { _dx = _px-_ax; _dy = _py-_ay; }
+        return _dx*_dx + _dy*_dy;
+      };
+      const _ptD = (_px, _py) => {
+        let _in = false, _m2 = Infinity, _n = _ring.length;
+        for (let _i = 0, _j = _n - 1; _i < _n; _j = _i++) {
+          const [_xi, _yi] = _ring[_i], [_xj, _yj] = _ring[_j];
+          if ((_yi > _py) !== (_yj > _py) && _px < (_xj-_xi)*(_py-_yi)/(_yj-_yi)+_xi) _in = !_in;
+          _m2 = Math.min(_m2, _pSegD2(_px, _py, _xi, _yi, _xj, _yj));
         }
+        return (_in ? 1 : -1) * Math.sqrt(_m2);
+      };
+      let _mnX = Infinity, _mnY = Infinity, _mxX = -Infinity, _mxY = -Infinity;
+      for (const [_x, _y] of _ring) { if (_x < _mnX) _mnX = _x; if (_y < _mnY) _mnY = _y; if (_x > _mxX) _mxX = _x; if (_y > _mxY) _mxY = _y; }
+      const _prec = 0.5, _pq = [];
+      const _mkC = (_x, _y, _h) => { const _d = _ptD(_x, _y); return { x: _x, y: _y, h: _h, d: _d, pot: _d + _h * 1.4143 }; };
+      const _enqC = _c => { let _lo = 0, _hi = _pq.length; while (_lo < _hi) { const _m = (_lo+_hi)>>1; if (_pq[_m].pot > _c.pot) _hi = _m; else _lo = _m+1; } _pq.splice(_lo, 0, _c); };
+      const _cs = Math.max(_mxX - _mnX, _mxY - _mnY);
+      for (let _x = _mnX; _x < _mxX; _x += _cs) for (let _y = _mnY; _y < _mxY; _y += _cs) _enqC(_mkC(_x+_cs/2, _y+_cs/2, _cs/2));
+      let _bst = _mkC((_mnX+_mxX)/2, (_mnY+_mxY)/2, 0);
+      while (_pq.length) {
+        const _c = _pq.pop();
+        if (_c.d > _bst.d) _bst = _c;
+        if (_c.pot - _bst.d <= _prec) continue;
+        const _h2 = _c.h / 2;
+        _enqC(_mkC(_c.x-_h2, _c.y-_h2, _h2)); _enqC(_mkC(_c.x+_h2, _c.y-_h2, _h2));
+        _enqC(_mkC(_c.x-_h2, _c.y+_h2, _h2)); _enqC(_mkC(_c.x+_h2, _c.y+_h2, _h2));
       }
-      const _pLen = Math.hypot(_pushX, _pushY);
-      if (_pLen > 0) {
-        const _pushScale = Math.min(14 * dpr, _pLen * 50) / _pLen;
-        _rx += _pushX * _pushScale; _ry += _pushY * _pushScale;
-      }
-      _rx = Math.max(6, Math.min(W - 6, _rx));
-      _ry = Math.max(6, Math.min(H - 6, _ry));
+      const _rx = Math.max(6, Math.min(W - 6, _bst.x));
+      const _ry = Math.max(6, Math.min(H - 6, _bst.y));
       const _numStr = String((anim.regions ?? []).indexOf(region) + 1);
       _regionLbls.push({ x: _rx, y: _ry, str: _numStr, isSel });
     }
@@ -18544,31 +18745,6 @@ function renderAnimListLegacy() {
     updateToolPanel(); return;
   }
 
-  if (isPrimitiveAnim(anim)) {
-    // ── Schematic ──
-    {
-      const _dpr = window.devicePixelRatio || 1;
-      const _schemW = Math.max((detailEl.clientWidth || 264) - 16, 80);
-      const _schemH = 120;
-      const _schemWrap = document.createElement('div');
-      _schemWrap.style.cssText = 'padding:8px 8px 4px; background:#11111b; border-bottom:1px solid #1e1e2e;';
-      const _schemCanvas = document.createElement('canvas');
-      _schemCanvas.width = Math.round(_schemW * _dpr);
-      _schemCanvas.height = Math.round(_schemH * _dpr);
-      _schemCanvas.style.width = _schemW + 'px';
-      _schemCanvas.style.height = _schemH + 'px';
-      _schemCanvas.style.cssText += 'display:block; border-radius:5px;';
-      drawPrimitiveSchematic(_schemCanvas, anim);
-      _schemWrap.appendChild(_schemCanvas);
-      detailEl.appendChild(_schemWrap);
-    }
-
-    // ── Color expansion ──
-    openColorMenuAnimId = anim.id;
-    appendColorExpansion(detailEl, anim);
-
-    updateToolPanel(); return;
-  }
 
   if (anim.anchors.length === 1 && anim.segments.length === 0) {
     appendSliderRow(detailEl, 'Size', 1, 10, 1, anim.thickness, v => `${Math.round(v)}`, v => { anim.thickness = parseInt(v, 10); });
