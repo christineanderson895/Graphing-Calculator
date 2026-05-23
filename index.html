@@ -58,7 +58,7 @@
     #sidebar {
       width: 280px;
       min-width: 280px;
-      background: #181825;
+      background: #342338;
       display: flex;
       flex-direction: column;
       border-right: 1px solid #313244;
@@ -1139,21 +1139,25 @@
       font-size: 0.7rem; color: #6c7086;
       padding: 4px 6px; font-style: italic;
     }
-    .bend-slider {
+    .bend-slider,
+    .eccentricity-slider {
       -webkit-appearance: none; appearance: none;
       width: 100%; height: 4px; border-radius: 2px;
       background: #45475a; outline: none; cursor: default;
     }
-    .bend-slider::-webkit-slider-thumb {
+    .bend-slider::-webkit-slider-thumb,
+    .eccentricity-slider::-webkit-slider-thumb {
       -webkit-appearance: none; appearance: none;
       width: 12px; height: 12px; border-radius: 50%;
       background: #cba6f7; cursor: default;
     }
-    .bend-slider::-moz-range-thumb {
+    .bend-slider::-moz-range-thumb,
+    .eccentricity-slider::-moz-range-thumb {
       width: 12px; height: 12px; border-radius: 50%;
       background: #cba6f7; border: none; cursor: default;
     }
-    .bend-slider::-moz-range-track {
+    .bend-slider::-moz-range-track,
+    .eccentricity-slider::-moz-range-track {
       background: #45475a; height: 4px; border-radius: 2px;
     }
 
@@ -1824,26 +1828,28 @@
 
   <div id="animations-panel">
     <div id="anim-tool-panel" aria-label="Create object">
-      <button class="tool-btn" data-tool="line" title="Line Segment" aria-label="Line Segment">
+      <button class="tool-btn" data-tool="select" title="Selection" aria-label="Selection">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M7 3l10 10-4 1.1 2.4 5.2-2.8 1.3-2.4-5.1L7 18z"></path>
+        </svg>
+      </button>
+      <button class="tool-btn" data-tool="arc-builder" title="Arc Builder" aria-label="Arc Builder">
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <line x1="7" y1="17" x2="17" y2="7"></line>
           <circle cx="7" cy="17" r="1.8"></circle>
           <circle cx="17" cy="7" r="1.8"></circle>
         </svg>
       </button>
-      <button class="tool-btn" data-tool="rectangle" title="Rectangle" aria-label="Rectangle">
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <rect x="6" y="7" width="12" height="10" rx="0"></rect>
-        </svg>
-      </button>
-      <button class="tool-btn" data-tool="circle" title="Circle" aria-label="Circle">
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <circle cx="12" cy="12" r="6"></circle>
-        </svg>
-      </button>
-      <button class="tool-btn" data-tool="freeform" title="Freeform" aria-label="Freeform">
+      <button class="tool-btn" data-tool="freeform" title="Freeform Pen" aria-label="Freeform Pen">
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M5 15c2.4-6.5 5.2 5.5 8-1.5 1.2-3 3.2-4.2 6-3"></path>
+        </svg>
+      </button>
+      <button class="tool-btn" data-tool="shape" title="Shape" aria-label="Shape">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="4.5" y="5.5" width="6.8" height="5.6" rx="0"></rect>
+          <circle cx="16.8" cy="8.1" r="3.1"></circle>
+          <path d="M7 19h10l-5-7z"></path>
         </svg>
       </button>
       <button class="tool-btn" data-tool="text" title="Text" aria-label="Text">
@@ -2032,7 +2038,8 @@ const GRAPH_COLORS = ['#f38ba8','#a6e3a1','#89b4fa','#fab387','#f9e2af','#cba6f7
 
 // ── Animation mode colors & object kinds ──
 const DEFAULT_COLORS = ['#ef4444','#f97316','#eab308','#22c55e','#14b8a6','#3b82f6','#8b5cf6','#ec4899'];
-const PRIMITIVE_KINDS = new Set(['line', 'rectangle', 'circle', 'ellipse']);
+const PRIMITIVE_KINDS = new Set(['line', 'rectangle', 'circle', 'ellipse', 'triangle']);
+const SHAPE_TOOL_KINDS = ['rectangle', 'circle', 'triangle'];
 const POLYLINE_KIND = 'polyline';
 const FILL_STYLES = [
   { key: 'solid',     title: 'Solid' },
@@ -2173,16 +2180,6 @@ function saveProject() {
   } catch {}
 }
 
-const FREEFORM_TOOL_KEY = 'freeformToolSettings';
-function saveFreeformPlacementState() {
-  try { localStorage.setItem(FREEFORM_TOOL_KEY, JSON.stringify({ eccentricity: freeformPlacementEccentricity })); } catch {}
-}
-function loadFreeformPlacementState() {
-  try {
-    const s = JSON.parse(localStorage.getItem(FREEFORM_TOOL_KEY) || '{}');
-    if (typeof s.eccentricity === 'number') freeformPlacementEccentricity = Math.max(0, Math.min(100, s.eccentricity));
-  } catch {}
-}
 
 function loadProject() {
   try {
@@ -2992,7 +2989,12 @@ function buildRepeatedDegreeCompositeBezierFn(ctrlPts, degree) {
   return fn;
 }
 
-function buildSingleEccentricityFn(pts, e, bezier, spiral, composite) {
+// Legacy eccentricity renderer, retained as a reference for the old post-placement
+// eccentricity behavior. New freeform eccentricity is applied while constructing
+// segment handles, so active compilation no longer routes through this function.
+const LEGACY_ECCENTRICITY_EDITING_ENABLED = false;
+
+function legacyBuildSingleEccentricityFn(pts, e, bezier, spiral, composite) {
   if (!bezier) return null;
   if (pts.length < 4) return bezier;
   const [p0, p1, p2, p3] = pts;
@@ -3045,18 +3047,39 @@ function buildSingleEccentricityFn(pts, e, bezier, spiral, composite) {
   return fn;
 }
 
-function eccentricityToPercent(e) {
+function buildSingleEccentricityFn(pts, _e, bezier, _spiral, _composite) {
+  if (LEGACY_ECCENTRICITY_EDITING_ENABLED) {
+    const legacyE = typeof _e === 'number' && _e > 3 ? legacyPercentToEccentricity(_e) : _e;
+    return legacyBuildSingleEccentricityFn(pts, legacyE, bezier, _spiral, _composite);
+  }
+  return bezier || buildBezierFn(pts);
+}
+
+function legacyEccentricityToPercent(e) {
   const ce = Math.max(0, Math.min(3, typeof e === 'number' ? e : 1));
   if (ce <= 1) return ce * 50;
   if (ce <= 2) return 50 + (ce - 1) * 25;
   return 75 + (ce - 2) * 25;
 }
 
-function percentToEccentricity(pct) {
+function legacyPercentToEccentricity(pct) {
   const cp = Math.max(0, Math.min(100, typeof pct === 'number' ? pct : 50));
   if (cp <= 50) return cp / 50;
   if (cp <= 75) return 1 + (cp - 50) / 25;
   return 2 + (cp - 75) / 25;
+}
+
+function normalizeEccentricityPercent(pct) {
+  return Math.max(0, Math.min(100, typeof pct === 'number' ? pct : 50));
+}
+
+function eccentricityToPercent(e) {
+  if (typeof e !== 'number' || !Number.isFinite(e)) return 50;
+  return e <= 3 ? legacyEccentricityToPercent(e) : normalizeEccentricityPercent(e);
+}
+
+function percentToEccentricity(pct) {
+  return normalizeEccentricityPercent(pct);
 }
 
 // Hit-detection utilities
@@ -3169,7 +3192,7 @@ function computeInitialHandles(anchors) {
   const n = anchors.length;
   if (n < 2) return [];
 
-  const makeSeg = (h0, h1) => ({ h0, h1, eccentricity: 1, compiled: null, compiledRef: null });
+  const makeSeg = (h0, h1) => ({ h0, h1, eccentricity: 50, compiled: null, compiledRef: null });
 
   if (n === 2) {
     const [A0, A1] = anchors;
@@ -3420,7 +3443,7 @@ function tangentAtBezierStart(anchor, h0) {
 
 // Build a new segment object (with handles) for placement.
 function makeSeg(h0, h1) {
-  return { h0, h1, eccentricity: 1, compiled: null, compiledRef: null };
+  return { h0, h1, eccentricity: 50, compiled: null, compiledRef: null };
 }
 
 function buildExtensionSegment(anim, sourceAnchorIdx, target) {
@@ -3558,9 +3581,9 @@ function computeFreshPlacementSegments(points) {
 function rebuildFreshPlacementSegments(anim) {
   if (animKind(anim) === 'freeform') {
     // Preserve per-segment eccentricities set by the user; only the NEW last segment
-    // (just committed) gets the current freeformPlacementEccentricity.
-    const savedEccs = anim.segments.map(s => (s ? s.eccentricity : percentToEccentricity(freeformPlacementEccentricity)));
-    anim.segments = buildFreeformPlacementSegs(anim.anchors, freeformPlacementEccentricity);
+    // (just committed) gets the current freeformPlacementBend.
+    const savedEccs = anim.segments.map(s => (s ? s.eccentricity : percentToEccentricity(freeformPlacementBend)));
+    anim.segments = buildFreeformPlacementSegs(anim.anchors, freeformPlacementBend);
     for (let i = 0; i < savedEccs.length && i < anim.segments.length; i++) {
       if (anim.segments[i]) anim.segments[i].eccentricity = savedEccs[i];
     }
@@ -3571,108 +3594,274 @@ function rebuildFreshPlacementSegments(anim) {
   recompileAnim(anim);
 }
 
-// Build freeform placement segments: seg 0 is always straight; segs 1+ use tangent
-// continuity with the symmetric mirror-handle rule, handles at L/3.
-// eccPct (0–100) sets eccentricity on every segment.
+// Build freeform placement segments from anchors alone. This is a fallback path;
+// the live placement flow builds each segment with cursor-path context.
 function buildFreeformPlacementSegs(anchors, eccPct) {
   const n = anchors.length;
   if (n < 2) return [];
-  const ecc = percentToEccentricity(Math.min(eccPct, 50));
   const segs = [];
-  // prevOutDir: unit Cx pointing in the outgoing tangent direction from the previous segment's end anchor.
   let prevOutDir = null;
 
   for (let i = 0; i < n - 1; i++) {
     const A0 = anchors[i], A1 = anchors[i + 1];
-    const dx = A1.re - A0.re, dy = A1.im - A0.im;
-    const L = Math.hypot(dx, dy);
-    if (L < 1e-9) {
-      const mid = new Cx((A0.re + A1.re) / 2, (A0.im + A1.im) / 2);
-      const seg = makeSeg(mid, mid);
-      seg.eccentricity = ecc;
-      segs.push(seg);
-      // keep prevOutDir unchanged (degenerate segment)
-      continue;
-    }
-    const HL = eccPct <= 50 ? L / 2 : L * (0.5 + (eccPct - 50) / 100);
-    let h0, h1;
-
-    if (i === 0) {
-      // Segment 0: straight — handles collinear with chord
-      h0 = new Cx(A0.re + dx / 2, A0.im + dy / 2);
-      h1 = new Cx(A1.re - dx / 2, A1.im - dy / 2);
-      // Outgoing tangent direction at A1 = chord direction (straight segment)
-      prevOutDir = new Cx(dx / L, dy / L);
-    } else {
-      // Segments 1+: incoming handle direction = prevOutDir (tangent continuity)
-      h0 = new Cx(A0.re + HL * prevOutDir.re, A0.im + HL * prevOutDir.im);
-      // Mirror h0 across the perpendicular bisector of A0→A1 to get h1
-      // Reflection formula: h1 = M + reflect(-v_parallel + v_perp) where v = h0 - M
-      const Mre = (A0.re + A1.re) / 2, Mim = (A0.im + A1.im) / 2;
-      const vRe = h0.re - Mre, vIm = h0.im - Mim;
-      const dRe = dx / L, dIm = dy / L; // unit chord vector
-      const dot = vRe * dRe + vIm * dIm; // projection of v onto chord
-      // v_parallel = dot * d_unit; reflected = -v_parallel + v_perp = v - 2*v_parallel
-      h1 = new Cx(Mre + vRe - 2 * dot * dRe, Mim + vIm - 2 * dot * dIm);
-      // Outgoing tangent at A1 = normalize(A1 - h1) (tangent = 3*(A1-h1), direction only)
-      const outRe = A1.re - h1.re, outIm = A1.im - h1.im;
-      const outL = Math.hypot(outRe, outIm);
-      prevOutDir = outL > 1e-9 ? new Cx(outRe / outL, outIm / outL) : new Cx(dx / L, dy / L);
-    }
-
-    const seg = makeSeg(h0, h1);
-    seg.eccentricity = ecc;
+    const seg = buildFreeformSeg(A0, A1, prevOutDir, eccPct, 0, null);
     segs.push(seg);
+    prevOutDir = tangentAtBezierEnd(A1, seg.h1);
   }
   return segs;
 }
 
-// Compute the meeting-point M for a pending freeform arc.
-// Build a Bézier segment from A0 to A1 controlled by a bend modifier (-1 to 1).
-// bend=0: natural default (straight line for seg 0; G1 smooth continuation for seg 1+).
-// bend=±1: handles length L perpendicular to chord (seg 0); h1 at A1±L·perp (seg 1+).
-// prevOutDir null → segment 0 (symmetric); set → G1 continuity, h0 direction fixed.
-function buildFreeformSeg(A0, A1, prevOutDir, bend) {
+// Build a freeform segment from A0 to A1 at an eccentricity percentage.
+// 0% is a straight line; 50% is the established natural behavior; 100%
+// aims for literal doubled chord turn, capped per segment at 180 degrees.
+const FREEFORM_SOFTEN_START_TURN = Math.PI / 4;
+const FREEFORM_UTURN_VISUAL_EPS = Math.PI / 18;
+const FREEFORM_MAX_SEGMENT_TURN = Math.PI;
+
+function signedAngleBetweenUnit(a, b) {
+  return Math.atan2(a.re * b.im - a.im * b.re, a.re * b.re + a.im * b.im);
+}
+
+function rotateUnit(v, angle) {
+  const c = Math.cos(angle), s = Math.sin(angle);
+  return new Cx(v.re * c - v.im * s, v.re * s + v.im * c);
+}
+
+function softenedFreeformArcTurn(chordTurn) {
+  const t = Math.min(Math.PI, Math.max(0, chordTurn));
+  if (t <= FREEFORM_SOFTEN_START_TURN) return 2 * t;
+  return Math.PI / 2 + (2 / 3) * (t - FREEFORM_SOFTEN_START_TURN);
+}
+
+function freeformHandleLengthForTurn(L, eccentricityPct, turnAmount) {
+  const pct = normalizeEccentricityPercent(eccentricityPct);
+  if (pct <= 50) return L * (1 / 3 + (pct / 50) * (1 / 2 - 1 / 3));
+  const s = (pct - 50) / 50;
+  return L * (0.5 + (1 / 3) * s * Math.sin(Math.abs(turnAmount) / 2));
+}
+
+function scaledFirstArcAngles(cu, firstArcGuide, eccentricityPct) {
+  if (!firstArcGuide?.startTangent || !firstArcGuide?.endTangent) return { startAngle: 0, endAngle: 0 };
+  const factor = normalizeEccentricityPercent(eccentricityPct) / 50;
+  let startAngle = signedAngleBetweenUnit(cu, firstArcGuide.startTangent) * factor;
+  let endAngle = signedAngleBetweenUnit(cu, firstArcGuide.endTangent) * factor;
+  const rawTurn = endAngle - startAngle;
+  if (Math.abs(rawTurn) > FREEFORM_MAX_SEGMENT_TURN) {
+    const scaleDown = FREEFORM_MAX_SEGMENT_TURN / Math.abs(rawTurn);
+    startAngle *= scaleDown;
+    endAngle *= scaleDown;
+  }
+  return { startAngle, endAngle };
+}
+
+function buildFreeformSeg(A0, A1, prevOutDir, eccentricityPct, sideSign = 0, firstArcGuide = null) {
   const dre = A1.re - A0.re, dim = A1.im - A0.im;
   const L = Math.hypot(dre, dim);
-  if (L < 1e-9) return makeSeg(new Cx(A0.re, A0.im), new Cx(A0.re, A0.im));
+  const pct = normalizeEccentricityPercent(eccentricityPct);
+  if (L < 1e-9) {
+    const degenerate = makeSeg(new Cx(A0.re, A0.im), new Cx(A0.re, A0.im));
+    degenerate.eccentricity = pct;
+    return degenerate;
+  }
   const cu = new Cx(dre / L, dim / L);
-  const pu = new Cx(-cu.im, cu.re);
-  const absB = Math.abs(bend);
-  let h0, h1;
+  let startTangent = cu;
+  let endTangent = cu;
+  let turnAmount = 0;
+
   if (prevOutDir === null) {
-    h0 = new Cx(
-      A0.re + (1 - absB) * 0.5 * L * cu.re + bend * L * pu.re,
-      A0.im + (1 - absB) * 0.5 * L * cu.im + bend * L * pu.im
-    );
-    h1 = new Cx(
-      A1.re - (1 - absB) * 0.5 * L * cu.re + bend * L * pu.re,
-      A1.im - (1 - absB) * 0.5 * L * cu.im + bend * L * pu.im
-    );
+    const { startAngle, endAngle } = scaledFirstArcAngles(cu, firstArcGuide, pct);
+    startTangent = rotateUnit(cu, startAngle);
+    endTangent = rotateUnit(cu, endAngle);
+    turnAmount = Math.abs(endAngle - startAngle);
   } else {
-    const cosT = prevOutDir.re * cu.re + prevOutDir.im * cu.im;
-    const sinT = prevOutDir.re * pu.re + prevOutDir.im * pu.im;
-    const h1nDirRe = -cosT * cu.re + sinT * pu.re;
-    const h1nDirIm = -cosT * cu.im + sinT * pu.im;
-    if (bend <= 0) {
-      // bendMod >= 0: both handles grow linearly from L/2 to L
-      const hLen = L * (1 + absB) / 2;
-      h0 = new Cx(A0.re + hLen * prevOutDir.re, A0.im + hLen * prevOutDir.im);
-      h1 = new Cx(A1.re + hLen * h1nDirRe, A1.im + hLen * h1nDirIm);
+    const signedChordTurn = signedAngleBetweenUnit(prevOutDir, cu);
+    const chordTurn = Math.abs(signedChordTurn);
+    const dot = prevOutDir.re * cu.re + prevOutDir.im * cu.im;
+    const ambiguousUTurn = dot < -0.999 && Math.abs(Math.sin(signedChordTurn)) < 0.045;
+    let turnSign = Math.sign(signedChordTurn);
+    let targetTurn50 = softenedFreeformArcTurn(chordTurn);
+    let targetTurn100 = Math.min(2 * targetTurn50 - chordTurn, FREEFORM_MAX_SEGMENT_TURN);
+    if (ambiguousUTurn) {
+      const pathSide = sideSign || 1;
+      turnSign = -pathSide;
+      targetTurn50 = Math.min(targetTurn50, Math.PI - FREEFORM_UTURN_VISUAL_EPS);
+      targetTurn100 = Math.min(targetTurn100, Math.PI - FREEFORM_UTURN_VISUAL_EPS);
+    } else if (turnSign === 0) {
+      turnSign = sideSign || 1;
+    }
+
+    if (pct <= 50) {
+      const s = pct / 50;
+      const end50 = rotateUnit(prevOutDir, turnSign * targetTurn50);
+      startTangent = blendUnitTangents(cu, prevOutDir, s);
+      endTangent = blendUnitTangents(cu, end50, s);
+      turnAmount = targetTurn50 * s;
     } else {
-      // bendMod < 0: h0 grows to L, h1 fixed at L/2, direction rotates toward -cu
-      h0 = new Cx(A0.re + (L * (1 + absB) / 2) * prevOutDir.re, A0.im + (L * (1 + absB) / 2) * prevOutDir.im);
-      const lerpRe = (1 - absB) * h1nDirRe - absB * cu.re;
-      const lerpIm = (1 - absB) * h1nDirIm - absB * cu.im;
-      const lerpLen = Math.hypot(lerpRe, lerpIm);
-      h1 = lerpLen > 1e-9
-        ? new Cx(A1.re + (L / 2) * lerpRe / lerpLen, A1.im + (L / 2) * lerpIm / lerpLen)
-        : new Cx(A1.re - (L / 2) * cu.re, A1.im - (L / 2) * cu.im);
+      const s = (pct - 50) / 50;
+      const end50 = rotateUnit(prevOutDir, turnSign * targetTurn50);
+      const end100 = rotateUnit(prevOutDir, turnSign * targetTurn100);
+      startTangent = prevOutDir;
+      endTangent = blendUnitTangents(end50, end100, s);
+      turnAmount = targetTurn50 + (targetTurn100 - targetTurn50) * s;
     }
   }
+  const hLen = freeformHandleLengthForTurn(L, pct, turnAmount);
+  const h0 = new Cx(A0.re + hLen * startTangent.re, A0.im + hLen * startTangent.im);
+  const h1 = new Cx(A1.re - hLen * endTangent.re, A1.im - hLen * endTangent.im);
   const seg = makeSeg(h0, h1);
-  seg.eccentricity = 1;
+  seg.eccentricity = pct;
   return seg;
+}
+
+function resetFreeformPendingSideSignal() {
+  freeformPendingSideSignal = null;
+}
+
+function resetFreeformFirstArcPathSignal() {
+  freeformFirstArcPathSignal = null;
+}
+
+function resetFreeformPlacementPathTracking() {
+  resetFreeformPendingSideSignal();
+  resetFreeformFirstArcPathSignal();
+}
+
+function freeformSideSignalDeadzone() {
+  return Math.max(0.02, 4 / Math.max(scale || 1, 1e-6));
+}
+
+function freeformFirstArcSampleStep() {
+  return Math.max(0.01, 2 / Math.max(scale || 1, 1e-6));
+}
+
+function updateFreeformFirstArcPathSignal(anim, cursorMath) {
+  if (!anim || animKind(anim) !== 'freeform' || !anim.inPlacementMode || anim.extensionAnchorIdx != null) {
+    resetFreeformFirstArcPathSignal();
+    return;
+  }
+  const anchors = anim.anchors ?? [];
+  if (anchors.length !== 1 || !cursorMath) {
+    resetFreeformFirstArcPathSignal();
+    return;
+  }
+  const start = anchors[0];
+  if (!freeformFirstArcPathSignal ||
+      freeformFirstArcPathSignal.animId !== anim.id ||
+      freeformFirstArcPathSignal.anchorCount !== anchors.length) {
+    freeformFirstArcPathSignal = {
+      animId: anim.id,
+      anchorCount: anchors.length,
+      samples: [cloneCx(start)],
+    };
+  }
+  const samples = freeformFirstArcPathSignal.samples;
+  const next = cloneCx(cursorMath);
+  const last = samples[samples.length - 1];
+  if (!last || Math.hypot(next.re - last.re, next.im - last.im) >= freeformFirstArcSampleStep()) {
+    samples.push(next);
+    if (samples.length > 36) samples.splice(1, samples.length - 36);
+  } else if (samples.length > 1) {
+    samples[samples.length - 1] = next;
+  } else {
+    samples.push(next);
+  }
+}
+
+function freeformFirstArcGuide(anim, endPoint) {
+  const anchors = anim?.anchors ?? [];
+  if (!freeformFirstArcPathSignal ||
+      freeformFirstArcPathSignal.animId !== anim.id ||
+      freeformFirstArcPathSignal.anchorCount !== 1 ||
+      anchors.length !== 1 ||
+      !endPoint) {
+    return null;
+  }
+  const A0 = anchors[0];
+  const dx = endPoint.re - A0.re, dy = endPoint.im - A0.im;
+  const L = Math.hypot(dx, dy);
+  if (L < 1e-9) return null;
+  const samples = freeformFirstArcPathSignal.samples ?? [];
+  const path = [cloneCx(A0)];
+  const pushDistinct = (pt) => {
+    if (!pt) return;
+    const last = path[path.length - 1];
+    if (!last || Math.hypot(pt.re - last.re, pt.im - last.im) > 1e-9) {
+      path.push(cloneCx(pt));
+    }
+  };
+  for (let i = 1; i < samples.length; i++) pushDistinct(samples[i]);
+  pushDistinct(endPoint);
+  if (path.length < 2) return null;
+
+  let totalLen = 0;
+  for (let i = 1; i < path.length; i++) {
+    totalLen += Math.hypot(path[i].re - path[i - 1].re, path[i].im - path[i - 1].im);
+  }
+  if (totalLen < 1e-9) return null;
+
+  const halfLen = totalLen / 2;
+  let walked = 0;
+  let mid = path[path.length - 1];
+  for (let i = 1; i < path.length; i++) {
+    const p0 = path[i - 1], p1 = path[i];
+    const segLen = Math.hypot(p1.re - p0.re, p1.im - p0.im);
+    if (segLen < 1e-9) continue;
+    if (walked + segLen >= halfLen) {
+      const t = (halfLen - walked) / segLen;
+      mid = new Cx(p0.re + (p1.re - p0.re) * t, p0.im + (p1.im - p0.im) * t);
+      break;
+    }
+    walked += segLen;
+  }
+
+  const startLen = Math.hypot(mid.re - A0.re, mid.im - A0.im);
+  const endLen = Math.hypot(endPoint.re - mid.re, endPoint.im - mid.im);
+  if (startLen < 1e-9 || endLen < 1e-9) return null;
+  return {
+    startTangent: new Cx((mid.re - A0.re) / startLen, (mid.im - A0.im) / startLen),
+    endTangent: new Cx((endPoint.re - mid.re) / endLen, (endPoint.im - mid.im) / endLen),
+  };
+}
+
+function updateFreeformPendingSideSignal(anim, cursorMath) {
+  if (!anim || animKind(anim) !== 'freeform' || !anim.inPlacementMode || anim.extensionAnchorIdx != null) {
+    resetFreeformPendingSideSignal();
+    return;
+  }
+  const anchors = anim.anchors ?? [];
+  const n = anchors.length;
+  if (n < 2 || !cursorMath) {
+    resetFreeformPendingSideSignal();
+    return;
+  }
+  const A0 = anchors[n - 1];
+  const lastSeg = anim.segments?.[anim.segments.length - 1];
+  if (!A0 || !lastSeg?.h1) {
+    resetFreeformPendingSideSignal();
+    return;
+  }
+  if (!freeformPendingSideSignal ||
+      freeformPendingSideSignal.animId !== anim.id ||
+      freeformPendingSideSignal.anchorCount !== n) {
+    freeformPendingSideSignal = { animId: anim.id, anchorCount: n, score: 0 };
+  }
+  const prevOutDir = tangentAtBezierEnd(A0, lastSeg.h1);
+  const vx = cursorMath.re - A0.re, vy = cursorMath.im - A0.im;
+  const score = prevOutDir.re * vy - prevOutDir.im * vx;
+  if (Math.abs(score) > Math.max(Math.abs(freeformPendingSideSignal.score), freeformSideSignalDeadzone())) {
+    freeformPendingSideSignal.score = score;
+  }
+}
+
+function freeformPendingSideSign(anim) {
+  const n = anim?.anchors?.length ?? 0;
+  if (!freeformPendingSideSignal ||
+      freeformPendingSideSignal.animId !== anim.id ||
+      freeformPendingSideSignal.anchorCount !== n ||
+      Math.abs(freeformPendingSideSignal.score) <= freeformSideSignalDeadzone()) {
+    return 0;
+  }
+  return freeformPendingSideSignal.score > 0 ? 1 : -1;
 }
 
 function makeStraightSegment(p0, p1) {
@@ -3822,8 +4011,12 @@ let canvasTextEditAnimId = null;
 let canvasTextEditor = null;
 let activeTextEditUndoAnimId = null;
 let eccentricitySliderActiveKey  = null; // {animId, segIdx} | null — whose ecc slider is focused
-let freeformPlacementEccentricity = 50;  // 0–100, persisted; controls eccentricity during freeform drawing
-let freeformBendModifier = 0; // -1 to 1; shifts M perpendicularly from natural position; resets on each anchor commit
+let currentTool = 'select';
+let selectedShapeKind = 'rectangle';
+let freeformPlacementBend = 50;  // 0–100; controls bend during freeform drawing, resets to 50 per new object
+let freeformBendModifier = 0; // Legacy disabled bend control; kept only so older notes/code are easy to trace.
+let freeformPendingSideSignal = null; // { animId, anchorCount, score } — strongest side signal for the pending freeform arc
+let freeformFirstArcPathSignal = null; // { animId, anchorCount, samples } — raw cursor trail for the first freeform arc
 
 // Canvas drag state
 let placementPreviewPos = null; // Cx | null — cursor pos during placement
@@ -3844,6 +4037,9 @@ let handleHover  = null; // {anim, segIdx, side} | null
 let resizeHover  = null; // {anim, handle} | null
 let rotateHover  = null; // {anim} | null
 let sideActionHover = null; // {anim|groupId|multi, kind:'duplicate'|'reflect'|'rotate'} | null
+let freeformPenActive  = false;
+let freeformPenCapture = null; // null | {points:[{x,y},...]} in device pixels
+let freeformPenTolerance = 10; // CSS pixels, used by RDP simplification
 let plusHover    = null; // {anim, end:'A0'|'A2'} | null
 let lockHover    = null; // {anim, anchorIdx} | null — interior anchor lock toggle
 let rubberBand   = null; // {startX,startY,curX,curY,ctrl} | null — drag-region selection
@@ -4919,6 +5115,15 @@ function animFillStyle(anim) {
   return normalizeFillStyle(anim?.fillStyle);
 }
 
+function syncObjectFillToDetectedRegions(anim, fields = {}) {
+  if (!anim?.regions?.length) return;
+  for (const region of anim.regions) {
+    for (const [key, value] of Object.entries(fields)) {
+      if (value !== undefined) region[key] = value;
+    }
+  }
+}
+
 function canFillAnim(anim) {
   if (anim?.curves) return !!(anim.regions?.length) || anim.curves.some(c => canFillAnim(c));
   return !!anim && (isTextAnim(anim) || (isPrimitiveAnim(anim) && animKind(anim) !== 'line') ||
@@ -4950,27 +5155,32 @@ function setAnchorLocked(anim, anchorIdx, locked) {
 }
 
 function activePlacementTool() {
+  if (freeformPenActive) return 'freeform';
+  if (currentTool === 'select') return 'select';
   const placing = animations.find(a => a.inPlacementMode);
-  if (!placing) return null;
-  return isPolylineAnim(placing) ? 'line' : animKind(placing);
+  if (!placing) return currentTool || 'select';
+  if (isPrimitiveAnim(placing)) return 'shape';
+  if (isTextAnim(placing)) return 'text';
+  if (isPolylineAnim(placing)) return 'arc-builder';
+  return animKind(placing) === 'freeform' ? 'arc-builder' : (currentTool || 'select');
 }
 
 function updateToolPanel() {
   const activeTool = activePlacementTool();
   document.querySelectorAll('.tool-btn').forEach(btn => {
-    btn.classList.toggle('active', activeTool !== null && btn.dataset.tool === activeTool);
+    btn.classList.toggle('active', btn.dataset.tool === activeTool);
   });
 }
 
 function neutralizeToolPanel() {
-  document.querySelectorAll('.tool-btn').forEach(btn => {
-    btn.classList.remove('active');
-    btn.blur();
-  });
+  currentTool = 'select';
+  document.querySelectorAll('.tool-btn').forEach(btn => btn.blur());
+  updateToolPanel();
 }
 
 function clearAnimationInteractionState(id) {
   placementPreviewPos = null;
+  resetFreeformPlacementPathTracking();
   rubberBand = null;
   if (anchorDrag?.anim?.id === id) anchorDrag = null;
   if (handleDrag?.anim?.id === id) handleDrag = null;
@@ -5037,6 +5247,7 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     e.preventDefault();
     if (eyedropperTarget !== null) { deactivateEyedropper(); renderAnimList(); return; }
+    if (freeformPenActive) { freeformPenActive = false; freeformPenCapture = null; currentTool = 'select'; updateToolPanel(); renderAnimList(); draw(); return; }
     if (contourSelectMode !== null) { contourSelectMode = null; renderAnimList(); draw(); return; }
     const placing = animations.find(a => a.inPlacementMode);
     if (placing) {
@@ -5044,6 +5255,8 @@ document.addEventListener('keydown', e => {
         cancelPlacement(placing);
       } else {
         finalizePlacement(placing);
+        currentTool = 'select';
+        updateToolPanel();
       }
       return;
     }
@@ -5097,8 +5310,8 @@ document.addEventListener('keydown', e => {
   const _freeformPlacing = animations.find(a => a.inPlacementMode && animKind(a) === 'freeform');
   if (_freeformPlacing && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
     e.preventDefault();
-    if (e.key === 'ArrowRight') freeformBendModifier = Math.min(1, freeformBendModifier + 0.1);
-    if (e.key === 'ArrowLeft')  freeformBendModifier = Math.max(-1, freeformBendModifier - 0.1);
+    if (e.key === 'ArrowRight') freeformPlacementBend = Math.min(100, freeformPlacementBend + 10);
+    if (e.key === 'ArrowLeft')  freeformPlacementBend = Math.max(0, freeformPlacementBend - 10);
     renderAnimList(); draw();
     return;
   }
@@ -5119,14 +5332,18 @@ function recompileSegment(anim, i) {
   if (!seg) return;
   const A0 = anim.anchors[i], A1 = anim.anchors[i + 1];
   const pts = [A0, seg.h0, seg.h1, A1];
-  const bezier    = buildBezierFn(pts);
-  const composite = buildCompositeBezierFn(pts);
+  const bezier = buildBezierFn(pts);
+  const composite = LEGACY_ECCENTRICITY_EDITING_ENABLED ? buildCompositeBezierFn(pts) : null;
   seg.compiled = buildSingleEccentricityFn(pts, seg.eccentricity, bezier, null, composite);
-  const previewEccs = Array.from({length: 21}, (_, j) => percentToEccentricity(j * 5));
-  seg.compiledRef = previewEccs.map(e => ({
-    eccentricity: e,
-    fn: buildSingleEccentricityFn(pts, e, bezier, null, composite),
-  }));
+  if (LEGACY_ECCENTRICITY_EDITING_ENABLED) {
+    const previewEccs = Array.from({length: 21}, (_, j) => legacyPercentToEccentricity(j * 5));
+    seg.compiledRef = previewEccs.map(e => ({
+      eccentricity: e,
+      fn: buildSingleEccentricityFn(pts, e, bezier, null, composite),
+    }));
+  } else {
+    seg.compiledRef = null;
+  }
 }
 
 function recompileAnim(anim) {
@@ -5136,8 +5353,9 @@ function recompileAnim(anim) {
 function recompileSegmentRaw(seg, A0, A1) {
   const pts = [A0, seg.h0, seg.h1, A1];
   const bezier = buildBezierFn(pts);
-  const composite = buildCompositeBezierFn(pts);
+  const composite = LEGACY_ECCENTRICITY_EDITING_ENABLED ? buildCompositeBezierFn(pts) : null;
   seg.compiled = buildSingleEccentricityFn(pts, seg.eccentricity, bezier, null, composite);
+  seg.compiledRef = null;
 }
 
 function swingOppositeHandle(anim, anchorIdx, movedWasOutgoing) {
@@ -5253,6 +5471,7 @@ function cancelPlacement(anim) {
   if (!anim || !anim.inPlacementMode) return;
   placementPreviewPos = null;
   placementMatchCandidate = null;
+  resetFreeformPlacementPathTracking();
   if (anim.extensionAnchorIdx != null) {
     anim.inPlacementMode = false;
     anim.extensionAnchorIdx = null;
@@ -5264,6 +5483,7 @@ function cancelPlacement(anim) {
     if (editModeAnimId === anim.id) editModeAnimId = null;
     animations = animations.filter(a => a.id !== anim.id);
   }
+  currentTool = 'select';
   renderAnimList(); draw(); updateCursor();
 }
 
@@ -5277,9 +5497,13 @@ function finalizePrimitivePlacement(anim) {
   anim.expanded = false;
   anim.activeSegments = new Set();
   placementPreviewPos = null;
+  resetFreeformPlacementPathTracking();
   detectObjectTopology(anim);
   enterEditMode(anim);
-  renderAnimList(); updateCursor();
+  selectedShapeKind = SHAPE_TOOL_KINDS.includes(animKind(anim)) ? animKind(anim) : selectedShapeKind;
+  currentTool = 'shape';
+  updateToolPanel();
+  renderAnimList(); draw(); updateCursor();
   saveProject();
 }
 
@@ -5301,8 +5525,11 @@ function finalizePolylinePlacement(anim) {
   anim.extensionForward = true;
   recompileAnim(anim);
   placementPreviewPos = null;
+  resetFreeformPlacementPathTracking();
   enterEditMode(anim);
-  renderAnimList(); updateCursor();
+  currentTool = 'arc-builder';
+  updateToolPanel();
+  renderAnimList(); draw(); updateCursor();
   saveProject();
 }
 
@@ -5311,6 +5538,7 @@ function finalizePlacement(anim) {
   if (isPrimitiveAnim(anim)) { finalizePrimitivePlacement(anim); return; }
   if (isPolylineAnim(anim)) { finalizePolylinePlacement(anim); return; }
   if (anim.anchors.length === 0) {
+    resetFreeformPlacementPathTracking();
     animations = animations.filter(a => a.id !== anim.id);
     renderAnimList(); draw(); updateCursor(); return;
   }
@@ -5335,9 +5563,12 @@ function finalizePlacement(anim) {
   recompileAnim(anim);
   placementPreviewPos = null;
   placementMatchCandidate = null;
+  resetFreeformPlacementPathTracking();
   detectObjectTopology(anim);
   enterEditMode(anim);
-  renderAnimList(); updateCursor();
+  currentTool = 'arc-builder';
+  updateToolPanel();
+  renderAnimList(); draw(); updateCursor();
   saveProject();
 }
 
@@ -5365,6 +5596,7 @@ function nextLetter() {
 }
 
 function addAnimation(kind = 'freeform') {
+  if (kind === 'freeform') freeformPlacementBend = 50;
   animations.forEach(a => {
     a.expanded = false;
     a.expandedArcs = new Set();
@@ -5451,9 +5683,50 @@ function addTextAnimation() {
 
 function startPlacementFromTool(kind) {
   openColorMenuAnimId = null;
+  if (kind === 'select') {
+    if (freeformPenActive) { freeformPenActive = false; freeformPenCapture = null; }
+    const placing = animations.find(a => a.inPlacementMode);
+    if (placing) cancelPlacement(placing);
+    currentTool = 'select';
+    updateToolPanel();
+    renderAnimList();
+    draw();
+    updateCursor();
+    return;
+  }
+  if (kind === 'shape') {
+    const placing = animations.find(a => a.inPlacementMode);
+    if (currentTool === 'shape' && placing && isPrimitiveAnim(placing)) {
+      updateToolPanel();
+      return;
+    }
+    selectedShapeKind = 'rectangle';
+    beginShapePlacement(selectedShapeKind);
+    return;
+  }
+  if (kind === 'freeform') {
+    currentTool = 'freeform';
+    if (freeformPenActive) {
+      updateToolPanel();
+      return;
+    } else {
+      const placing = animations.find(a => a.inPlacementMode);
+      if (placing) cancelPlacement(placing);
+      exitEditMode();
+      selectedGroupId = null;
+      clearMultiSelection();
+      clearGroupMode();
+      freeformPenActive = true;
+    }
+    updateToolPanel();
+    renderAnimList();
+    draw();
+    return;
+  }
+  if (freeformPenActive) { freeformPenActive = false; freeformPenCapture = null; }
   const placing = animations.find(a => a.inPlacementMode);
   if (placing && activePlacementTool() === kind) {
-    cancelPlacement(placing);
+    updateToolPanel();
     return;
   }
   if (placing) cancelPlacement(placing);
@@ -5461,13 +5734,159 @@ function startPlacementFromTool(kind) {
   selectedGroupId = null;
   clearMultiSelection();
   clearGroupMode();
+  currentTool = kind === 'text' ? 'text' : 'arc-builder';
   if (kind === 'line') addPolylineAnimation();
-  else if (isPrimitiveAnim({ kind })) addPrimitiveAnimation(kind);
-  else if (kind === 'text') addTextAnimation();
+  else if (isPrimitiveAnim({ kind })) {
+    currentTool = 'shape';
+    selectedShapeKind = kind;
+    addPrimitiveAnimation(kind);
+  } else if (kind === 'text') addTextAnimation();
   else addAnimation('freeform');
   updateToolPanel();
 }
 
+function beginShapePlacement(kind) {
+  const shapeKind = SHAPE_TOOL_KINDS.includes(kind) ? kind : 'rectangle';
+  selectedShapeKind = shapeKind;
+  if (freeformPenActive) { freeformPenActive = false; freeformPenCapture = null; }
+  const placing = animations.find(a => a.inPlacementMode);
+  if (placing) cancelPlacement(placing);
+  exitEditMode();
+  selectedGroupId = null;
+  clearMultiSelection();
+  clearGroupMode();
+  currentTool = 'shape';
+  addPrimitiveAnimation(shapeKind);
+  updateToolPanel();
+}
+
+
+function rdpPerpendicularDist(p, a, b) {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  if (dx === 0 && dy === 0) return Math.hypot(p.x - a.x, p.y - a.y);
+  const t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / (dx * dx + dy * dy);
+  return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+}
+
+function rdpSimplify(pts, eps) {
+  if (pts.length <= 2) return pts.slice();
+  let maxDist = 0, maxIdx = 0;
+  for (let i = 1; i < pts.length - 1; i++) {
+    const d = rdpPerpendicularDist(pts[i], pts[0], pts[pts.length - 1]);
+    if (d > maxDist) { maxDist = d; maxIdx = i; }
+  }
+  if (maxDist > eps) {
+    const left  = rdpSimplify(pts.slice(0, maxIdx + 1), eps);
+    const right = rdpSimplify(pts.slice(maxIdx), eps);
+    return [...left.slice(0, -1), ...right];
+  }
+  return [pts[0], pts[pts.length - 1]];
+}
+
+function commitFreeformPenStroke() {
+  const cap = freeformPenCapture;
+  freeformPenCapture = null;
+  if (!cap || cap.points.length < 2) { draw(); return; }
+  const eps = freeformPenTolerance * devicePixelRatio;
+  const simplified = rdpSimplify(cap.points, eps);
+  if (simplified.length < 2) { draw(); return; }
+  const mathPts = simplified.map(p => new Cx(...toMath(p.x, p.y)));
+  const segs = computeFreshPlacementSegments(mathPts);
+  if (!segs.length) { draw(); return; }
+  addAnimation('freeform');
+  const anim = animations[animations.length - 1];
+  anim.anchors = mathPts;
+  anim.segments = segs;
+  anim.anchorLocked = mathPts.map(() => true);
+  anim.inPlacementMode = false;
+  recompileAnim(anim);
+  detectObjectTopology(anim);
+  freeformPenActive = true;
+  currentTool = 'freeform';
+  enterEditMode(anim);
+  pushUndo();
+  updateToolPanel();
+  renderAnimList(); draw(); updateCursor();
+}
+
+function renderFreeformPenSidebar(detailEl) {
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'padding:10px 12px; display:flex; flex-direction:column; gap:8px;';
+
+  const hintEl = document.createElement('div');
+  hintEl.className = 'placement-hint';
+  hintEl.style.cssText = 'padding:0; margin-bottom:6px;';
+  hintEl.textContent = 'Drag on canvas to draw. Release to finish stroke.';
+  wrap.appendChild(hintEl);
+
+  const tolBlock = document.createElement('div');
+  tolBlock.style.cssText = 'display:flex; flex-direction:column; gap:6px;';
+
+  const tolLabelRow = document.createElement('div');
+  tolLabelRow.style.cssText = 'display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:11px; color:#a6adc8;';
+  const tolLabel = document.createElement('span');
+  tolLabel.textContent = 'Smoothing';
+  const tolValue = document.createElement('span');
+  tolValue.textContent = `${freeformPenTolerance}px`;
+  tolLabelRow.append(tolLabel, tolValue);
+  tolBlock.appendChild(tolLabelRow);
+
+  const tolSlider = document.createElement('input');
+  tolSlider.type = 'range';
+  tolSlider.min = '1'; tolSlider.max = '50'; tolSlider.step = '1';
+  tolSlider.value = String(freeformPenTolerance);
+  tolSlider.className = 'bend-slider';
+  tolSlider.tabIndex = -1;
+  tolSlider.addEventListener('input', () => {
+    freeformPenTolerance = parseInt(tolSlider.value, 10);
+    tolValue.textContent = `${freeformPenTolerance}px`;
+  });
+  tolBlock.appendChild(tolSlider);
+  wrap.appendChild(tolBlock);
+  detailEl.appendChild(wrap);
+}
+
+function renderShapePlacementSidebar(detailEl, anim) {
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'padding:10px 12px; display:flex; flex-direction:column; gap:8px;';
+
+  const row = document.createElement('div');
+  row.style.cssText = 'display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:6px;';
+  const labels = { rectangle: 'Rectangle', circle: 'Circle', triangle: 'Triangle' };
+  const activeKind = animKind(anim) || selectedShapeKind;
+
+  for (const kind of SHAPE_TOOL_KINDS) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.title = labels[kind];
+    btn.setAttribute('aria-label', labels[kind]);
+    btn.style.cssText = [
+      'height:34px',
+      'border-radius:6px',
+      'border:1px solid #313244',
+      'background:#1e1e2e',
+      'color:#cdd6f4',
+      'display:flex',
+      'align-items:center',
+      'justify-content:center',
+      'cursor:pointer'
+    ].join(';');
+    if (kind === activeKind) {
+      btn.style.background = '#45475a';
+      btn.style.borderColor = '#89b4fa';
+      btn.style.color = '#ffffff';
+    }
+    btn.appendChild(makeObjectIcon(kind, 'anim-kind-icon'));
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      if (kind === activeKind) return;
+      beginShapePlacement(kind);
+    });
+    row.appendChild(btn);
+  }
+  wrap.appendChild(row);
+  detailEl.appendChild(wrap);
+}
 
 function duplicateAnimation() {
   if (isGroupSelectionActive()) {
@@ -5870,12 +6289,28 @@ function primitiveRectangleCorners(anim) {
   return rot ? corners.map(pt => rotateMathPoint(pt, center, rot)) : corners;
 }
 
+function primitiveTrianglePoints(anim) {
+  const p0 = anim.anchors[0], p1 = anim.anchors[1];
+  if (!p0 || !p1) return [];
+  const minRe = Math.min(p0.re, p1.re), maxRe = Math.max(p0.re, p1.re);
+  const minIm = Math.min(p0.im, p1.im), maxIm = Math.max(p0.im, p1.im);
+  const center = primitiveCenter(anim);
+  const pts = [
+    new Cx((minRe + maxRe) * 0.5, maxIm),
+    new Cx(maxRe, minIm),
+    new Cx(minRe, minIm),
+  ];
+  const rot = animRotation(anim);
+  return rot ? pts.map(pt => rotateMathPoint(pt, center, rot)) : pts;
+}
+
 function samplePrimitiveBoundaryMath(anim, count = 96) {
   const p0 = anim.anchors[0], p1 = anim.anchors[1];
   if (!p0 || !p1) return [];
   const kind = animKind(anim);
   if (kind === 'line') return [p0, p1];
   if (kind === 'rectangle') return primitiveRectangleCorners(anim);
+  if (kind === 'triangle') return primitiveTrianglePoints(anim);
   const rot = animRotation(anim);
   if (kind === 'circle') {
     const radius = Math.hypot(p1.re - p0.re, p1.im - p0.im);
@@ -5936,6 +6371,7 @@ function applyEyedropperColor(hex) {
     else { anim.color = hex; anim.outlineOpacity = 1; }
   } else if (eyedropperTarget === 'gradientTo') {
     anim.gradientToColor = hex;
+    syncObjectFillToDetectedRegions(anim, { gradientToColor: anim.gradientToColor });
     openColorMenuAnimId = eyedropperAnimId;
     colorEditTarget = 'fill';
     objectFillTab = 2;
@@ -5943,6 +6379,11 @@ function applyEyedropperColor(hex) {
     anim.fillColor = hex;
     if (!anim.fillStyle) anim.fillStyle = 'solid';
     anim.fillOpacity = 1;
+    syncObjectFillToDetectedRegions(anim, {
+      fillColor: anim.fillColor,
+      fillOpacity: anim.fillOpacity,
+      fillStyle: anim.fillStyle || 'solid',
+    });
     openColorMenuAnimId = eyedropperAnimId;
     colorEditTarget = 'fill';
     objectFillTab = 1;
@@ -6114,6 +6555,14 @@ function addPrimitiveFillPath(renderCtx, anim) {
     renderCtx.closePath();
     return true;
   }
+  if (kind === 'triangle') {
+    const pts = primitiveTrianglePoints(anim).map(pt => toCanvas(pt.re, pt.im));
+    if (pts.length < 3) return false;
+    renderCtx.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length; i++) renderCtx.lineTo(pts[i][0], pts[i][1]);
+    renderCtx.closePath();
+    return true;
+  }
   if (kind === 'circle') {
     const radius = Math.hypot(x1 - x0, y1 - y0);
     renderCtx.arc(x0, y0, radius < 1e-6 ? Math.max(2 * devicePixelRatio, primitiveStrokeWidth(anim) * 0.5) : radius, 0, Math.PI * 2);
@@ -6253,6 +6702,16 @@ function primitiveHitDistance(anim, cx, cy) {
   if (anim.kind === 'rectangle') {
     const pts = primitiveRectangleCorners(anim).map(pt => toCanvas(pt.re, pt.im));
     if (pts.length < 4) return Infinity;
+    let best = Infinity;
+    for (let i = 0; i < pts.length; i++) {
+      const a = pts[i], b = pts[(i + 1) % pts.length];
+      best = Math.min(best, distPointToSegmentPx(cx, cy, a[0], a[1], b[0], b[1]));
+    }
+    return best;
+  }
+  if (anim.kind === 'triangle') {
+    const pts = primitiveTrianglePoints(anim).map(pt => toCanvas(pt.re, pt.im));
+    if (pts.length < 3) return Infinity;
     let best = Infinity;
     for (let i = 0; i < pts.length; i++) {
       const a = pts[i], b = pts[(i + 1) % pts.length];
@@ -6982,6 +7441,8 @@ function textPlacementClickHandler(anim, snapped) {
   selectedId = anim.id;
   editModeAnimId = anim.id;
   openColorMenuAnimId = null;
+  currentTool = 'text';
+  updateToolPanel();
   animations.forEach(a => {
     if (a.id !== anim.id) {
       a.expanded = false;
@@ -6993,6 +7454,33 @@ function textPlacementClickHandler(anim, snapped) {
   beginCanvasTextEdit(anim, true, false);
   scrollToShowExpanded(anim.id);
   saveProject();
+}
+
+function startActiveDrawingToolAt(snapped, mathX, mathY) {
+  if (currentTool === 'arc-builder') {
+    addAnimation('freeform');
+    const anim = animations[animations.length - 1];
+    placementClickHandler(anim, snapped, mathX, mathY);
+    updateToolPanel();
+    return true;
+  }
+  if (currentTool === 'shape') {
+    const shapeKind = SHAPE_TOOL_KINDS.includes(selectedShapeKind) ? selectedShapeKind : 'rectangle';
+    addPrimitiveAnimation(shapeKind);
+    const anim = animations[animations.length - 1];
+    primitivePlacementClickHandler(anim, snapped);
+    updateToolPanel();
+    return true;
+  }
+  if (currentTool === 'text') {
+    finishCanvasTextEdit(false);
+    addTextAnimation();
+    const anim = animations[animations.length - 1];
+    textPlacementClickHandler(anim, snapped);
+    updateToolPanel();
+    return true;
+  }
+  return false;
 }
 
 function nearestPlacementAnchorIndex(anim, mathX, mathY, threshold, snappedPoint = null) {
@@ -7100,10 +7588,10 @@ function placementClickHandler(anim, snapped, mathX, mathY) {
   const nearIdx = nearestPlacementAnchorIndex(anim, mathX, mathY, undefined, snapped);
 
   if (n === 0) {
-    // First click: place the first real anchor; reset M for the pending arc
+    // First click: place the first real anchor and start tracking the first arc path.
     pushUndo();
     anch.push(snapped); anim.anchorLocked.push(true);
-    freeformBendModifier = 0;
+    resetFreeformPlacementPathTracking();
     renderAnimList(); draw(); return;
   }
 
@@ -7145,13 +7633,18 @@ function placementClickHandler(anim, snapped, mathX, mathY) {
     : null;
 
   const A0 = anch[endIdx];
-  const newSeg = buildFreeformSeg(A0, target, prevOutDir, -freeformBendModifier);
+  if (prevOutDir === null) updateFreeformFirstArcPathSignal(anim, new Cx(mathX, mathY));
+  const newSeg = buildFreeformSeg(
+    A0, target, prevOutDir, freeformPlacementBend,
+    freeformPendingSideSign(anim),
+    prevOutDir === null ? freeformFirstArcGuide(anim, target) : null
+  );
 
   pushUndo();
   anch.push(target); anim.anchorLocked.push(true);
   segs.push(newSeg);
   recompileAnim(anim);
-  freeformBendModifier = 0;
+  resetFreeformPlacementPathTracking();
   updatePlacementMatchCandidate(anim);
   renderAnimList(); draw(); return;
 }
@@ -7237,6 +7730,14 @@ canvas.addEventListener('mousedown', e => {
   }
   if (e.button !== 0) return;
 
+  // ── Freeform pen capture ──
+  if (freeformPenActive) {
+    e.preventDefault();
+    freeformPenCapture = { points: [{ x: cx, y: cy }] };
+    draw();
+    return;
+  }
+
   // ── Match arc button (during placement) ──
   if (placementMatchCandidate?._btnX != null) {
     const { _btnX: bx, _btnY: by, _btnW: bw, _btnH: bh } = placementMatchCandidate;
@@ -7303,6 +7804,12 @@ canvas.addEventListener('mousedown', e => {
       renderAnimList(); draw();
     }
     return;
+  }
+
+  if (currentTool === 'arc-builder' || currentTool === 'shape' || currentTool === 'text') {
+    e.preventDefault();
+    const snapped = new Cx(softSnap(mathX), softSnap(mathY));
+    if (startActiveDrawingToolAt(snapped, mathX, mathY)) return;
   }
 
   // Canvas side buttons: duplicate / reflect / rotate
@@ -7962,11 +8469,24 @@ window.addEventListener('mousemove', e => {
     draw(); return;
   }
 
+  if (freeformPenCapture) {
+    const last = freeformPenCapture.points[freeformPenCapture.points.length - 1];
+    if (Math.hypot(cx - last.x, cy - last.y) >= 3 * devicePixelRatio) {
+      freeformPenCapture.points.push({ x: cx, y: cy });
+    }
+    draw(); return;
+  }
+
   // Placement preview
   const placingForPreview = animations.find(a => a.inPlacementMode);
   if (placingForPreview) {
     const onCanvas = cx >= 0 && cy >= 0 && cx <= canvas.width && cy <= canvas.height;
     placementPreviewPos = onCanvas ? new Cx(softSnap(mathX), softSnap(mathY)) : null;
+    if (onCanvas) {
+      const rawCursor = new Cx(mathX, mathY);
+      updateFreeformFirstArcPathSignal(placingForPreview, rawCursor);
+      updateFreeformPendingSideSignal(placingForPreview, rawCursor);
+    }
     draw(); return;
   }
 
@@ -8171,6 +8691,7 @@ window.addEventListener('mousemove', e => {
     draw(); return;
   }
 
+  if (eccDrag && !LEGACY_ECCENTRICITY_EDITING_ENABLED) eccDrag = null;
   if (eccDrag) {
     // Dead zone: ignore tiny movements to prevent accidental eccentricity changes
     if (Math.hypot(e.clientX - mouseDownClientX, e.clientY - mouseDownClientY) < 6) return;
@@ -8336,6 +8857,7 @@ window.addEventListener('mousemove', e => {
 });
 
 window.addEventListener('mouseup', e => {
+  if (freeformPenCapture && e.button === 0) { commitFreeformPenStroke(); return; }
   if (pendingBodyDrag) {
     pendingBodyDrag.onSelect();
     pendingBodyDrag = null;
@@ -8812,6 +9334,11 @@ objCanvas.addEventListener('mousedown', e => {
         if (a.id !== hitAnim.id) { a.expanded = false; a.expandedArcs = new Set(); a.expandedAnchors = new Set(); }
       });
 
+      if (!LEGACY_ECCENTRICITY_EDITING_ENABLED) {
+        renderAnimList(); scrollToShowExpanded(hitAnim.id);
+        updateCursor(); draw(); return;
+      }
+
       const a0 = hitAnim.anchors[hitSegIdx];
       const a1 = hitAnim.anchors[hitSegIdx + 1];
       let perpRe = 0, perpIm = 1;
@@ -9116,6 +9643,11 @@ isolCanvas.addEventListener('mousedown', e => {
         if (a.id !== hitAnim.id) { a.expanded = false; a.expandedArcs = new Set(); a.expandedAnchors = new Set(); }
       });
 
+      if (!LEGACY_ECCENTRICITY_EDITING_ENABLED) {
+        renderAnimList(); scrollToShowExpanded(hitAnim.id);
+        updateCursor(); draw(); return;
+      }
+
       const a0 = hitAnim.anchors[hitSegIdx];
       const a1 = hitAnim.anchors[hitSegIdx + 1];
       let perpRe = 0, perpIm = 1;
@@ -9356,6 +9888,7 @@ function drawHandles(anim) {
 
 // Returns true when eccentricity ghost curves should be shown for this arc.
 function isEccGhostActive(anim, segIdx) {
+  if (!LEGACY_ECCENTRICITY_EDITING_ENABLED) return false;
   if (eccentricitySliderActiveKey?.animId === anim.id && eccentricitySliderActiveKey?.segIdx === segIdx)
     return true;
   if (handleDrag?.anim === anim) {
@@ -9555,14 +10088,14 @@ function drawPrimitiveBlockerMask(renderCtx, anim) {
     renderCtx.lineTo(x1, y1);
     renderCtx.stroke();
   } else if (animKind(anim) === 'rectangle') {
-    const center = new Cx((p0.re + p1.re) * 0.5, (p0.im + p1.im) * 0.5);
-    const corners = [
-      new Cx(p0.re, p0.im),
-      new Cx(p1.re, p0.im),
-      new Cx(p1.re, p1.im),
-      new Cx(p0.re, p1.im),
-    ].map(pt => animRotation(anim) ? rotateMathPoint(pt, center, animRotation(anim)) : pt);
-    const pts = corners.map(pt => toCanvas(pt.re, pt.im));
+    const pts = primitiveRectangleCorners(anim).map(pt => toCanvas(pt.re, pt.im));
+    renderCtx.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length; i++) renderCtx.lineTo(pts[i][0], pts[i][1]);
+    renderCtx.closePath();
+    renderCtx.fill();
+    renderCtx.stroke();
+  } else if (animKind(anim) === 'triangle') {
+    const pts = primitiveTrianglePoints(anim).map(pt => toCanvas(pt.re, pt.im));
     renderCtx.moveTo(pts[0][0], pts[0][1]);
     for (let i = 1; i < pts.length; i++) renderCtx.lineTo(pts[i][0], pts[i][1]);
     renderCtx.closePath();
@@ -9972,14 +10505,16 @@ function drawPrimitiveShape(kind, p0, p1, color, lineWidth, alpha = 1, dashed = 
   const buildShapePath = () => {
     ctx.beginPath();
     if (kind === 'rectangle') {
-      const center = new Cx((p0.re + p1.re) * 0.5, (p0.im + p1.im) * 0.5);
-      const corners = [
-        new Cx(p0.re, p0.im),
-        new Cx(p1.re, p0.im),
-        new Cx(p1.re, p1.im),
-        new Cx(p0.re, p1.im),
-      ].map(pt => rotation ? rotateMathPoint(pt, center, rotation) : pt);
-      const pts = corners.map(pt => toCanvas(pt.re, pt.im));
+      const temp = { kind: 'rectangle', anchors: [p0, p1], rotation };
+      const pts = primitiveRectangleCorners(temp).map(pt => toCanvas(pt.re, pt.im));
+      ctx.moveTo(pts[0][0], pts[0][1]);
+      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+      ctx.closePath();
+      return true;
+    }
+    if (kind === 'triangle') {
+      const temp = { kind: 'triangle', anchors: [p0, p1], rotation };
+      const pts = primitiveTrianglePoints(temp).map(pt => toCanvas(pt.re, pt.im));
       ctx.moveTo(pts[0][0], pts[0][1]);
       for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
       ctx.closePath();
@@ -10026,7 +10561,7 @@ function drawPrimitiveShape(kind, p0, p1, color, lineWidth, alpha = 1, dashed = 
     ctx.moveTo(x0, y0);
     ctx.lineTo(x1, y1);
     ctx.stroke();
-  } else if (kind === 'rectangle') {
+  } else if (kind === 'rectangle' || kind === 'triangle') {
     if (buildShapePath()) paint();
   } else if (kind === 'circle') {
     const radius = Math.hypot(x1 - x0, y1 - y0);
@@ -10047,7 +10582,7 @@ function drawPrimitiveShape(kind, p0, p1, color, lineWidth, alpha = 1, dashed = 
 
 function drawPrimitive(anim, extraWidth = 0, alpha = 1) {
   if (!isPrimitiveAnim(anim) || anim.anchors.length < 2) return;
-  const fillColor = extraWidth === 0 && alpha >= 1 ? animFillColor(anim) : null;
+  const fillColor = extraWidth === 0 && alpha >= 1 && !anim.regions?.length ? animFillColor(anim) : null;
   drawPrimitiveShape(
     anim.kind,
     anim.anchors[0],
@@ -10159,7 +10694,11 @@ function buildFreeformTentativeSeg(anim, previewPoint) {
     ? tangentAtBezierEnd(A0, anim.segments[anim.segments.length - 1].h1)
     : null;
 
-  return buildFreeformSeg(A0, previewPoint, prevOutDir, -freeformBendModifier);
+  return buildFreeformSeg(
+    A0, previewPoint, prevOutDir, freeformPlacementBend,
+    freeformPendingSideSign(anim),
+    prevOutDir === null ? freeformFirstArcGuide(anim, previewPoint) : null
+  );
 }
 
 function drawFreshFreeformPlacement(anim, previewPoint, cw, dpr) {
@@ -11271,7 +11810,7 @@ function applyPointTransformFromState(state, transformPoint, options = {}) {
 
   anim.anchors = origAnchors.map(transformPoint);
   if (isPrimitiveAnim(anim)) {
-    if (options.forcePath && (origKind === 'rectangle' || origKind === 'circle' || origKind === 'ellipse')) {
+    if (options.forcePath && (origKind === 'rectangle' || origKind === 'triangle' || origKind === 'circle' || origKind === 'ellipse')) {
       const path = primitivePathForDrag(state);
       if (path) {
         anim.kind = path.kind;
@@ -11285,7 +11824,7 @@ function applyPointTransformFromState(state, transformPoint, options = {}) {
       return;
     }
     anim.segments = [];
-    if (options.rotationDelta && (origKind === 'rectangle' || origKind === 'circle' || origKind === 'ellipse')) {
+    if (options.rotationDelta && (origKind === 'rectangle' || origKind === 'triangle' || origKind === 'circle' || origKind === 'ellipse')) {
       anim.rotation = state.origRotation + options.rotationDelta;
     }
     return;
@@ -11461,6 +12000,24 @@ function primitiveRectanglePathForDrag(drag) {
   };
 }
 
+function primitiveTrianglePathForDrag(drag) {
+  const temp = {
+    kind: 'triangle',
+    anchors: drag.origAnchors.map(cloneCx),
+    rotation: drag.origRotation ?? 0,
+  };
+  const pts = primitiveTrianglePoints(temp);
+  if (pts.length < 3) return null;
+  const anchors = pts.concat([cloneCx(pts[0])]);
+  return {
+    kind: POLYLINE_KIND,
+    closed: true,
+    anchors,
+    segments: anchors.slice(0, -1).map((p, i) => makeStraightSegment(p, anchors[i + 1])),
+    locked: false,
+  };
+}
+
 function primitiveEllipsePathForDrag(drag) {
   const center = drag.origAnchors[0];
   const p1 = drag.origAnchors[1];
@@ -11502,6 +12059,7 @@ function primitiveEllipsePathForDrag(drag) {
 
 function primitivePathForDrag(drag) {
   if (drag.origKind === 'rectangle') return primitiveRectanglePathForDrag(drag);
+  if (drag.origKind === 'triangle') return primitiveTrianglePathForDrag(drag);
   if (drag.origKind === 'circle' || drag.origKind === 'ellipse') return primitiveEllipsePathForDrag(drag);
   return null;
 }
@@ -11630,7 +12188,7 @@ function applyShearForCursor(drag, mathX, mathY) {
     return true;
   }
 
-  if (origKind === 'rectangle' || origKind === 'circle' || origKind === 'ellipse') {
+  if (origKind === 'rectangle' || origKind === 'triangle' || origKind === 'circle' || origKind === 'ellipse') {
     const path = primitivePathForDrag(drag);
     if (!path) return false;
     anim.kind = path.kind;
@@ -11688,7 +12246,7 @@ function applySideResizeShearForCursor(drag, mathX, mathY) {
     return true;
   }
 
-  if (origKind === 'rectangle' || origKind === 'circle' || origKind === 'ellipse') {
+  if (origKind === 'rectangle' || origKind === 'triangle' || origKind === 'circle' || origKind === 'ellipse') {
     const path = primitivePathForDrag(drag);
     if (!path) return false;
     anim.kind = path.kind;
@@ -11911,7 +12469,7 @@ function applyRotationDelta(drag, delta) {
     anim.rotation = origRotation + delta;
     return;
   }
-  if (isPrimitiveAnim(anim) && (kind === 'rectangle' || kind === 'circle' || kind === 'ellipse')) {
+  if (isPrimitiveAnim(anim) && (kind === 'rectangle' || kind === 'triangle' || kind === 'circle' || kind === 'ellipse')) {
     anim.rotation = origRotation + delta;
     return;
   }
@@ -12506,6 +13064,7 @@ function drawSelectedMultiSelectionBounds() {
 function drawCommittedAnimation(anim, { deferOverlay = false } = {}) {
   if (!anim || !isAnimEffectivelyVisible(anim) || anim.inPlacementMode) return;
   const inEditMode = (editModeAnimId === anim.id);
+  drawObjectRegionFillsForAnim(anim);
 
   if (anim.curves) {
     const _fadingArc = drillObjectArc?.animId === anim.id ? drillObjectArc : null;
@@ -12568,7 +13127,9 @@ function drawCommittedAnimation(anim, { deferOverlay = false } = {}) {
   const activeArc = activeArcIndex(anim);
   const _topoFade = activeArc === null && drillObjectArc?.animId === anim.id ? drillObjectArc : null;
   const softColor = activeArc !== null ? softenedSelectionColor(anim.color) : null;
-  if (canFillAnim(anim)) {
+  // Skip direct-fill paths when regions exist — drawObjectRegionFills handles those,
+  // with anim.fillColor as fallback if any region.fillColor is null.
+  if (canFillAnim(anim) && !anim.regions?.length) {
     const _fStyle = animFillStyle(anim);
     if (_fStyle === 'gradient') {
       drawGradientFill(anim);
@@ -12629,12 +13190,14 @@ function addAnimShapeToGroupPath(anim) {
       return true;
     }
     if (kind === 'rectangle') {
-      const center = new Cx((p0.re + p1.re) * 0.5, (p0.im + p1.im) * 0.5);
-      const corners = [
-        new Cx(p0.re, p0.im), new Cx(p1.re, p0.im),
-        new Cx(p1.re, p1.im), new Cx(p0.re, p1.im),
-      ].map(pt => rot ? rotateMathPoint(pt, center, rot) : pt);
-      const pts = corners.map(pt => toCanvas(pt.re, pt.im));
+      const pts = primitiveRectangleCorners(anim).map(pt => toCanvas(pt.re, pt.im));
+      ctx.moveTo(pts[0][0], pts[0][1]);
+      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+      ctx.closePath();
+      return true;
+    }
+    if (kind === 'triangle') {
+      const pts = primitiveTrianglePoints(anim).map(pt => toCanvas(pt.re, pt.im));
       ctx.moveTo(pts[0][0], pts[0][1]);
       for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
       ctx.closePath();
@@ -12730,7 +13293,6 @@ function drawAnimations() {
   drawGrid();
   drawGroupFills();
   drawGroupRegionFills();
-  drawObjectRegionFills();
   const dpr = devicePixelRatio;
 
   // Hover glow under hovered segment
@@ -12956,6 +13518,8 @@ function makeObjectIcon(kind, className = 'anim-kind-icon') {
     );
   } else if (kind === 'rectangle') {
     svg.appendChild(makeSvgEl('rect', { x: 5, y: 6, width: 14, height: 12, rx: 0 }));
+  } else if (kind === 'triangle') {
+    svg.appendChild(makeSvgEl('path', { d: 'M12 5l8 14H4z' }));
   } else if (kind === 'circle') {
     svg.appendChild(makeSvgEl('circle', { cx: 12, cy: 12, r: 7 }));
   } else if (kind === 'ellipse') {
@@ -13005,6 +13569,7 @@ function objectLabel(anim) {
   const kind = animKind(anim);
   if (kind === 'line') return `${anim.letter} - line`;
   if (kind === 'rectangle') return `${anim.letter} - rectangle`;
+  if (kind === 'triangle') return `${anim.letter} - triangle`;
   if (kind === 'circle') return `${anim.letter} - circle`;
   if (kind === 'ellipse') return `${anim.letter} - ellipse`;
   if (kind === 'text') return `${anim.letter} - text`;
@@ -13024,6 +13589,14 @@ function primitiveDetails(anim) {
     const height = Math.abs(p1.im - p0.im);
     return [
       ['Corners', `${formatCoordPairHundredths(p0)}, ${formatCoordPairHundredths(p1)}`],
+      ['Size', `${formatNumberHundredths(width)} x ${formatNumberHundredths(height)}`],
+    ];
+  }
+  if (anim.kind === 'triangle') {
+    const width = Math.abs(p1.re - p0.re);
+    const height = Math.abs(p1.im - p0.im);
+    return [
+      ['Bounds', `${formatCoordPairHundredths(p0)}, ${formatCoordPairHundredths(p1)}`],
       ['Size', `${formatNumberHundredths(width)} x ${formatNumberHundredths(height)}`],
     ];
   }
@@ -13429,6 +14002,7 @@ function appendHslColorPicker(parent, activeColor, onChange, options = {}) {
     saturation: Math.round(clamp(hsl.s, 0, 100)),
     lightness: Math.round(clamp(hsl.l, 0, 100)),
   };
+  let lastEmittedHex = initialColor;
 
   const wheelWrap = document.createElement('div');
   wheelWrap.className = 'hue-wheel-wrap';
@@ -13512,6 +14086,7 @@ function appendHslColorPicker(parent, activeColor, onChange, options = {}) {
     const hex = currentHex();
     preview.style.background = hex;
     options.onPreviewChange?.(hex);
+    lastEmittedHex = hex;
     onChange(hex, { fromHueClick: false });
   });
   previewValue.addEventListener('keydown', e => {
@@ -13575,8 +14150,11 @@ function appendHslColorPicker(parent, activeColor, onChange, options = {}) {
 
   function applyColor(fromHueClick) {
     const hex = currentHex();
+    const colorChanged = !sameColor(hex, lastEmittedHex);
     refresh();
-    onChange(hex, { fromHueClick });
+    if (!colorChanged && !(fromHueClick && options.forceActiveHueClick)) return;
+    lastEmittedHex = hex;
+    onChange(hex, { fromHueClick, colorChanged });
   }
 
   refresh();
@@ -13729,7 +14307,10 @@ function _appendAllRegionColor(parent, anim) {
   let previewHex = normalizeColorString(initColor) || initColor;
   let opacityCtrl = null;
   appendHslColorPicker(panel, initColor, (color, meta = {}) => {
-    for (const r of regions) r.fillColor = color;
+    for (const r of regions) {
+      r.fillColor = color;
+      if (!isFinite(r.fillOpacity) || r.fillOpacity <= 0) r.fillOpacity = 1;
+    }
     saveProject(); if (meta.fromHueClick) renderAnimList(); draw();
   }, { withUndo: true, fallbackHue: _ridh,
     onPreviewChange(hex) { previewHex = hex; opacityCtrl?.setTrack(opacitySliderTrack(hex)); } });
@@ -13856,6 +14437,7 @@ function appendRegionColorExpansion(parent, region, group) {
     const _initDc = normalizeColorString(globalSettings.defaultColor);
     const _initDh = _initDc ? colorToHsl(_initDc).h : 0;
     region.fillColor = hslToHex(_initDh, 100, 50);
+    if (!isFinite(region.fillOpacity) || region.fillOpacity <= 0) region.fillOpacity = 1;
     saveProject();
   }
   const style = region.fillStyle || 'solid';
@@ -14388,6 +14970,11 @@ function appendColorExpansion(parent, anim) {
       if (!sameColor(animFillColor(anim), color)) {
         anim.fillColor = color;
         if (!anim.fillStyle) anim.fillStyle = 'solid';
+        syncObjectFillToDetectedRegions(anim, {
+          fillColor: color,
+          fillOpacity: animFillOpacity(anim),
+          fillStyle: anim.fillStyle || 'solid',
+        });
       }
       saveProject(); if (meta.fromHueClick) renderAnimList(); draw();
     }, {
@@ -14398,7 +14985,13 @@ function appendColorExpansion(parent, anim) {
     c1Opacity = appendSliderRow(panel, 'Opacity', 0, 100, 1, Math.round(animFillOpacity(anim) * 100),
       v => `${Math.round(v)}%`, v => {
         if (!animFillColor(anim)) { anim.fillColor = c1; if (!anim.fillStyle) anim.fillStyle = 'solid'; }
-        anim.fillOpacity = clamp(parseFloat(v) / 100, 0, 1); saveProject();
+        anim.fillOpacity = clamp(parseFloat(v) / 100, 0, 1);
+        syncObjectFillToDetectedRegions(anim, {
+          fillColor: anim.fillColor,
+          fillOpacity: anim.fillOpacity,
+          fillStyle: anim.fillStyle || 'solid',
+        });
+        saveProject();
       }, !fillEnabled, { colorTrack: opacitySliderTrack(c1Preview) });
 
   } else if (objectFillTab === 2) {
@@ -14409,6 +15002,7 @@ function appendColorExpansion(parent, anim) {
       let c2Opacity = null;
       const c2Row = appendHslColorPicker(panel, c2Init, (color, meta = {}) => {
         if (!sameColor(anim.gradientToColor, color)) anim.gradientToColor = color;
+        syncObjectFillToDetectedRegions(anim, { gradientToColor: anim.gradientToColor });
         saveProject(); if (meta.fromHueClick) renderAnimList(); draw();
       }, {
         withUndo: true, fallbackHue: colorToHsl(animFillColor(anim) || anim.color).h,
@@ -14416,7 +15010,11 @@ function appendColorExpansion(parent, anim) {
       });
       appendDropperBtn(c2Row, 'gradientTo');
       c2Opacity = appendSliderRow(panel, 'Opacity', 0, 100, 1, Math.round((anim.gradientToOpacity ?? 0) * 100),
-        v => `${Math.round(v)}%`, v => { anim.gradientToOpacity = clamp(parseFloat(v) / 100, 0, 1); saveProject(); },
+        v => `${Math.round(v)}%`, v => {
+          anim.gradientToOpacity = clamp(parseFloat(v) / 100, 0, 1);
+          syncObjectFillToDetectedRegions(anim, { gradientToOpacity: anim.gradientToOpacity });
+          saveProject();
+        },
         false, { colorTrack: opacitySliderTrack(c2Preview) });
     } else {
       const note = document.createElement('div');
@@ -14443,6 +15041,17 @@ function appendColorExpansion(parent, anim) {
             anim.gradientToColor = animFillColor(anim) || anim.color;
             if (!isFinite(anim.gradientToOpacity)) anim.gradientToOpacity = 0;
           }
+          syncObjectFillToDetectedRegions(anim, {
+            fillColor: animFillColor(anim),
+            fillOpacity: animFillOpacity(anim),
+            fillStyle: anim.fillStyle || 'solid',
+            gradientToColor: anim.gradientToColor,
+            gradientToOpacity: anim.gradientToOpacity,
+            gradientAngle: anim.gradientAngle,
+            patternType: anim.patternType,
+            patternAngle: anim.patternAngle,
+            patternSpacing: anim.patternSpacing,
+          });
           saveProject(); renderAnimList(); draw();
         }
       });
@@ -14459,7 +15068,11 @@ function appendColorExpansion(parent, anim) {
       wheelRow.appendChild(lbl);
       appendDirectionWheel(wheelRow,
         () => anim.gradientAngle ?? Math.PI / 4,
-        a => { anim.gradientAngle = a; saveProject(); draw(); });
+        a => {
+          anim.gradientAngle = a;
+          syncObjectFillToDetectedRegions(anim, { gradientAngle: anim.gradientAngle });
+          saveProject(); draw();
+        });
       panel.appendChild(wheelRow);
     }
 
@@ -14476,7 +15089,9 @@ function appendColorExpansion(parent, anim) {
         btn.addEventListener('click', e => {
           e.stopPropagation();
           if ((anim.patternType || 'lines') !== key) {
-            pushUndo(); anim.patternType = key; saveProject(); renderAnimList(); draw();
+            pushUndo(); anim.patternType = key;
+            syncObjectFillToDetectedRegions(anim, { patternType: anim.patternType });
+            saveProject(); renderAnimList(); draw();
           }
         });
         typeRow.appendChild(btn);
@@ -14491,16 +15106,79 @@ function appendColorExpansion(parent, anim) {
       wheelRow.appendChild(lbl);
       appendDirectionWheel(wheelRow,
         () => anim.patternAngle ?? 0,
-        a => { anim.patternAngle = a; saveProject(); draw(); });
+        a => {
+          anim.patternAngle = a;
+          syncObjectFillToDetectedRegions(anim, { patternAngle: anim.patternAngle });
+          saveProject(); draw();
+        });
       panel.appendChild(wheelRow);
 
       appendSliderRow(panel, 'Spacing', 4, 48, 1, anim.patternSpacing ?? 12,
-        v => `${Math.round(v)}px`, v => { anim.patternSpacing = parseFloat(v); saveProject(); draw(); });
+        v => `${Math.round(v)}px`, v => {
+          anim.patternSpacing = parseFloat(v);
+          syncObjectFillToDetectedRegions(anim, { patternSpacing: anim.patternSpacing });
+          saveProject(); draw();
+        });
     }
   }
 
   root.appendChild(panel);
   parent.appendChild(root);
+}
+
+function addTransformedRegionBoundaryToPath(target, boundary, curvesMap, transform, steps = 32) {
+  let isFirst = true;
+  const addPoint = pt => {
+    if (!pt || !Number.isFinite(pt.re) || !Number.isFinite(pt.im)) return;
+    const [x, y] = transform(pt.re, pt.im);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    if (isFirst) {
+      target.moveTo(x, y);
+      isFirst = false;
+    } else {
+      target.lineTo(x, y);
+    }
+  };
+  const sampleSegment = (seg, reverse = false) => {
+    if (!seg?.compiled) return;
+    for (let i = 0; i <= steps; i++) {
+      const t = reverse ? 1 - i / steps : i / steps;
+      try { addPoint(seg.compiled(0, t, {})); } catch (_) {}
+    }
+  };
+  for (const edge of boundary ?? []) {
+    const curve = curvesMap.get(edge.animId);
+    if (!curve) continue;
+    const fwd = edge.endIdx > edge.startIdx;
+    const sMin = Math.min(edge.startIdx, edge.endIdx);
+    const sMax = Math.max(edge.startIdx, edge.endIdx);
+    if (fwd) {
+      for (let s = sMin; s < sMax; s++) sampleSegment(curve.segments[s], false);
+    } else {
+      for (let s = sMax - 1; s >= sMin; s--) sampleSegment(curve.segments[s], true);
+    }
+  }
+  if (!isFirst) target.closePath();
+  return !isFirst;
+}
+
+function drawThumbnailRegionFills(tctx, anim, transform) {
+  if (!anim?.regions?.length) return;
+  const curvesMap = buildTopologyCurvesMap(anim);
+  for (const region of anim.regions) {
+    const fill = region.fillColor || anim.fillColor;
+    if (!fill) continue;
+    const opacity = region.fillColor ? (region.fillOpacity ?? 0.3) : animFillOpacity(anim);
+    if (opacity <= 0) continue;
+    tctx.save();
+    tctx.beginPath();
+    if (addTransformedRegionBoundaryToPath(tctx, region.boundary, curvesMap, transform)) {
+      tctx.fillStyle = fill;
+      tctx.globalAlpha = opacity;
+      try { tctx.fill('evenodd'); } catch (_) { tctx.fill(); }
+    }
+    tctx.restore();
+  }
 }
 
 function renderAnimThumbnail(anim, canvasEl, size = 48) {
@@ -14542,6 +15220,7 @@ function renderAnimThumbnail(anim, canvasEl, size = 48) {
     const ox2 = pad2 + (drawW2 - rangeRe2 * ts2) / 2;
     const oy2 = pad2 + (drawH2 - rangeIm2 * ts2) / 2;
     const T2 = (re, im) => [ox2 + (re - minRe) * ts2, PX - oy2 - (im - minIm) * ts2];
+    drawThumbnailRegionFills(tctx, anim, T2);
     for (const c of anim.curves) {
       const cColor = c.color || '#cdd6f4';
       tctx.strokeStyle = cColor;
@@ -14560,6 +15239,14 @@ function renderAnimThumbnail(anim, canvasEl, size = 48) {
           const [x0,y0] = T2(Math.min(p0.re,p1.re), Math.max(p0.im,p1.im));
           const [x1,y1] = T2(Math.max(p0.re,p1.re), Math.min(p0.im,p1.im));
           tctx.rect(x0, y0, x1-x0, y1-y0);
+          if (cFill) { tctx.fillStyle = cFill; tctx.globalAlpha = cFillAlpha; tctx.fill(); }
+          tctx.globalAlpha = 0.9; tctx.stroke();
+        } else if (c.kind === 'triangle') {
+          const pts = primitiveTrianglePoints(c).map(pt => T2(pt.re, pt.im));
+          if (pts.length < 3) continue;
+          tctx.moveTo(pts[0][0], pts[0][1]);
+          for (let i = 1; i < pts.length; i++) tctx.lineTo(pts[i][0], pts[i][1]);
+          tctx.closePath();
           if (cFill) { tctx.fillStyle = cFill; tctx.globalAlpha = cFillAlpha; tctx.fill(); }
           tctx.globalAlpha = 0.9; tctx.stroke();
         } else if (c.kind === 'circle') {
@@ -14677,8 +15364,9 @@ function renderAnimThumbnail(anim, canvasEl, size = 48) {
   const ox = pad + (drawW - rangeRe * ts) / 2;
   const oy = pad + (drawH - rangeIm * ts) / 2;
   const T = (re, im) => [ox + (re - minRe) * ts, PX - oy - (im - minIm) * ts];
+  drawThumbnailRegionFills(tctx, anim, T);
 
-  const fillCol = animFillColor(anim);
+  const fillCol = anim.regions?.length ? null : animFillColor(anim);
   const fillAlpha = fillCol ? animFillOpacity(anim) : 0;
   tctx.strokeStyle = color;
   tctx.lineWidth = 1.5 * dpr; tctx.lineCap = 'round'; tctx.lineJoin = 'round';
@@ -14695,6 +15383,14 @@ function renderAnimThumbnail(anim, canvasEl, size = 48) {
       const [x0,y0] = T(Math.min(p0.re,p1.re), Math.max(p0.im,p1.im));
       const [x1,y1] = T(Math.max(p0.re,p1.re), Math.min(p0.im,p1.im));
       tctx.rect(x0, y0, x1-x0, y1-y0);
+      if (fillCol) { tctx.fillStyle = fillCol; tctx.globalAlpha = fillAlpha; tctx.fill(); }
+      tctx.globalAlpha = 0.9; tctx.stroke();
+    } else if (anim.kind === 'triangle') {
+      const pts = primitiveTrianglePoints(anim).map(pt => T(pt.re, pt.im));
+      if (pts.length < 3) return;
+      tctx.moveTo(pts[0][0], pts[0][1]);
+      for (let i = 1; i < pts.length; i++) tctx.lineTo(pts[i][0], pts[i][1]);
+      tctx.closePath();
       if (fillCol) { tctx.fillStyle = fillCol; tctx.globalAlpha = fillAlpha; tctx.fill(); }
       tctx.globalAlpha = 0.9; tctx.stroke();
     } else if (anim.kind === 'circle') {
@@ -15377,7 +16073,14 @@ function collapseCoincidentHalfEdges(activeHalfEdges, curvesMap, keyToNode) {
     const hi = Math.max(fromNid, toNid);
     const nodePairKey = `${lo}:${hi}`;
     const samples = sampledHalfEdgePath(canonicalHE, curvesMap);
-    if (samples.length < 2) continue;
+    if (samples.length < 2) {
+      // Too short to sample — keep unconditionally rather than drop; dropping creates
+      // DCEL gaps that break face traversal for complex objects with fine detail.
+      he.visited = false;
+      he.twin.visited = false;
+      kept.push(he, he.twin);
+      continue;
+    }
 
     const reps = repsByNodePair.get(nodePairKey) ?? [];
     if (reps.some(rep => sampledPathsCoincident(samples, rep.samples, tolerancePx))) continue;
@@ -15512,7 +16215,7 @@ function detectObjectTopology(anim) {
       he.visited = true;
       face.push({ animId: he.animId, startIdx: he.fromIdx, endIdx: he.toIdx });
       he = nextHE(he);
-      if (!he || ++steps > 2000) break;
+      if (!he || ++steps > 100000) break;
     } while (he !== startHE);
     if (he === startHE && face.length >= 2) faces.push(face);
   }
@@ -15536,7 +16239,20 @@ function detectObjectTopology(anim) {
     regionId++;
   }
   if (anim.regions.length > 0) {
-    for (const c of rawCurves) { c.fillColor = null; c.fillOpacity = 0; c.fillStyle = 'solid'; }
+    // If this is first-time detection (no prior regions) but the anim had a direct fill,
+    // migrate it to the first region before clearing — otherwise the fill is lost forever.
+    if (priorRegions.length === 0 && anim.fillColor && !anim.regions[0].fillColor) {
+      anim.regions[0].fillColor = anim.fillColor;
+      anim.regions[0].fillOpacity = anim.fillOpacity ?? 0;
+      anim.regions[0].fillStyle = anim.fillStyle ?? 'solid';
+    }
+    // Only clear sub-curve fills for merged objects (anim.curves). For simple curves,
+    // preserve anim.fillColor/fillOpacity as a permanent fallback: if region fills ever
+    // become null (e.g. due to a DCEL ordering change), the renderer at drawObjectRegionFills
+    // falls back to anim.fillColor so fills are never completely lost.
+    if (anim.curves) {
+      for (const c of rawCurves) { c.fillColor = null; c.fillOpacity = 0; c.fillStyle = 'solid'; }
+    }
   }
 }
 
@@ -15554,6 +16270,15 @@ function primitiveToTopologyPath(c) {
     const corners = primitiveRectangleCorners(c);
     if (corners.length < 4) return null;
     const anchors = [...corners, new Cx(corners[0].re, corners[0].im)];
+    const segments = anchors.slice(0, -1).map((p, i) => makeStraightSegment(p, anchors[i + 1]));
+    return { id: c.id, kind: POLYLINE_KIND, closed: true, anchors, segments, color: c.color,
+             anchorLocked: [], anchorLabels: [], activeSegments: new Set(),
+             gradientFromArcs: new Set(), gradientToArcs: new Set() };
+  }
+  if (kind === 'triangle') {
+    const pts = primitiveTrianglePoints(c);
+    if (pts.length < 3) return null;
+    const anchors = [...pts, new Cx(pts[0].re, pts[0].im)];
     const segments = anchors.slice(0, -1).map((p, i) => makeStraightSegment(p, anchors[i + 1]));
     return { id: c.id, kind: POLYLINE_KIND, closed: true, anchors, segments, color: c.color,
              anchorLocked: [], anchorLabels: [], activeSegments: new Set(),
@@ -15810,7 +16535,7 @@ function detectRegionsForGroup(groupId) {
       he.visited = true;
       face.push({ animId: he.animId, startIdx: he.fromIdx, endIdx: he.toIdx });
       he = nextHE(he);
-      if (!he || ++steps > 2000) break;
+      if (!he || ++steps > 100000) break;
     } while (he !== startHE);
     if (he === startHE && face.length >= 2) faces.push(face);
   }
@@ -16346,52 +17071,54 @@ function drawGroupRegionFills() {
   }
 }
 
-function drawObjectRegionFills() {
-  for (const anim of animations) {
-    if (!anim.regions?.length || !isAnimEffectivelyVisible(anim)) continue;
-    const _fadeTopo = drillObjectArc?.animId === anim.id;
-    const _selRegionId = selectedObjectRegionId?.animId === anim.id ? selectedObjectRegionId.id : null;
-    const curvesMap = buildTopologyCurvesMap(anim);
-    for (const region of anim.regions) {
-      const _rFill = region.fillColor || anim.fillColor;
-      if (!_rFill) continue;
-      const _useRegion = !!region.fillColor;
-      const _rStyle = _useRegion ? (region.fillStyle || 'solid') : animFillStyle(anim);
-      const _rOpBase = _useRegion ? (region.fillOpacity ?? 0.3) : animFillOpacity(anim);
-      const _rGradTo = _useRegion ? region.gradientToColor : anim.gradientToColor;
-      const _rGradToOp = _useRegion ? (region.gradientToOpacity ?? 0) : (anim.gradientToOpacity ?? 0);
-      const opacity = _rOpBase * (_fadeTopo ? 0.45 : (_selRegionId !== null && region.id !== _selRegionId ? 0.35 : 1));
-      ctx.save();
-      if (_rStyle === 'contour-gradient') {
-        const { b1, b2 } = resolveContourBoundaries(region);
-        const pts1 = sampleBoundaryEdges(b1, curvesMap, 120);
-        const pts2 = sampleBoundaryEdges(b2, curvesMap, 120);
-        ctx.beginPath();
-        addRegionBoundaryToPathLike(ctx, region.boundary, curvesMap);
-        ctx.clip();
-        drawTwoBoundaryBlend(ctx, pts1, pts2, _rFill, opacity, _rGradTo || _rFill, _rGradToOp);
-      } else if (_rStyle === 'pattern') {
-        drawRegionPattern(ctx, region, curvesMap, opacity);
-      } else {
-        ctx.beginPath();
-        addRegionBoundaryToPathLike(ctx, region.boundary, curvesMap);
-        if (_rStyle === 'gradient') {
-          const bounds = computeRegionCanvasBounds(region, curvesMap);
-          const c1 = parseColorToRgb(_rFill);
-          const c2 = parseColorToRgb(_rGradTo || _rFill);
-          if (bounds && c1 && c2) {
-            const { x1, y1, x2, y2 } = makeLinearGradientAxis(bounds, region.gradientAngle ?? Math.PI / 4);
-            const grad = ctx.createLinearGradient(x1, y1, x2, y2);
-            grad.addColorStop(0, rgbaCss(c1, opacity));
-            grad.addColorStop(1, rgbaCss(c2, _rGradToOp));
-            ctx.fillStyle = grad; ctx.globalAlpha = 1;
-          } else { ctx.fillStyle = _rFill; ctx.globalAlpha = opacity; }
+function drawObjectRegionFillsForAnim(anim) {
+  if (!anim?.regions?.length || !isAnimEffectivelyVisible(anim) || anim.inPlacementMode) return;
+  const _fadeTopo = drillObjectArc?.animId === anim.id;
+  const _selRegionId = selectedObjectRegionId?.animId === anim.id ? selectedObjectRegionId.id : null;
+  const curvesMap = buildTopologyCurvesMap(anim);
+  for (const region of anim.regions) {
+    const _rFill = region.fillColor || anim.fillColor;
+    if (!_rFill) continue;
+    const _useRegion = !!region.fillColor;
+    const _rStyle = _useRegion ? (region.fillStyle || 'solid') : animFillStyle(anim);
+    const _rOpBase = _useRegion ? (region.fillOpacity ?? 0.3) : animFillOpacity(anim);
+    const _rGradTo = _useRegion ? region.gradientToColor : anim.gradientToColor;
+    const _rGradToOp = _useRegion ? (region.gradientToOpacity ?? 0) : (anim.gradientToOpacity ?? 0);
+    const opacity = _rOpBase * (_fadeTopo ? 0.45 : (_selRegionId !== null && region.id !== _selRegionId ? 0.35 : 1));
+    ctx.save();
+    if (_rStyle === 'contour-gradient') {
+      const { b1, b2 } = resolveContourBoundaries(region);
+      const pts1 = sampleBoundaryEdges(b1, curvesMap, 120);
+      const pts2 = sampleBoundaryEdges(b2, curvesMap, 120);
+      ctx.beginPath();
+      addRegionBoundaryToPathLike(ctx, region.boundary, curvesMap);
+      ctx.clip();
+      drawTwoBoundaryBlend(ctx, pts1, pts2, _rFill, opacity, _rGradTo || _rFill, _rGradToOp);
+    } else if (_rStyle === 'pattern') {
+      drawRegionPattern(ctx, region, curvesMap, opacity);
+    } else {
+      ctx.beginPath();
+      addRegionBoundaryToPathLike(ctx, region.boundary, curvesMap);
+      if (_rStyle === 'gradient') {
+        const bounds = computeRegionCanvasBounds(region, curvesMap);
+        const c1 = parseColorToRgb(_rFill);
+        const c2 = parseColorToRgb(_rGradTo || _rFill);
+        if (bounds && c1 && c2) {
+          const { x1, y1, x2, y2 } = makeLinearGradientAxis(bounds, region.gradientAngle ?? Math.PI / 4);
+          const grad = ctx.createLinearGradient(x1, y1, x2, y2);
+          grad.addColorStop(0, rgbaCss(c1, opacity));
+          grad.addColorStop(1, rgbaCss(c2, _rGradToOp));
+          ctx.fillStyle = grad; ctx.globalAlpha = 1;
         } else { ctx.fillStyle = _rFill; ctx.globalAlpha = opacity; }
-        ctx.fill();
-      }
-      ctx.restore();
+      } else { ctx.fillStyle = _rFill; ctx.globalAlpha = opacity; }
+      ctx.fill();
     }
+    ctx.restore();
   }
+}
+
+function drawObjectRegionFills() {
+  for (const anim of animations) drawObjectRegionFillsForAnim(anim);
 }
 
 function hitTestGroupRegion(groupId, cx, cy) {
@@ -17722,6 +18449,33 @@ function drawPrimitiveSchematic(canvasEl, anim) {
       pctx.strokeRect(rx + lw / 2, ry + lw / 2, rw - lw, rh - lw);
       pctx.globalAlpha = 1;
     }
+  } else if (kind === 'triangle') {
+    const minRe = Math.min(p0.re, p1.re), maxRe = Math.max(p0.re, p1.re);
+    const minIm = Math.min(p0.im, p1.im), maxIm = Math.max(p0.im, p1.im);
+    const rangeRe = Math.max(maxRe - minRe, 1e-6);
+    const rangeIm = Math.max(maxIm - minIm, 1e-6);
+    const sc = Math.min((W - PAD * 2) / rangeRe, (H - PAD * 2) / rangeIm);
+    const rx = (W - rangeRe * sc) / 2;
+    const ry = (H - rangeIm * sc) / 2;
+    const rw = rangeRe * sc;
+    const rh = rangeIm * sc;
+    pctx.beginPath();
+    pctx.moveTo(rx + rw * 0.5, ry);
+    pctx.lineTo(rx + rw, ry + rh);
+    pctx.lineTo(rx, ry + rh);
+    pctx.closePath();
+    if (fillC && fillO > 0) {
+      pctx.fillStyle = fillC;
+      pctx.globalAlpha = fillO;
+      pctx.fill();
+      pctx.globalAlpha = 1;
+    }
+    if (outO > 0) {
+      pctx.strokeStyle = color;
+      pctx.globalAlpha = outO;
+      pctx.stroke();
+      pctx.globalAlpha = 1;
+    }
   } else if (kind === 'circle') {
     const radius = Math.hypot(p1.re - p0.re, p1.im - p0.im);
     const sc = Math.min(W - PAD * 2, H - PAD * 2) / (2 * Math.max(radius, 1e-6));
@@ -18551,7 +19305,20 @@ function renderAnimListLegacy() {
     return;
   }
 
+  if (freeformPenActive) {
+    setView('detail');
+    updateToolPanel();
+    renderFreeformPenSidebar(detailEl);
+    return;
+  }
+
   const anim = detailAnim;
+  if (anim?.inPlacementMode && isPrimitiveAnim(anim)) {
+    setView('detail');
+    updateToolPanel();
+    renderShapePlacementSidebar(detailEl, anim);
+    return;
+  }
   if (!anim || (anim.inPlacementMode && animKind(anim) !== 'freeform')) { updateToolPanel(); setView('tiles'); return; }
   setView('detail');
 
@@ -18572,32 +19339,41 @@ function renderAnimListLegacy() {
     hintEl.textContent = 'Click to place anchors. ← → adjust bend. Esc to finish.';
     wrap.appendChild(hintEl);
 
-    const bendBlock = document.createElement('div');
-    bendBlock.style.cssText = 'display:flex; flex-direction:column; gap:6px;';
+    const eccBlock = document.createElement('div');
+    eccBlock.style.cssText = 'display:flex; flex-direction:column; gap:6px;';
 
-    const bendLabel = document.createElement('div');
-    bendLabel.textContent = 'Bend modifier';
-    bendLabel.style.cssText = 'font-size:11px; color:#a6adc8;';
-    bendBlock.appendChild(bendLabel);
+    const eccLabelRow = document.createElement('div');
+    eccLabelRow.style.cssText = 'display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:11px; color:#a6adc8;';
+    const eccLabel = document.createElement('span');
+    eccLabel.textContent = 'Bend';
+    const eccValue = document.createElement('span');
+    eccValue.textContent = `${Math.round(freeformPlacementBend)}%`;
+    eccLabelRow.append(eccLabel, eccValue);
+    eccBlock.appendChild(eccLabelRow);
 
-    const bendSlider = document.createElement('input');
-    bendSlider.type = 'range';
-    bendSlider.min = '-1'; bendSlider.max = '1'; bendSlider.step = '0.01';
-    bendSlider.value = String(freeformBendModifier);
-    bendSlider.className = 'bend-slider';
-    bendSlider.tabIndex = -1;
-    bendBlock.appendChild(bendSlider);
+    const eccSlider = document.createElement('input');
+    eccSlider.type = 'range';
+    eccSlider.min = '0'; eccSlider.max = '100'; eccSlider.step = '10';
+    eccSlider.value = String(freeformPlacementBend);
+    eccSlider.className = 'bend-slider';
+    eccSlider.tabIndex = -1;
+    eccSlider.addEventListener('input', () => {
+      freeformPlacementBend = normalizeEccentricityPercent(parseFloat(eccSlider.value));
+      eccValue.textContent = `${Math.round(freeformPlacementBend)}%`;
+      draw();
+    });
+    eccBlock.appendChild(eccSlider);
 
     const tickRow = document.createElement('div');
     tickRow.style.cssText = 'display:flex; justify-content:space-between; font-size:10px; color:#6c7086;';
-    ['-1', '0', '1'].forEach(t => {
+    ['0%', '50%', '100%'].forEach(t => {
       const s = document.createElement('span');
       s.textContent = t;
       tickRow.appendChild(s);
     });
-    bendBlock.appendChild(tickRow);
+    eccBlock.appendChild(tickRow);
 
-    wrap.appendChild(bendBlock);
+    wrap.appendChild(eccBlock);
     detailEl.appendChild(wrap);
     updateToolPanel(); return;
   }
@@ -18735,6 +19511,35 @@ function renderAnimListLegacy() {
     });
     _alignBtns.forEach(b => _alignRow.appendChild(b));
     _textWrap.appendChild(_alignRow);
+
+    appendSliderRow(_textWrap, 'Size', 8, 200, 1, anim.fontSize ?? 36, v => `${Math.round(v)}`, v => {
+      anim.fontSize = parseInt(v, 10);
+      _sizeInput.value = anim.fontSize;
+      updateCanvasTextEditorFromAnim(anim);
+      saveProject();
+    }, false, { valAlign: 'center' });
+    appendSliderRow(_textWrap, 'Width', 25, 300, 1, Math.round(Math.abs(textScaleX(anim)) * 100), v => `${Math.round(v)}%`, v => {
+      const sign = textScaleX(anim) < 0 ? -1 : 1;
+      anim.textScaleX = sign * Math.max(0.05, parseFloat(v) / 100);
+      updateCanvasTextEditorFromAnim(anim);
+      saveProject();
+    });
+    appendSliderRow(_textWrap, 'Height', 25, 300, 1, Math.round(Math.abs(textScaleY(anim)) * 100), v => `${Math.round(v)}%`, v => {
+      const sign = textScaleY(anim) < 0 ? -1 : 1;
+      anim.textScaleY = sign * Math.max(0.05, parseFloat(v) / 100);
+      updateCanvasTextEditorFromAnim(anim);
+      saveProject();
+    });
+    appendSliderRow(_textWrap, 'Slant X', -100, 100, 1, Math.round(textShearX(anim) * 100), v => `${Math.round(v)}%`, v => {
+      anim.textShearX = parseFloat(v) / 100;
+      updateCanvasTextEditorFromAnim(anim);
+      saveProject();
+    });
+    appendSliderRow(_textWrap, 'Slant Y', -100, 100, 1, Math.round(textShearY(anim) * 100), v => `${Math.round(v)}%`, v => {
+      anim.textShearY = parseFloat(v) / 100;
+      updateCanvasTextEditorFromAnim(anim);
+      saveProject();
+    });
 
     detailEl.appendChild(_textWrap);
 
@@ -19245,26 +20050,29 @@ function _skipOld() { // dead code stub — body deleted
         const sliderLbl = document.createElement('label'); sliderLbl.textContent = 'Eccentricity';
         const slider = document.createElement('input');
         slider.type = 'range'; slider.min = 0; slider.max = 100; slider.step = 1; slider.value = pct;
+        slider.disabled = !LEGACY_ECCENTRICITY_EDITING_ENABLED;
         slider.dataset.segEcc = segIdx;
         const sliderVal = document.createElement('span'); sliderVal.className = 'tree-slider-val'; sliderVal.textContent = `${pct}%`;
         sliderVal.dataset.segEccVal = segIdx;
-        slider.addEventListener('mousedown', () => {
-          selectedId = anim.id;
-          if (editModeAnimId !== anim.id) enterEditMode(anim, new Set());
-          anim.activeSegments = new Set([segIdx]);
-          resizeHover = null;
-          rotateHover = null;
-          anim.expandedArcs = new Set([segIdx]);
-          anim.expandedAnchors = new Set();
-          pushUndo(); draw();
-        });
-        slider.addEventListener('focus', () => { eccentricitySliderActiveKey = { animId: anim.id, segIdx }; draw(); });
-        slider.addEventListener('blur', () => { eccentricitySliderActiveKey = null; draw(); });
-        slider.addEventListener('input', () => {
-          seg.eccentricity = percentToEccentricity(parseFloat(slider.value));
-          sliderVal.textContent = `${Math.round(slider.value)}%`;
-          recompileSegment(anim, segIdx); draw();
-        });
+        if (LEGACY_ECCENTRICITY_EDITING_ENABLED) {
+          slider.addEventListener('mousedown', () => {
+            selectedId = anim.id;
+            if (editModeAnimId !== anim.id) enterEditMode(anim, new Set());
+            anim.activeSegments = new Set([segIdx]);
+            resizeHover = null;
+            rotateHover = null;
+            anim.expandedArcs = new Set([segIdx]);
+            anim.expandedAnchors = new Set();
+            pushUndo(); draw();
+          });
+          slider.addEventListener('focus', () => { eccentricitySliderActiveKey = { animId: anim.id, segIdx }; draw(); });
+          slider.addEventListener('blur', () => { eccentricitySliderActiveKey = null; draw(); });
+          slider.addEventListener('input', () => {
+            seg.eccentricity = percentToEccentricity(parseFloat(slider.value));
+            sliderVal.textContent = `${Math.round(slider.value)}%`;
+            recompileSegment(anim, segIdx); draw();
+          });
+        }
         sliderRow.append(sliderLbl, slider, sliderVal);
         const controlRow = document.createElement('div'); controlRow.className = 'tree-input-row arc-control-row';
         const controlLabel = document.createElement('label'); controlLabel.textContent = 'Control points';
@@ -19656,6 +20464,19 @@ function draw() {
     drawGraphs();
   } else {
     drawAnimations();
+    if (freeformPenCapture && freeformPenCapture.points.length >= 2) {
+      const pts = freeformPenCapture.points;
+      ctx.save();
+      ctx.strokeStyle = '#b4befe';
+      ctx.lineWidth = 2 * devicePixelRatio;
+      ctx.setLineDash([6 * devicePixelRatio, 4 * devicePixelRatio]);
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+      ctx.stroke();
+      ctx.restore();
+    }
     positionCanvasTextEditor();
   }
   if (AUX_WINDOWS_ENABLED && currentMode === 'animations') { drawObjectWindow(); drawIsolationWindow(); }
@@ -19908,9 +20729,9 @@ addFunction('sin(x)', 'cartesian');
 addFunction('cos(theta)', 'polar');
 functions.forEach(compileFunction);
 renderFunctionList();
-loadFreeformPlacementState();
 if (!loadProject()) renderAnimList();
 renderGlobalSettingsControls();
+updateToolPanel();
 
 resize();
 loadFromShareParam();
