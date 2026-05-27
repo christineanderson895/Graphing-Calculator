@@ -4013,7 +4013,7 @@ let activeTextEditUndoAnimId = null;
 let eccentricitySliderActiveKey  = null; // {animId, segIdx} | null — whose ecc slider is focused
 let currentTool = 'select';
 let selectedShapeKind = 'rectangle';
-let freeformPlacementBend = 50;  // 0–100; controls bend during freeform drawing, resets to 50 per new object
+let freeformPlacementBend = 0;  // 0–100; controls bend during freeform drawing, resets to 0 per new object
 let freeformBendModifier = 0; // Legacy disabled bend control; kept only so older notes/code are easy to trace.
 let freeformPendingSideSignal = null; // { animId, anchorCount, score } — strongest side signal for the pending freeform arc
 let freeformFirstArcPathSignal = null; // { animId, anchorCount, samples } — raw cursor trail for the first freeform arc
@@ -5596,7 +5596,7 @@ function nextLetter() {
 }
 
 function addAnimation(kind = 'freeform') {
-  if (kind === 'freeform') freeformPlacementBend = 50;
+  if (kind === 'freeform') freeformPlacementBend = 0;
   animations.forEach(a => {
     a.expanded = false;
     a.expandedArcs = new Set();
@@ -5901,65 +5901,30 @@ function duplicateAnimation() {
   const src = animations.find(a => a.id === selectedId);
   if (!src || src.inPlacementMode) return;
   pushUndo();
-  animations.forEach(a => {
-    a.expanded = false;
-    a.expandedArcs = new Set();
-    a.expandedAnchors = new Set();
-  });
-  const anim = {
-    id: Date.now() + Math.random(),
-    letter: nextLetter(),
-    color: src.color,
-    kind: animKind(src),
-    fillColor: animFillColor(src),
-    outlineOpacity: animOutlineOpacity(src),
-    fillOpacity: animFillOpacity(src),
-    fillStyle: animFillStyle(src),
-    closed: !!src.closed,
-    text: src.text ?? '',
-    fontSize: src.fontSize ?? 36,
-    fontFamily: src.fontFamily ?? 'sans-serif',
-    fontBold: src.fontBold ?? false,
-    fontItalic: src.fontItalic ?? false,
-    textAlign: src.textAlign ?? 'left',
-    textScaleX: src.textScaleX ?? 1,
-    textScaleY: src.textScaleY ?? 1,
-    textShearX: src.textShearX ?? 0,
-    textShearY: src.textShearY ?? 0,
-    visible: src.visible,
-    thickness: src.thickness,
-    rotation: animRotation(src),
-    anchors: src.anchors.map(a => new Cx(a.re + 1, a.im - 1)),
-    segments: src.segments.map(s => s ? ({
-      h0: new Cx(s.h0.re + 1, s.h0.im - 1),
-      h1: new Cx(s.h1.re + 1, s.h1.im - 1),
-      eccentricity: s.eccentricity,
-      compiled: null,
-      compiledRef: null,
-    }) : null),
-    anchorLocked: src.anchorLocked ? [...src.anchorLocked] : [],
-    activeSegments: new Set([...Array(src.segments.length).keys()]),
-    inPlacementMode: false,
-    expanded: true,
-    expandedAnchors: new Set(),
-    expandedArcs: new Set(),
-    curves: src.curves ? src.curves.map(c => ({
-      ...c,
-      id: Date.now() + Math.random(),
-      anchors: c.anchors.map(a => new Cx(a.re + 1, a.im - 1)),
-      segments: c.segments.map(s => s ? ({ h0: new Cx(s.h0.re + 1, s.h0.im - 1), h1: new Cx(s.h1.re + 1, s.h1.im - 1), eccentricity: s.eccentricity, compiled: null, compiledRef: null }) : null),
-      anchorLocked: c.anchorLocked ? [...c.anchorLocked] : [],
-      activeSegments: new Set(),
-      expandedAnchors: new Set(),
-      expandedArcs: new Set(),
-      gradientFromArcs: new Set(c.gradientFromArcs instanceof Set ? c.gradientFromArcs : []),
-      gradientToArcs: new Set(c.gradientToArcs instanceof Set ? c.gradientToArcs : []),
-    })) : null,
-    regions: [],
-  };
+  const off = 20 * devicePixelRatio / scale;
+  const anim = makeTransformedAnimation(src, pt => new Cx(pt.re + off, pt.im - off), animRotation(src));
   animations.push(anim);
   recompileAnim(anim);
   if (anim.curves) for (const c of anim.curves) recompileAnim(c);
+  if (anim.curves && src.regions?.length) {
+    detectObjectTopology(anim);
+    const idMap = new Map(src.curves.map((c, i) => [c.id, anim.curves[i].id]));
+    anim.regions.forEach((r, i) => {
+      const s = src.regions[i];
+      if (!s) return;
+      r.fillColor = s.fillColor;
+      r.fillOpacity = s.fillOpacity;
+      r.fillStyle = s.fillStyle;
+      r.gradientToColor = s.gradientToColor;
+      r.gradientToOpacity = s.gradientToOpacity;
+      r.gradientAngle = s.gradientAngle;
+      r.patternType = s.patternType;
+      r.patternAngle = s.patternAngle;
+      r.patternSpacing = s.patternSpacing;
+      r.fill1Arcs = s.fill1Arcs ? s.fill1Arcs.map(e => ({ ...e, animId: idMap.get(e.animId) ?? e.animId })) : null;
+      r.fill2Arcs = s.fill2Arcs ? s.fill2Arcs.map(e => ({ ...e, animId: idMap.get(e.animId) ?? e.animId })) : null;
+    });
+  }
   enterEditMode(anim);
   updateCursor();
 }
@@ -5969,7 +5934,11 @@ function duplicateAnimation() {
 // ════════════════════════════════════════════════════════
 
 function makeTransformedAnimation(src, transformPoint, rotation) {
+  const newAnimId = Date.now() + Math.random();
   const curveIdMap = new Map();
+  // For simple paths (no sub-curves), region boundaries reference the anim's own ID;
+  // map it to the new ID so copied regions remain valid.
+  if (!src.curves) curveIdMap.set(src.id, newAnimId);
   const newCurves = src.curves ? src.curves.map(c => {
     const newId = Date.now() + Math.random();
     curveIdMap.set(c.id, newId);
@@ -5991,7 +5960,7 @@ function makeTransformedAnimation(src, transformPoint, rotation) {
     boundary: r.boundary.map(edge => ({ ...edge, animId: curveIdMap.get(edge.animId) ?? edge.animId })),
   })) : [];
   return {
-    id: Date.now() + Math.random(),
+    id: newAnimId,
     letter: nextLetter(),
     color: src.color,
     kind: animKind(src),
@@ -5999,6 +5968,14 @@ function makeTransformedAnimation(src, transformPoint, rotation) {
     outlineOpacity: animOutlineOpacity(src),
     fillOpacity: animFillOpacity(src),
     fillStyle: animFillStyle(src),
+    gradientToColor: src.gradientToColor ?? null,
+    gradientToOpacity: src.gradientToOpacity ?? null,
+    gradientAngle: src.gradientAngle,
+    gradientFromArcs: new Set(src.gradientFromArcs instanceof Set ? src.gradientFromArcs : []),
+    gradientToArcs: new Set(src.gradientToArcs instanceof Set ? src.gradientToArcs : []),
+    patternType: src.patternType,
+    patternAngle: src.patternAngle,
+    patternSpacing: src.patternSpacing,
     closed: !!src.closed,
     text: src.text ?? '',
     fontSize: src.fontSize ?? 36,
@@ -6094,20 +6071,19 @@ function makeTransformedArcAnimation(src, segIdx, transformPoint) {
 
 function createSideActionCopy(src, kind) {
   if (!src || src.inPlacementMode) return;
-  const placement = sideActionTargetLeftMath(src, kind);
-  if (!placement) return;
-  const { bounds, targetLeft } = placement;
+  const bounds = selectedArcMathBounds(src) || objectMathBounds(src);
+  if (!bounds || !selectionSideActionButtons(src).some(b => b.kind === kind)) return;
   pushUndo();
 
+  const off = 20 * devicePixelRatio / scale;
   let transformPoint;
   let rotation = animRotation(src);
   if (kind === 'reflect') {
-    const mirrorX = (bounds.right + targetLeft) * 0.5;
-    transformPoint = pt => new Cx(2 * mirrorX - pt.re, pt.im);
+    const cx = (bounds.left + bounds.right) * 0.5;
+    transformPoint = pt => new Cx(2 * cx - pt.re + off, pt.im - off);
     rotation = -rotation;
   } else {
-    const dx = targetLeft - bounds.left;
-    transformPoint = pt => new Cx(pt.re + dx, pt.im);
+    transformPoint = pt => new Cx(pt.re + off, pt.im - off);
   }
 
   const segIdx = activeArcIndex(src);
@@ -6129,6 +6105,7 @@ function createSideActionCopy(src, kind) {
       r.fillStyle = s.fillStyle;
       r.gradientToColor = s.gradientToColor;
       r.gradientToOpacity = s.gradientToOpacity;
+      r.gradientAngle = s.gradientAngle;
       r.patternType = s.patternType;
       r.patternAngle = s.patternAngle;
       r.patternSpacing = s.patternSpacing;
@@ -6152,19 +6129,16 @@ function createGroupSideActionCopy(groupId, kind) {
   const members = allDescendantAnims(groupId);
   if (members.length === 0) return;
   const bounds = groupMathBounds(groupId);
-  const btn = groupSelectionSideActionButtons(groupId).find(b => b.kind === kind);
-  if (!bounds || !btn) return;
-  const gap = 6 * devicePixelRatio;
-  const [targetLeft] = toMath(btn.x + btn.w + gap, 0);
+  if (!bounds || !groupSelectionSideActionButtons(groupId).some(b => b.kind === kind)) return;
   pushUndo();
 
+  const off = 20 * devicePixelRatio / scale;
   let transformPoint;
   if (kind === 'reflect') {
-    const mirrorX = (bounds.right + targetLeft) * 0.5;
-    transformPoint = pt => new Cx(2 * mirrorX - pt.re, pt.im);
+    const cx = (bounds.left + bounds.right) * 0.5;
+    transformPoint = pt => new Cx(2 * cx - pt.re + off, pt.im - off);
   } else {
-    const dx = targetLeft - bounds.left;
-    transformPoint = pt => new Cx(pt.re + dx, pt.im);
+    transformPoint = pt => new Cx(pt.re + off, pt.im - off);
   }
 
   // Collect the full group hierarchy (root + all descendant groups)
@@ -6216,19 +6190,16 @@ function createMultiSelectionSideActionCopy(kind) {
   const members = multiSelectionMembers();
   if (members.length === 0) return;
   const bounds = multiSelectionMathBounds();
-  const btn = multiSelectionSideActionButtons().find(b => b.kind === kind);
-  if (!bounds || !btn) return;
-  const gap = 6 * devicePixelRatio;
-  const [targetLeft] = toMath(btn.x + btn.w + gap, 0);
+  if (!bounds || !multiSelectionSideActionButtons().some(b => b.kind === kind)) return;
   pushUndo();
 
+  const off = 20 * devicePixelRatio / scale;
   let transformPoint;
   if (kind === 'reflect') {
-    const mirrorX = (bounds.right + targetLeft) * 0.5;
-    transformPoint = pt => new Cx(2 * mirrorX - pt.re, pt.im);
+    const cx = (bounds.left + bounds.right) * 0.5;
+    transformPoint = pt => new Cx(2 * cx - pt.re + off, pt.im - off);
   } else {
-    const dx = targetLeft - bounds.left;
-    transformPoint = pt => new Cx(pt.re + dx, pt.im);
+    transformPoint = pt => new Cx(pt.re + off, pt.im - off);
   }
 
   const copies = members.map(src => {
