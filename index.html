@@ -4039,7 +4039,7 @@ let rotateHover  = null; // {anim} | null
 let sideActionHover = null; // {anim|groupId|multi, kind:'duplicate'|'reflect'|'rotate'} | null
 let freeformPenActive  = false;
 let freeformPenCapture = null; // null | {points:[{x,y},...]} in device pixels
-let freeformPenTolerance = 10; // CSS pixels, used by RDP simplification
+let freeformPenTolerance = 2; // CSS pixels, used by RDP simplification
 let plusHover    = null; // {anim, end:'A0'|'A2'} | null
 let lockHover    = null; // {anim, anchorIdx} | null — interior anchor lock toggle
 let rubberBand   = null; // {startX,startY,curX,curY,ctrl} | null — drag-region selection
@@ -5833,7 +5833,7 @@ function renderFreeformPenSidebar(detailEl) {
 
   const tolSlider = document.createElement('input');
   tolSlider.type = 'range';
-  tolSlider.min = '1'; tolSlider.max = '50'; tolSlider.step = '1';
+  tolSlider.min = '2'; tolSlider.max = '5'; tolSlider.step = '1';
   tolSlider.value = String(freeformPenTolerance);
   tolSlider.className = 'bend-slider';
   tolSlider.tabIndex = -1;
@@ -6114,10 +6114,13 @@ function createSideActionCopy(src, kind) {
     });
   }
 
+  editModeAnimId = null;
+  drillObjectArc = null;
+  selectedObjectNode = null;
+  selectedObjectRegionId = null;
   selectedGroupId = null;
-  selectedId = src.id;
-  src.expanded = true;
-  anim.expanded = false;
+  selectedId = anim.id;
+  animations.forEach(a => { a.expanded = false; });
   anim.activeSegments = new Set();
   anim.expandedAnchors = new Set();
   anim.expandedArcs = new Set();
@@ -6211,7 +6214,7 @@ function createMultiSelectionSideActionCopy(kind) {
   });
   animations.push(...copies);
   renumberAnimationsByStackOrder();
-  selectTemporaryMultiSelection(members.map(a => a.id));
+  selectTemporaryMultiSelection(copies.map(c => c.id));
   renderAnimList(); draw(); updateCursor();
 }
 
@@ -12789,6 +12792,13 @@ function drawTopoFeatureSelectionBounds(anim) {
       const a = curve.anchors[i];
       if (a) bounds = includeCanvasPoint(bounds, toCanvas(a.re, a.im));
     }
+    // Include Bézier handle positions so control points stay inside the selection frame
+    for (let si = fromIdx; si < toIdx; si++) {
+      const seg = curve.segments[si];
+      if (!seg) continue;
+      if (seg.h0) bounds = includeCanvasPoint(bounds, toCanvas(seg.h0.re, seg.h0.im));
+      if (seg.h1) bounds = includeCanvasPoint(bounds, toCanvas(seg.h1.re, seg.h1.im));
+    }
     // Include plus-sign positions when arc endpoint coincides with curve endpoint
     for (const pp of getPlusPositions(curve)) {
       if ((pp.anchorIdx === 0 && fromIdx === 0) ||
@@ -12849,9 +12859,11 @@ function drawSelectedObjectBounds(anim) {
   ctx.shadowColor = CANVAS_TOOL_COLOR;
   ctx.strokeRect(x, y, w, h);
 
+  ctx.strokeStyle = 'black';
   ctx.lineWidth = 0.9 * dpr;
-  ctx.globalAlpha = 0.26;
+  ctx.globalAlpha = 1.0;
   ctx.strokeRect(outerX, outerY, outerW, outerH);
+  ctx.strokeStyle = CANVAS_TOOL_COLOR;
 
   ctx.lineWidth = 2 * dpr;
   ctx.globalAlpha = 0.3;
