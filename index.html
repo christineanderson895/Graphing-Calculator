@@ -4036,7 +4036,8 @@ let anchorHover  = null; // {anim, anchorIdx} | null
 let handleHover  = null; // {anim, segIdx, side} | null
 let resizeHover  = null; // {anim, handle} | null
 let rotateHover  = null; // {anim} | null
-let sideActionHover = null; // {anim|groupId|multi, kind:'duplicate'|'reflect'|'rotate'} | null
+let sideActionHover = null; // {anim|groupId|multi, kind:'menu'|'duplicate'|'reflect'|'rotate'} | null
+let sideActionMenuOpen = false;
 let freeformPenActive  = false;
 let freeformPenCapture = null; // null | {points:[{x,y},...]} in device pixels
 let freeformPenTolerance = 2; // CSS pixels, used by RDP simplification
@@ -5426,6 +5427,7 @@ function exitEditMode() {
   rotateHover = null;
   rotateDrag = null;
   sideActionHover = null;
+  sideActionMenuOpen = false;
   segmentHover = null;
   anchorHover = null;
   handleHover = null;
@@ -5499,9 +5501,10 @@ function finalizePrimitivePlacement(anim) {
   placementPreviewPos = null;
   resetFreeformPlacementPathTracking();
   detectObjectTopology(anim);
-  enterEditMode(anim);
+  enterEditMode(anim, new Set());
+  exitEditMode();
   selectedShapeKind = SHAPE_TOOL_KINDS.includes(animKind(anim)) ? animKind(anim) : selectedShapeKind;
-  currentTool = 'shape';
+  currentTool = 'select';
   updateToolPanel();
   renderAnimList(); draw(); updateCursor();
   saveProject();
@@ -5526,8 +5529,9 @@ function finalizePolylinePlacement(anim) {
   recompileAnim(anim);
   placementPreviewPos = null;
   resetFreeformPlacementPathTracking();
-  enterEditMode(anim);
-  currentTool = 'arc-builder';
+  enterEditMode(anim, new Set());
+  exitEditMode();
+  currentTool = 'select';
   updateToolPanel();
   renderAnimList(); draw(); updateCursor();
   saveProject();
@@ -5540,6 +5544,8 @@ function finalizePlacement(anim) {
   if (anim.anchors.length === 0) {
     resetFreeformPlacementPathTracking();
     animations = animations.filter(a => a.id !== anim.id);
+    currentTool = 'select';
+    updateToolPanel();
     renderAnimList(); draw(); updateCursor(); return;
   }
   // Auto-close if first and last anchors are within snap threshold
@@ -5565,8 +5571,9 @@ function finalizePlacement(anim) {
   placementMatchCandidate = null;
   resetFreeformPlacementPathTracking();
   detectObjectTopology(anim);
-  enterEditMode(anim);
-  currentTool = 'arc-builder';
+  enterEditMode(anim, new Set());
+  exitEditMode();
+  currentTool = 'select';
   updateToolPanel();
   renderAnimList(); draw(); updateCursor();
   saveProject();
@@ -5686,7 +5693,10 @@ function startPlacementFromTool(kind) {
   if (kind === 'select') {
     if (freeformPenActive) { freeformPenActive = false; freeformPenCapture = null; }
     const placing = animations.find(a => a.inPlacementMode);
-    if (placing) cancelPlacement(placing);
+    if (placing) {
+      finalizePlacement(placing);
+      return;
+    }
     currentTool = 'select';
     updateToolPanel();
     renderAnimList();
@@ -5801,9 +5811,10 @@ function commitFreeformPenStroke() {
   anim.inPlacementMode = false;
   recompileAnim(anim);
   detectObjectTopology(anim);
-  freeformPenActive = true;
-  currentTool = 'freeform';
-  enterEditMode(anim);
+  freeformPenActive = false;
+  enterEditMode(anim, new Set());
+  exitEditMode();
+  currentTool = 'select';
   pushUndo();
   updateToolPanel();
   renderAnimList(); draw(); updateCursor();
@@ -6072,7 +6083,7 @@ function makeTransformedArcAnimation(src, segIdx, transformPoint) {
 function createSideActionCopy(src, kind) {
   if (!src || src.inPlacementMode) return;
   const bounds = selectedArcMathBounds(src) || objectMathBounds(src);
-  if (!bounds || !selectionSideActionButtons(src).some(b => b.kind === kind)) return;
+  if (!bounds || !['duplicate','reflect','rotate'].includes(kind)) return;
   pushUndo();
 
   const off = 20 * devicePixelRatio / scale;
@@ -6132,7 +6143,7 @@ function createGroupSideActionCopy(groupId, kind) {
   const members = allDescendantAnims(groupId);
   if (members.length === 0) return;
   const bounds = groupMathBounds(groupId);
-  if (!bounds || !groupSelectionSideActionButtons(groupId).some(b => b.kind === kind)) return;
+  if (!bounds || !['duplicate','reflect','rotate'].includes(kind)) return;
   pushUndo();
 
   const off = 20 * devicePixelRatio / scale;
@@ -6193,7 +6204,7 @@ function createMultiSelectionSideActionCopy(kind) {
   const members = multiSelectionMembers();
   if (members.length === 0) return;
   const bounds = multiSelectionMathBounds();
-  if (!bounds || !multiSelectionSideActionButtons().some(b => b.kind === kind)) return;
+  if (!bounds || !['duplicate','reflect','rotate'].includes(kind)) return;
   pushUndo();
 
   const off = 20 * devicePixelRatio / scale;
@@ -7793,6 +7804,10 @@ canvas.addEventListener('mousedown', e => {
     handleSideActionButtonPress(sideAction);
     return;
   }
+  if (sideActionMenuOpen) {
+    sideActionMenuOpen = false;
+    draw();
+  }
 
   const activeRotateHit = (rotateHover && isRotationModeActiveForHit(rotateHover)) ? rotateHover : queryRotationWheelHover(cx, cy);
   if (activeRotateHit) {
@@ -8004,6 +8019,17 @@ canvas.addEventListener('mousedown', e => {
       const _aHit = anchorHover ?? queryAnchorHover(mathX, mathY);
       const _hHit = !_aHit ? (handleHover ?? queryHandleHover(mathX, mathY)) : null;
       _rbSkip = !!_aHit || !!_hHit;
+    } else if (selectedId !== null) {
+      // In selection-frame mode: allow dragging topology nodes without deselecting
+      const _sfAnim = animations.find(a => a.id === selectedId);
+      if (_sfAnim && !isTextAnim(_sfAnim)) {
+        const { essentialPoints: _sfEps } = computeObjectTopologyData(_sfAnim);
+        const _sfHIT = 14 * devicePixelRatio;
+        for (const _sfEp of _sfEps) {
+          const [_sfCx, _sfCy] = toCanvas(_sfEp.pos.re, _sfEp.pos.im);
+          if (Math.hypot(cx - _sfCx, cy - _sfCy) <= _sfHIT) { _rbSkip = true; break; }
+        }
+      }
     }
     if (!_rbSkip) {
       pendingRubberBand = { startX: cx, startY: cy, startClientX: e.clientX, startClientY: e.clientY, clickCx: cx, clickCy: cy, clickMathX: mathX, clickMathY: mathY, savedEditModeAnimId: editModeAnimId };
@@ -8035,7 +8061,7 @@ canvas.addEventListener('mousedown', e => {
             if (isPrimitiveAnim(_nc) || isTextAnim(_nc)) continue;
             for (let _ai = 0; _ai < _nc.anchors.length; _ai++) {
               const _na = _nc.anchors[_ai];
-              if (_na && Math.hypot(_na.re - ep.pos.re, _na.im - ep.pos.im) < 1e-4) {
+              if (_na && Math.hypot(_na.re - ep.pos.re, _na.im - ep.pos.im) < 1e-2) {
                 _nodeAnchors.push({ anim: _nc, anchorIdx: _ai });
               }
             }
@@ -8077,6 +8103,14 @@ canvas.addEventListener('mousedown', e => {
           updateCursor(); draw(); return;
         }
       }
+      const _hitReg = hitTestObjectRegion(_topoAnim, cx, cy);
+      if (_hitReg !== null) {
+        e.preventDefault();
+        selectedObjectNode = null; drillObjectArc = null;
+        selectedObjectRegionId = { animId: selectedId, id: _hitReg };
+        activeTopoTab = 'region';
+        renderAnimList(); draw(); return;
+      }
       if (_tas.length) {
         const _arcHitThreshold = 10 * devicePixelRatio;
         const _curvesById = buildTopologyCurvesMap(_topoAnim);
@@ -8111,14 +8145,6 @@ canvas.addEventListener('mousedown', e => {
           }
           renderAnimList(); draw(); return;
         }
-      }
-      const _hitReg = hitTestObjectRegion(_topoAnim, cx, cy);
-      if (_hitReg !== null) {
-        e.preventDefault();
-        selectedObjectNode = null; drillObjectArc = null;
-        selectedObjectRegionId = { animId: selectedId, id: _hitReg };
-        activeTopoTab = 'region';
-        renderAnimList(); draw(); return;
       }
       } // end if (!_overInteractive)
     }
@@ -8168,7 +8194,7 @@ canvas.addEventListener('mousedown', e => {
           if (_sib === aHitAnim) continue;
           for (let _ai = 0; _ai < _sib.anchors.length; _ai++) {
             const _sa = _sib.anchors[_ai];
-            if (_sa && Math.hypot(_sa.re - _pos.re, _sa.im - _pos.im) < 1e-4) {
+            if (_sa && Math.hypot(_sa.re - _pos.re, _sa.im - _pos.im) < 1e-2) {
               const _saOrig = cloneCx(_sa);
               const _saOutSeg = _sib.segments[_ai];
               const _saInSeg = _ai > 0 ? _sib.segments[_ai - 1] : null;
@@ -8523,14 +8549,22 @@ window.addEventListener('mousemove', e => {
     const curveThresh = snapCurveThreshold();
     if (curveThresh > 0) {
       let bestDist = curveThresh, bestPt = null;
+      // Skip the primary anchor and any coincident anchors — they're all being moved
+      // together and must not be used as snap targets (on subsequent frames they would
+      // be at the previous frame's position, causing a lag/jump).
+      const _ccSkip = new Set((anchorDrag.coincidentAnchors ?? []).map(cc => `${cc.anim.id}:${cc.anchorIdx}`));
+      _ccSkip.add(`${anim.id}:${anchorIdx}`);
       for (const a of animations) {
         if (a.inPlacementMode || isPrimitiveAnim(a) || isTextAnim(a)) continue;
         const n = a.anchors.length;
         if (n < 1) continue;
-        const candidates = a === anim
-          ? (anchorIdx === 0 ? [a.anchors[n - 1]] : anchorIdx === n - 1 ? [a.anchors[0]] : [])
-          : [a.anchors[0], a.anchors[n - 1]];
-        for (const anchor of candidates) {
+        const checkIdxs = a === anim
+          ? (anchorIdx === 0 ? [n - 1] : anchorIdx === n - 1 ? [0] : [])
+          : [0, n - 1];
+        for (const ci of checkIdxs) {
+          if (_ccSkip.has(`${a.id}:${ci}`)) continue;
+          const anchor = a.anchors[ci];
+          if (!anchor) continue;
           const d = Math.hypot(anchor.re - snapX, anchor.im - snapY);
           if (d < bestDist) { bestDist = d; bestPt = anchor; }
         }
@@ -8553,6 +8587,9 @@ window.addEventListener('mousemove', e => {
           if (_skipKeys.has(`${_sib.id}:${_ai}`)) continue;
           const _sa = _sib.anchors[_ai];
           if (!_sa) continue;
+          // Skip anchors at the dragged node's original position — they are coincident
+          // with the primary but may lag one frame, causing snap-back if not excluded.
+          if (Math.hypot(_sa.re - anchorDrag.origAnchor.re, _sa.im - anchorDrag.origAnchor.im) < 2 / scale) continue;
           const _d = Math.hypot(_sa.re - snapX, _sa.im - snapY);
           if (_d < _weldBest) { _weldBest = _d; _weldPt = _sa; }
         }
@@ -8575,7 +8612,7 @@ window.addEventListener('mousemove', e => {
           const p1 = anchorDrag.nextAnchor;
           anim.segments[anchorIdx].h0 = new Cx(snapX + (p1.re - snapX) / 3, snapY + (p1.im - snapY) / 3);
           anim.segments[anchorIdx].h1 = new Cx(snapX + 2 * (p1.re - snapX) / 3, snapY + 2 * (p1.im - snapY) / 3);
-        } else if (isInterior && origH0 !== null) {
+        } else if (origH0 !== null) {
           anim.segments[anchorIdx].h0 = new Cx(origH0.re + sdx, origH0.im + sdy);
         }
       }
@@ -8585,7 +8622,7 @@ window.addEventListener('mousemove', e => {
           const p0 = anchorDrag.prevAnchor;
           anim.segments[anchorIdx - 1].h0 = new Cx(p0.re + (snapX - p0.re) / 3, p0.im + (snapY - p0.im) / 3);
           anim.segments[anchorIdx - 1].h1 = new Cx(p0.re + 2 * (snapX - p0.re) / 3, p0.im + 2 * (snapY - p0.im) / 3);
-        } else if (isInterior && origH1 !== null) {
+        } else if (origH1 !== null) {
           anim.segments[anchorIdx - 1].h1 = new Cx(origH1.re + sdx, origH1.im + sdy);
         }
       }
@@ -8605,7 +8642,7 @@ window.addEventListener('mousemove', e => {
           if (_cOutStraight && _cNext) {
             _ca.segments[_cai].h0 = new Cx(_cSnapX + (_cNext.re - _cSnapX) / 3, _cSnapY + (_cNext.im - _cSnapY) / 3);
             _ca.segments[_cai].h1 = new Cx(_cSnapX + 2 * (_cNext.re - _cSnapX) / 3, _cSnapY + 2 * (_cNext.im - _cSnapY) / 3);
-          } else if (_cIsInterior && _cOrigH0 !== null) {
+          } else if (_cOrigH0 !== null) {
             _ca.segments[_cai].h0 = new Cx(_cOrigH0.re + sdx, _cOrigH0.im + sdy);
           }
         }
@@ -8613,7 +8650,7 @@ window.addEventListener('mousemove', e => {
           if (_cInStraight && _cPrev) {
             _ca.segments[_cai - 1].h0 = new Cx(_cPrev.re + (_cSnapX - _cPrev.re) / 3, _cPrev.im + (_cSnapY - _cPrev.im) / 3);
             _ca.segments[_cai - 1].h1 = new Cx(_cPrev.re + 2 * (_cSnapX - _cPrev.re) / 3, _cPrev.im + 2 * (_cSnapY - _cPrev.im) / 3);
-          } else if (_cIsInterior && _cOrigH1 !== null) {
+          } else if (_cOrigH1 !== null) {
             _ca.segments[_cai - 1].h1 = new Cx(_cOrigH1.re + sdx, _cOrigH1.im + sdy);
           }
         }
@@ -8845,6 +8882,14 @@ window.addEventListener('mouseup', e => {
       const _topoAnim = animations.find(a => a.id === selectedId);
       if (_topoAnim && !isTextAnim(_topoAnim)) {
         const { topoArcs: _tas } = computeObjectTopologyData(_topoAnim);
+        // Region check first so clicking inside a region always wins over nearby arc boundaries.
+        const _hitReg = hitTestObjectRegion(_topoAnim, _prb.clickCx, _prb.clickCy);
+        if (_hitReg !== null) {
+          selectedObjectNode = null; drillObjectArc = null;
+          selectedObjectRegionId = { animId: selectedId, id: _hitReg };
+          activeTopoTab = 'region';
+          renderAnimList(); draw(); return;
+        }
         if (_tas.length) {
           const _arcHitThreshold = 10 * devicePixelRatio;
           const _curvesById = buildTopologyCurvesMap(_topoAnim);
@@ -8876,13 +8921,6 @@ window.addEventListener('mouseup', e => {
             }
             renderAnimList(); draw(); return;
           }
-        }
-        const _hitReg = hitTestObjectRegion(_topoAnim, _prb.clickCx, _prb.clickCy);
-        if (_hitReg !== null) {
-          selectedObjectNode = null; drillObjectArc = null;
-          selectedObjectRegionId = { animId: selectedId, id: _hitReg };
-          activeTopoTab = 'region';
-          renderAnimList(); draw(); return;
         }
       }
     }
@@ -11120,18 +11158,27 @@ function multiSelectionSideActionButtons() {
 function sideActionButtonsForFrame(f) {
   if (!f) return [];
   const dpr = devicePixelRatio;
-  const w = 38 * dpr;
-  const rotateW = 30 * dpr;
+  const w = 27 * dpr;
   const h = 22 * dpr;
-  const gap = 5 * dpr;
   const rightEdge = f.outerX + f.outerW + f.extend;
   const topEdge = f.outerY - f.extend;
   const x = rightEdge + 7 * dpr;
   const y = topEdge + 12 * dpr;
+  return [{ kind: 'menu', x, y, w, h }];
+}
+
+function sideActionMenuItemsForFrame(f) {
+  if (!f || !sideActionMenuOpen) return [];
+  const dpr = devicePixelRatio;
+  const h = 22 * dpr;
+  const gap = 4 * dpr;
+  const w = 90 * dpr;
+  const [menuBtn] = sideActionButtonsForFrame(f);
+  if (!menuBtn) return [];
   return [
-    { kind: 'duplicate', x, y, w, h },
-    { kind: 'reflect', x, y: y + h + gap, w, h },
-    { kind: 'rotate', x, y: y + (h + gap) * 2, w: rotateW, h },
+    { kind: 'duplicate', x: menuBtn.x, y: menuBtn.y + menuBtn.h + gap,              w, h },
+    { kind: 'reflect',   x: menuBtn.x, y: menuBtn.y + menuBtn.h + gap + (h + gap),   w, h },
+    { kind: 'rotate',    x: menuBtn.x, y: menuBtn.y + menuBtn.h + gap + (h + gap)*2, w, h },
   ];
 }
 
@@ -11142,20 +11189,32 @@ function pointInRect(px, py, rect) {
 function querySideActionButtonHover(cx, cy) {
   const anim = selectedObjectAnim();
   if (anim && isAnimEffectivelyVisible(anim) && !anim.inPlacementMode && !hasActiveArcSelection(anim)) {
-    for (const btn of selectionSideActionButtons(anim)) {
+    const f = selectionFrameMetrics(anim);
+    for (const btn of sideActionButtonsForFrame(f)) {
       if (pointInRect(cx, cy, btn)) return { anim, kind: btn.kind };
+    }
+    for (const item of sideActionMenuItemsForFrame(f)) {
+      if (pointInRect(cx, cy, item)) return { anim, kind: item.kind };
     }
     return null;
   }
   if (isGroupSelectionActive()) {
-    for (const btn of groupSelectionSideActionButtons(selectedGroupId)) {
+    const f = groupSelectionFrameMetrics(selectedGroupId);
+    for (const btn of sideActionButtonsForFrame(f)) {
       if (pointInRect(cx, cy, btn)) return { groupId: selectedGroupId, kind: btn.kind };
+    }
+    for (const item of sideActionMenuItemsForFrame(f)) {
+      if (pointInRect(cx, cy, item)) return { groupId: selectedGroupId, kind: item.kind };
     }
     return null;
   }
   if (isMultiSelectionActive()) {
-    for (const btn of multiSelectionSideActionButtons()) {
+    const f = multiSelectionFrameMetrics();
+    for (const btn of sideActionButtonsForFrame(f)) {
       if (pointInRect(cx, cy, btn)) return { multi: true, kind: btn.kind };
+    }
+    for (const item of sideActionMenuItemsForFrame(f)) {
+      if (pointInRect(cx, cy, item)) return { multi: true, kind: item.kind };
     }
     return null;
   }
@@ -11170,6 +11229,12 @@ function toggleRotationModeFromSideAction(action) {
 
 function handleSideActionButtonPress(action) {
   if (!action) return false;
+  if (action.kind === 'menu') {
+    sideActionMenuOpen = !sideActionMenuOpen;
+    draw();
+    return true;
+  }
+  sideActionMenuOpen = false;
   if (action.kind === 'rotate') {
     toggleRotationModeFromSideAction(action);
     renderAnimList(); draw(); updateCursor();
@@ -12571,15 +12636,28 @@ function drawSelectionSideActionButton(btn, active, showLabel = active) {
   ctx.lineWidth = (active ? 1.4 : 1) * dpr;
   ctx.strokeRect(btn.x, btn.y, btn.w, btn.h);
 
-  ctx.globalAlpha = active ? 0.62 : 0.4;
-  ctx.beginPath();
-  ctx.moveTo(midX, btn.y + 3 * dpr);
-  ctx.lineTo(midX, btn.y + btn.h - 3 * dpr);
-  if (btn.kind !== 'rotate') ctx.stroke();
-
   if (btn.kind === 'rotate') {
     drawRotationSideActionIcon(btn, active);
+  } else if (btn.kind === 'menu') {
+    const lineLen = 13 * dpr;
+    const lineX0 = midX - lineLen * 0.5;
+    const lineX1 = midX + lineLen * 0.5;
+    ctx.globalAlpha = active ? 0.9 : 0.7;
+    ctx.strokeStyle = active ? CANVAS_BUTTON_COLOR : CANVAS_BUTTON_IDLE_COLOR;
+    ctx.lineWidth = 1.5 * dpr;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(lineX0, midY - 4.5 * dpr); ctx.lineTo(lineX1, midY - 4.5 * dpr);
+    ctx.moveTo(lineX0, midY);              ctx.lineTo(lineX1, midY);
+    ctx.moveTo(lineX0, midY + 4.5 * dpr); ctx.lineTo(lineX1, midY + 4.5 * dpr);
+    ctx.stroke();
   } else {
+    ctx.globalAlpha = active ? 0.62 : 0.4;
+    ctx.beginPath();
+    ctx.moveTo(midX, btn.y + 3 * dpr);
+    ctx.lineTo(midX, btn.y + btn.h - 3 * dpr);
+    ctx.stroke();
+
     ctx.globalAlpha = active ? 0.9 : 0.7;
     ctx.fillStyle = active ? CANVAS_BUTTON_COLOR : CANVAS_BUTTON_IDLE_COLOR;
     ctx.font = `700 ${12 * dpr}px sans-serif`;
@@ -12601,7 +12679,7 @@ function drawSelectionSideActionButton(btn, active, showLabel = active) {
 
 function drawSelectionSideActionLabel(btn) {
   const dpr = devicePixelRatio;
-  const text = btn.kind === 'reflect' ? 'Reflect' : btn.kind === 'rotate' ? 'Rotate' : 'Duplicate';
+  const text = btn.kind === 'reflect' ? 'Reflect' : btn.kind === 'rotate' ? 'Rotate' : btn.kind === 'menu' ? 'Menu' : 'Duplicate';
   ctx.save();
   ctx.font = `${11 * dpr}px sans-serif`;
   ctx.textAlign = 'left';
@@ -12627,11 +12705,38 @@ function drawSelectionSideActionLabel(btn) {
   ctx.restore();
 }
 
+function drawSideActionMenuItem(item, hovered) {
+  const dpr = devicePixelRatio;
+  const midX = item.x + item.w * 0.5;
+  const midY = item.y + item.h * 0.5;
+  const text = item.kind === 'reflect' ? 'Reflect' : item.kind === 'rotate' ? 'Rotate' : 'Duplicate';
+  ctx.save();
+  ctx.fillStyle = '#11111b';
+  ctx.globalAlpha = hovered ? 0.92 : 0.82;
+  ctx.fillRect(item.x, item.y, item.w, item.h);
+  ctx.globalAlpha = hovered ? 0.78 : 0.56;
+  ctx.strokeStyle = hovered ? CANVAS_BUTTON_COLOR : CANVAS_BUTTON_IDLE_COLOR;
+  ctx.lineWidth = (hovered ? 1.4 : 1) * dpr;
+  ctx.strokeRect(item.x, item.y, item.w, item.h);
+  ctx.globalAlpha = hovered ? 0.9 : 0.7;
+  ctx.fillStyle = hovered ? CANVAS_BUTTON_COLOR : CANVAS_BUTTON_IDLE_COLOR;
+  ctx.font = `600 ${11 * dpr}px sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, midX, midY + 0.5 * dpr);
+  ctx.restore();
+}
+
 function drawSelectionSideActionButtons(anim) {
-  for (const btn of selectionSideActionButtons(anim)) {
+  const f = selectionFrameMetrics(anim);
+  for (const btn of sideActionButtonsForFrame(f)) {
     const hovered = sideActionHover?.anim === anim && sideActionHover?.kind === btn.kind;
     const active = hovered || (btn.kind === 'rotate' && isRotationModeActiveForAnim(anim));
     drawSelectionSideActionButton(btn, active, hovered);
+  }
+  for (const item of sideActionMenuItemsForFrame(f)) {
+    const hovered = sideActionHover?.anim === anim && sideActionHover?.kind === item.kind;
+    drawSideActionMenuItem(item, hovered);
   }
 }
 
@@ -12767,11 +12872,8 @@ function drawNodeDots(anim) {
       }
     }
     ctx.globalAlpha = onBoundary ? 1 : 0.45;
-    ctx.fillStyle = dotColor || CANVAS_TOOL_COLOR;
     const [ncx, ncy] = toCanvas(ep.pos.re, ep.pos.im);
-    ctx.beginPath();
-    ctx.arc(ncx, ncy, 3.2 * dpr, 0, Math.PI * 2);
-    ctx.fill();
+    drawAnchorDot([ncx, ncy], dotColor || anim.color, 5 * dpr);
   }
   ctx.restore();
 }
@@ -12931,9 +13033,11 @@ function drawSelectedGroupBounds() {
   ctx.strokeRect(x, y, w, h);
 
   ctx.shadowBlur = 0;
+  ctx.strokeStyle = 'black';
   ctx.lineWidth = 0.9 * dpr;
-  ctx.globalAlpha = 0.3;
+  ctx.globalAlpha = 1.0;
   ctx.strokeRect(outerX, outerY, outerW, outerH);
+  ctx.strokeStyle = CANVAS_TOOL_COLOR;
 
   ctx.lineWidth = 2 * dpr;
   ctx.globalAlpha = 0.34;
@@ -12969,10 +13073,15 @@ function drawSelectedGroupBounds() {
   ctx.stroke();
 
   ctx.shadowBlur = 0;
-  for (const btn of groupSelectionSideActionButtons(selectedGroupId)) {
+  const _gf = groupSelectionFrameMetrics(selectedGroupId);
+  for (const btn of sideActionButtonsForFrame(_gf)) {
     const hovered = sideActionHover?.groupId === selectedGroupId && sideActionHover?.kind === btn.kind;
     const active = hovered || (btn.kind === 'rotate' && isRotationModeActiveForGroup(selectedGroupId));
     drawSelectionSideActionButton(btn, active, hovered);
+  }
+  for (const item of sideActionMenuItemsForFrame(_gf)) {
+    const hovered = sideActionHover?.groupId === selectedGroupId && sideActionHover?.kind === item.kind;
+    drawSideActionMenuItem(item, hovered);
   }
   ctx.restore();
 }
@@ -12998,9 +13107,11 @@ function drawSelectedMultiSelectionBounds() {
   ctx.strokeRect(x, y, w, h);
 
   ctx.shadowBlur = 0;
+  ctx.strokeStyle = 'black';
   ctx.lineWidth = 0.9 * dpr;
-  ctx.globalAlpha = 0.3;
+  ctx.globalAlpha = 1.0;
   ctx.strokeRect(outerX, outerY, outerW, outerH);
+  ctx.strokeStyle = CANVAS_TOOL_COLOR;
 
   ctx.lineWidth = 2 * dpr;
   ctx.globalAlpha = 0.34;
@@ -13036,10 +13147,15 @@ function drawSelectedMultiSelectionBounds() {
   ctx.stroke();
 
   ctx.shadowBlur = 0;
-  for (const btn of multiSelectionSideActionButtons()) {
+  const _mf = multiSelectionFrameMetrics();
+  for (const btn of sideActionButtonsForFrame(_mf)) {
     const hovered = sideActionHover?.multi && sideActionHover?.kind === btn.kind;
     const active = hovered || (btn.kind === 'rotate' && isRotationModeActiveForMultiSelection());
     drawSelectionSideActionButton(btn, active, hovered);
+  }
+  for (const item of sideActionMenuItemsForFrame(_mf)) {
+    const hovered = sideActionHover?.multi && sideActionHover?.kind === item.kind;
+    drawSideActionMenuItem(item, hovered);
   }
   ctx.restore();
 }
@@ -17095,6 +17211,20 @@ function drawObjectRegionFillsForAnim(anim) {
         } else { ctx.fillStyle = _rFill; ctx.globalAlpha = opacity; }
       } else { ctx.fillStyle = _rFill; ctx.globalAlpha = opacity; }
       ctx.fill();
+    }
+    // Selected-region canvas highlight: blue stroke + faint fill over the region boundary
+    if (region.id === _selRegionId) {
+      ctx.save();
+      ctx.beginPath();
+      addRegionBoundaryToPathLike(ctx, region.boundary, curvesMap);
+      ctx.fillStyle = '#89b4fa';
+      ctx.globalAlpha = 0.12;
+      ctx.fill();
+      ctx.strokeStyle = '#89b4fa';
+      ctx.lineWidth = 1.5 * devicePixelRatio;
+      ctx.globalAlpha = 0.75;
+      ctx.stroke();
+      ctx.restore();
     }
     ctx.restore();
   }
