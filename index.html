@@ -9113,6 +9113,31 @@ window.addEventListener('mouseup', e => {
   if (pendingRubberBand) {
     const _prb = pendingRubberBand;
     pendingRubberBand = null;
+    // If a topmost object (by z-order) other than the selected one covers this point, prefer it.
+    if (selectedId != null && !isGroupSelectionActive() && !isMultiSelectionActive()) {
+      const _topFill = queryFillHit(_prb.clickCx, _prb.clickCy);
+      if (_topFill && _topFill.id !== selectedId && !objectGroupId(_topFill)) {
+        selectFromScene(_topFill);
+        renderAnimList(); draw(); updateCursor();
+        return;
+      }
+      const _segThresh = 10 * devicePixelRatio;
+      for (let _i = animations.length - 1; _i >= 0; _i--) {
+        const _sc = segmentHitCandidate(animations[_i], _prb.clickCx, _prb.clickCy);
+        if (!_sc || _sc.dist > _segThresh) continue;
+        if (_sc.hit.anim.id !== selectedId && !objectGroupId(_sc.hit.anim)) {
+          const _sha = _sc.hit.anim;
+          enterEditMode(_sha, new Set());
+          _sha.expanded = true;
+          animations.forEach(a => { if (a.id !== _sha.id) { a.expanded = false; a.expandedArcs = new Set(); a.expandedAnchors = new Set(); } });
+          _sha.expandedArcs = new Set(); _sha.expandedAnchors = new Set();
+          renderAnimList(); draw(); updateCursor();
+          scrollToShowExpanded(_sha.id);
+          return;
+        }
+        break; // topmost hit is already selected or grouped; fall through
+      }
+    }
     // Tiny click: replay topology arc/region hit tests first (when a topo object is selected).
     if (selectedId && !isGroupSelectionActive() && !isMultiSelectionActive()) {
       const _topoAnim = animations.find(a => a.id === selectedId);
