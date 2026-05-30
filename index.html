@@ -3446,22 +3446,44 @@ function makeSeg(h0, h1) {
   return { h0, h1, eccentricity: 50, compiled: null, compiledRef: null };
 }
 
-function buildExtensionSegment(anim, sourceAnchorIdx, target) {
+function buildExtensionSegment(anim, sourceAnchorIdx, target, bendPct = 50) {
   const src = anim.anchors[sourceAnchorIdx];
   const locked = isAnchorLocked(anim, sourceAnchorIdx);
+  const s = Math.max(0, bendPct) / 50; // 0=straight, 1=default curve, 2=extrapolated
+
   if (anim.extensionForward) {
     const chord = chordDir(src, target);
+    const L = Math.hypot(target.re - src.re, target.im - src.im);
+    const f = L / 3;
+    const sh0 = new Cx(src.re + chord.re * f, src.im + chord.im * f);
+    const sh1 = new Cx(target.re - chord.re * f, target.im - chord.im * f);
+    if (s <= 0) {
+      const seg = makeSeg(sh0, sh1); seg.eccentricity = 0;
+      return { seg, start: src, end: target, nextTangent: chord };
+    }
     const tOut = locked ? anim.tContinuation : chord;
     const tIn = locked ? reflectOverChord(tOut, src, target) : chord;
-    const seg = bisectorArc(src, target, tOut, tIn, turnHandleFactor(src, target, tOut), turnHandleFactor(src, target, tIn));
-    return { seg, start: src, end: target, nextTangent: tIn };
+    const curvedSeg = bisectorArc(src, target, tOut, tIn, turnHandleFactor(src, target, tOut), turnHandleFactor(src, target, tIn));
+    const seg = makeSeg(blendPoint(sh0, curvedSeg.h0, s), blendPoint(sh1, curvedSeg.h1, s));
+    seg.eccentricity = bendPct;
+    return { seg, start: src, end: target, nextTangent: tangentAtBezierEnd(target, seg.h1) };
   }
 
   const chord = chordDir(target, src);
+  const L = Math.hypot(src.re - target.re, src.im - target.im);
+  const f = L / 3;
+  const sh0 = new Cx(target.re + chord.re * f, target.im + chord.im * f);
+  const sh1 = new Cx(src.re - chord.re * f, src.im - chord.im * f);
+  if (s <= 0) {
+    const seg = makeSeg(sh0, sh1); seg.eccentricity = 0;
+    return { seg, start: target, end: src, nextTangent: chord };
+  }
   const tIn = locked ? anim.tContinuation : chord;
   const tOut = locked ? reflectOverChord(tIn, target, src) : chord;
-  const seg = bisectorArc(target, src, tOut, tIn, turnHandleFactor(target, src, tOut), turnHandleFactor(target, src, tIn));
-  return { seg, start: target, end: src, nextTangent: tOut };
+  const curvedSeg = bisectorArc(target, src, tOut, tIn, turnHandleFactor(target, src, tOut), turnHandleFactor(target, src, tIn));
+  const seg = makeSeg(blendPoint(sh0, curvedSeg.h0, s), blendPoint(sh1, curvedSeg.h1, s));
+  seg.eccentricity = bendPct;
+  return { seg, start: target, end: src, nextTangent: tangentAtBezierStart(target, seg.h0) };
 }
 
 function cleanSplinePoints(points) {
@@ -5243,6 +5265,171 @@ function deleteAnimation(id) {
   renderAnimList(); neutralizeToolPanel(); draw(); updateCursor();
 }
 
+function buildClipboardText() {
+  const animIdsToCopy = new Set();
+  const groupIdsToCopy = new Set();
+  let mode = 'single', rootGroupId = null;
+
+  if (selectedGroupId != null) {
+    mode = 'group'; rootGroupId = selectedGroupId;
+    const queue = [selectedGroupId];
+    while (queue.length) {
+      const gid = queue.shift();
+      if (groupIdsToCopy.has(gid)) continue;
+      groupIdsToCopy.add(gid);
+      childGroups(gid).forEach(g => queue.push(g.id));
+    }
+    animations.filter(a => groupIdsToCopy.has(a.groupId)).forEach(a => animIdsToCopy.add(a.id));
+  } else if (isMultiSelectionActive()) {
+    mode = 'multi';
+    multiSelectedIds.forEach(id => animIdsToCopy.add(id));
+    for (const id of animIdsToCopy) {
+      const anim = animations.find(a => a.id === id);
+      if (!anim?.groupId) continue;
+      groupPathFromRoot(anim.groupId).forEach(gid => groupIdsToCopy.add(gid));
+    }
+  } else if (selectedId != null) {
+    animIdsToCopy.add(selectedId);
+  }
+
+  if (!animIdsToCopy.size) return null;
+
+  const snapAnims = snapshotAnimations().filter(a => animIdsToCopy.has(a.id));
+  const snapGroups = snapshotGroups().filter(g => groupIdsToCopy.has(g.id));
+  if (mode === 'single') snapAnims.forEach(a => { a.groupId = null; });
+  return 'ANIMATOR_CLIP:' + JSON.stringify({ mode, rootGroupId, animations: snapAnims, groups: snapGroups });
+}
+
+function pasteFromClipboard(text) {
+  if (!text || !text.startsWith('ANIMATOR_CLIP:')) return;
+  let data;
+  try { data = JSON.parse(text.slice('ANIMATOR_CLIP:'.length)); } catch { return; }
+
+  const { mode, rootGroupId, animations: clipAnims, groups: clipGroups = [] } = data;
+  if (!Array.isArray(clipAnims) || !clipAnims.length) return;
+
+  // Assign all fresh IDs upfront
+  let _idSeed = Date.now();
+  const _nextId = () => ++_idSeed + Math.random();
+  const animIdMap = new Map();
+  const groupIdMap = new Map();
+  const curveIdMap = new Map(); // old curve/anim id → new id, for region boundary remapping
+
+  for (const a of clipAnims) {
+    const newId = _nextId();
+    animIdMap.set(a.id, newId);
+    curveIdMap.set(a.id, newId); // simple paths: region boundaries reference the anim's own id
+    if (a.curves) for (const c of a.curves) curveIdMap.set(c.id, _nextId());
+  }
+  for (const g of clipGroups) groupIdMap.set(g.id, _nextId());
+
+  // Bounding box center of all anchor points in source math coords
+  const allPts = clipAnims.flatMap(a =>
+    a.curves ? a.curves.flatMap(c => c.anchors ?? []) : (a.anchors ?? [])
+  );
+  if (!allPts.length) return;
+  const minRe = Math.min(...allPts.map(p => p.re)), maxRe = Math.max(...allPts.map(p => p.re));
+  const minIm = Math.min(...allPts.map(p => p.im)), maxIm = Math.max(...allPts.map(p => p.im));
+  const srcRe = (minRe + maxRe) / 2, srcIm = (minIm + maxIm) / 2;
+
+  // Translate to viewport center of the receiving canvas
+  const [vpRe, vpIm] = toMath(canvas.width / 2, canvas.height / 2);
+  const dRe = vpRe - srcRe, dIm = vpIm - srcIm;
+  const tp = p => new Cx(p.re + dRe, p.im + dIm);
+  const remapBdry = bdry => (bdry ?? []).map(e =>
+    e.curveId != null ? { ...e, curveId: curveIdMap.get(e.curveId) ?? e.curveId } : { ...e }
+  );
+
+  // Reconstruct groups with new IDs
+  const newGroups = clipGroups.map(g => ({
+    id: groupIdMap.get(g.id), name: g.name, hidden: g.hidden ?? false,
+    parentGroupId: g.parentGroupId != null ? (groupIdMap.get(g.parentGroupId) ?? null) : null,
+    fillColor: g.fillColor ?? null, fillOpacity: g.fillOpacity ?? 0.3,
+    fillStyle: g.fillStyle ?? 'solid',
+    gradientToColor: g.gradientToColor ?? null, gradientToOpacity: g.gradientToOpacity ?? 0,
+    regions: (g.regions ?? []).map(r => ({ ...r, boundary: remapBdry(r.boundary) })),
+  }));
+
+  // Reconstruct animations with new IDs and translated positions
+  const newAnims = clipAnims.map(s => ({
+    id: animIdMap.get(s.id), letter: s.letter, color: s.color, kind: s.kind || 'freeform',
+    groupId: s.groupId != null ? (groupIdMap.get(s.groupId) ?? null) : null,
+    fillColor: s.fillColor ?? null, outlineOpacity: s.outlineOpacity ?? 1,
+    fillOpacity: s.fillOpacity ?? 0.5, fillStyle: normalizeFillStyle(s.fillStyle),
+    closed: !!s.closed, text: s.text ?? '', fontSize: s.fontSize ?? 36,
+    fontFamily: s.fontFamily ?? 'sans-serif', fontBold: s.fontBold ?? false,
+    fontItalic: s.fontItalic ?? false, textAlign: s.textAlign ?? 'left',
+    textScaleX: s.textScaleX ?? 1, textScaleY: s.textScaleY ?? 1,
+    textShearX: s.textShearX ?? 0, textShearY: s.textShearY ?? 0,
+    visible: s.visible, thickness: s.thickness, rotation: s.rotation ?? 0,
+    anchors: s.anchors.map(tp),
+    segments: s.segments.map(sg => sg ? ({
+      h0: tp(sg.h0), h1: tp(sg.h1), eccentricity: sg.eccentricity ?? 1,
+      visible: sg.visible ?? true, compiled: null, compiledRef: null,
+    }) : null),
+    anchorLocked: s.anchorLocked ? [...s.anchorLocked] : [],
+    anchorLabels: s.anchorLabels ? [...s.anchorLabels] : [],
+    activeSegments: new Set(), inPlacementMode: false, reversePlacement: false,
+    extensionAnchorIdx: null, extensionForward: true, extensionInsertAt: 0, tContinuation: null,
+    expanded: false, expandedAnchors: new Set(), expandedArcs: new Set(),
+    gradientFromArcs: new Set(s.gradientFromArcs ?? []), gradientToArcs: new Set(s.gradientToArcs ?? []),
+    gradientToColor: s.gradientToColor ?? null, gradientToOpacity: s.gradientToOpacity ?? null,
+    name: s.name ?? null,
+    curves: s.curves ? s.curves.map(c => ({
+      id: curveIdMap.get(c.id), color: c.color, kind: c.kind || 'freeform',
+      fillColor: c.fillColor ?? null, outlineOpacity: c.outlineOpacity ?? 1,
+      fillOpacity: c.fillOpacity ?? 0.5, fillStyle: normalizeFillStyle(c.fillStyle),
+      closed: !!c.closed, text: c.text ?? '', fontSize: c.fontSize ?? 36,
+      fontFamily: c.fontFamily ?? 'sans-serif', fontBold: c.fontBold ?? false,
+      fontItalic: c.fontItalic ?? false, textAlign: c.textAlign ?? 'left',
+      textScaleX: c.textScaleX ?? 1, textScaleY: c.textScaleY ?? 1,
+      textShearX: c.textShearX ?? 0, textShearY: c.textShearY ?? 0,
+      visible: c.visible, thickness: c.thickness, rotation: c.rotation ?? 0,
+      anchors: c.anchors.map(tp),
+      segments: c.segments.map(sg => sg ? ({
+        h0: tp(sg.h0), h1: tp(sg.h1), eccentricity: sg.eccentricity ?? 1,
+        visible: sg.visible ?? true, compiled: null, compiledRef: null,
+      }) : null),
+      anchorLocked: c.anchorLocked ? [...c.anchorLocked] : [],
+      anchorLabels: c.anchorLabels ? [...c.anchorLabels] : [],
+      activeSegments: new Set(),
+      gradientFromArcs: new Set(c.gradientFromArcs ?? []), gradientToArcs: new Set(c.gradientToArcs ?? []),
+      gradientToColor: c.gradientToColor ?? null, gradientToOpacity: c.gradientToOpacity ?? null,
+      arcOverrideSegments: c.arcOverrideSegments?.length ? new Set(c.arcOverrideSegments) : undefined,
+    })) : null,
+    regions: (s.regions ?? []).map(r => ({ ...r, boundary: remapBdry(r.boundary) })),
+  }));
+
+  pushUndo();
+  for (const g of newGroups) groups.push(g);
+  for (const anim of newAnims) {
+    animations.push(anim);
+    recompileAnim(anim);
+    if (anim.curves) for (const c of anim.curves) recompileAnim(c);
+    detectObjectTopology(anim);
+  }
+
+  // Select pasted objects
+  if (mode === 'group' && rootGroupId != null && groupIdMap.has(rootGroupId)) {
+    selectGroup(groupIdMap.get(rootGroupId));
+  } else if (newAnims.length === 1) {
+    clearMultiSelection(); selectedGroupId = null;
+    selectedId = newAnims[0].id;
+  } else if (!selectTemporaryMultiSelection(newAnims.map(a => a.id))) {
+    selectedId = newAnims[0]?.id ?? null;
+  }
+
+  saveProject(); renderAnimList(); draw(); updateCursor();
+}
+
+document.addEventListener('paste', e => {
+  if (isTypingTarget(document.activeElement)) return;
+  const text = e.clipboardData.getData('text/plain');
+  if (!text.startsWith('ANIMATOR_CLIP:')) return;
+  e.preventDefault();
+  pasteFromClipboard(text);
+});
+
 document.addEventListener('keydown', e => {
   if (isTypingTarget(document.activeElement)) return;
   if (e.key === 'Escape') {
@@ -5308,6 +5495,19 @@ document.addEventListener('keydown', e => {
   if (e.ctrlKey && !e.shiftKey && e.key === 'z') { e.preventDefault(); undo(); }
   if ((e.ctrlKey && e.key === 'y') || (e.ctrlKey && e.shiftKey && (e.key === 'z' || e.key === 'Z'))) { e.preventDefault(); redo(); }
   if (e.ctrlKey && (e.key === 'd' || e.key === 'D')) { e.preventDefault(); duplicateAnimation(); }
+  if (e.ctrlKey && (e.key === 'c' || e.key === 'C')) {
+    e.preventDefault();
+    const clipText = buildClipboardText();
+    if (clipText) {
+      const ta = document.createElement('textarea');
+      ta.value = clipText;
+      ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none';
+      document.body.appendChild(ta);
+      ta.focus(); ta.select();
+      document.execCommand('copy');
+      ta.remove();
+    }
+  }
   const _freeformPlacing = animations.find(a => a.inPlacementMode && animKind(a) === 'freeform');
   if (_freeformPlacing && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
     e.preventDefault();
@@ -7586,7 +7786,7 @@ function placementClickHandler(anim, snapped, mathX, mathY) {
     if (nearIdx === endIdx) { finalizePlacement(anim); return; }
     const looping = nearIdx >= 0;
     const target = looping ? new Cx(anch[nearIdx].re, anch[nearIdx].im) : snapped;
-    const built = buildExtensionSegment(anim, endIdx, target);
+    const built = buildExtensionSegment(anim, endIdx, target, freeformPlacementBend);
     const seg = built.seg;
     const aPos = anim.extensionInsertAt;
     const sPos = anim.extensionForward ? aPos - 1 : aPos;
@@ -8504,6 +8704,12 @@ window.addEventListener('mousemove', e => {
     if (Math.hypot(cx - last.x, cy - last.y) >= 3 * devicePixelRatio) {
       freeformPenCapture.points.push({ x: cx, y: cy });
     }
+    draw(); return;
+  }
+
+  if (dragging) {
+    originX = dragOriginX + (e.clientX * devicePixelRatio - dragStartX);
+    originY = dragOriginY + (e.clientY * devicePixelRatio - dragStartY);
     draw(); return;
   }
 
@@ -13497,7 +13703,7 @@ function drawAnimations() {
           const endIdx = anim.extensionForward
             ? anim.extensionInsertAt - 1 : anim.extensionInsertAt;
           if (anim.anchors[endIdx] && anim.tContinuation) {
-            const built = buildExtensionSegment(anim, endIdx, cursor);
+            const built = buildExtensionSegment(anim, endIdx, cursor, freeformPlacementBend);
             const prevSeg = built.seg;
             recompileSegmentRaw(prevSeg, built.start, built.end);
             ctx.save(); ctx.globalAlpha = 0.4; ctx.setLineDash([4*dpr, 4*dpr]);
