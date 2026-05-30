@@ -8066,7 +8066,37 @@ canvas.addEventListener('mousedown', e => {
               }
             }
           }
-          if (_nodeAnchors.length === 0) return;
+          if (_nodeAnchors.length === 0) {
+            // Convert any primitive shape at this node position into an editable polyline,
+            // then populate _nodeAnchors from the converted curve so drag proceeds normally.
+            for (const _nc of animCurves(_topoAnim)) {
+              if (!isPrimitiveAnim(_nc) || isTextAnim(_nc)) continue;
+              const _ncKind = animKind(_nc);
+              let _verts = null;
+              if (_ncKind === 'triangle') _verts = primitiveTrianglePoints(_nc);
+              else if (_ncKind === 'rectangle') _verts = primitiveRectangleCorners(_nc);
+              if (!_verts || _verts.length < 2) continue;
+              // Convert in-place: bake computed vertices into a closed POLYLINE_KIND.
+              // primitiveTrianglePoints/primitiveRectangleCorners already apply rotation,
+              // so the resulting anchor positions are in the global (unrotated) frame.
+              const _closing = new Cx(_verts[0].re, _verts[0].im);
+              _nc.anchors = [..._verts, _closing];
+              _nc.segments = _nc.anchors.slice(0, -1).map((p, i) => makeStraightSegment(p, _nc.anchors[i + 1]));
+              _nc.kind = POLYLINE_KIND;
+              _nc.closed = true;
+              if (!Array.isArray(_nc.anchorLocked)) _nc.anchorLocked = _nc.anchors.map(() => false);
+              if (!Array.isArray(_nc.anchorLabels)) _nc.anchorLabels = _nc.anchors.map(() => '');
+              _nc.activeSegments = new Set();
+              recompileAnim(_nc);
+              for (let _ai = 0; _ai < _nc.anchors.length; _ai++) {
+                const _na = _nc.anchors[_ai];
+                if (_na && Math.hypot(_na.re - ep.pos.re, _na.im - ep.pos.im) < 1e-2) {
+                  _nodeAnchors.push({ anim: _nc, anchorIdx: _ai });
+                }
+              }
+            }
+            if (_nodeAnchors.length === 0) return;
+          }
           const _prim = _nodeAnchors[0];
           const _primOrig = cloneCx(_prim.anim.anchors[_prim.anchorIdx]);
           const _primH0 = _prim.anim.segments[_prim.anchorIdx] ? cloneCx(_prim.anim.segments[_prim.anchorIdx].h0) : null;
