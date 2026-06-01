@@ -8203,7 +8203,7 @@ canvas.addEventListener('mousedown', e => {
         startMathX: mathX, startMathY: mathY,
         origBounds: groupMathBounds(resizeHit.groupId) ?? frameMathBounds(f),
         origFrameBounds: frameMathBounds(f),
-        origStates: allDescendantAnims(resizeHit.groupId).map(cloneTransformState),
+        origStates: buildGroupOrigStates(allDescendantAnims(resizeHit.groupId)),
       };
     } else if (resizeHit.multi) {
       const f = multiSelectionFrameMetrics();
@@ -8213,7 +8213,7 @@ canvas.addEventListener('mousedown', e => {
         startMathX: mathX, startMathY: mathY,
         origBounds: multiSelectionMathBounds() ?? frameMathBounds(f),
         origFrameBounds: frameMathBounds(f),
-        origStates: multiSelectionMembers().map(cloneTransformState),
+        origStates: buildGroupOrigStates(multiSelectionMembers()),
       };
     }
     updateCursor(); draw(); return;
@@ -8242,7 +8242,7 @@ canvas.addEventListener('mousedown', e => {
           groupId: rotateHit.groupId,
           center: new Cx(cRe, cIm),
           startAngle: Math.atan2(mathY - cIm, mathX - cRe),
-          origStates: allDescendantAnims(rotateHit.groupId).map(cloneTransformState),
+          origStates: buildGroupOrigStates(allDescendantAnims(rotateHit.groupId)),
         };
       }
     } else if (rotateHit.multi) {
@@ -8253,7 +8253,7 @@ canvas.addEventListener('mousedown', e => {
           multi: true,
           center: new Cx(cRe, cIm),
           startAngle: Math.atan2(mathY - cIm, mathX - cRe),
-          origStates: multiSelectionMembers().map(cloneTransformState),
+          origStates: buildGroupOrigStates(multiSelectionMembers()),
         };
       }
     }
@@ -8287,6 +8287,19 @@ canvas.addEventListener('mousedown', e => {
       const _aHit = anchorHover ?? queryAnchorHover(mathX, mathY);
       const _hHit = !_aHit ? (handleHover ?? queryHandleHover(mathX, mathY)) : null;
       _rbSkip = !!_aHit || !!_hHit;
+      // Primitives are excluded from anchor/handle hover. When the edit-mode anim is a
+      // primitive, fall back to topology nodes so clicking on a corner skips rubber-band.
+      if (!_rbSkip) {
+        const _emAnim = animations.find(a => a.id === editModeAnimId);
+        if (_emAnim && isPrimitiveAnim(_emAnim)) {
+          const { essentialPoints: _emEps } = computeObjectTopologyData(_emAnim);
+          const _emHIT = 14 * devicePixelRatio;
+          for (const _emEp of _emEps) {
+            const [_emCx, _emCy] = toCanvas(_emEp.pos.re, _emEp.pos.im);
+            if (Math.hypot(cx - _emCx, cy - _emCy) <= _emHIT) { _rbSkip = true; break; }
+          }
+        }
+      }
     } else if (selectedId !== null) {
       // In selection-frame mode: allow dragging topology nodes without deselecting
       const _sfAnim = animations.find(a => a.id === selectedId);
@@ -9557,7 +9570,7 @@ objCanvas.addEventListener('mousedown', e => {
           startMathX: mathX, startMathY: mathY,
           origBounds: groupMathBounds(resizeHit.groupId) ?? frameMathBounds(f),
           origFrameBounds: frameMathBounds(f),
-          origStates: allDescendantAnims(resizeHit.groupId).map(cloneTransformState),
+          origStates: buildGroupOrigStates(allDescendantAnims(resizeHit.groupId)),
           onObjCanvas: true,
         };
       } else if (resizeHit.multi) {
@@ -9568,7 +9581,7 @@ objCanvas.addEventListener('mousedown', e => {
           startMathX: mathX, startMathY: mathY,
           origBounds: multiSelectionMathBounds() ?? frameMathBounds(f),
           origFrameBounds: frameMathBounds(f),
-          origStates: multiSelectionMembers().map(cloneTransformState),
+          origStates: buildGroupOrigStates(multiSelectionMembers()),
           onObjCanvas: true,
         };
       }
@@ -9598,7 +9611,7 @@ objCanvas.addEventListener('mousedown', e => {
           rotateDrag = {
             groupId: rotateHit.groupId,
             center, startAngle: Math.atan2(mathY - cIm, mathX - cRe),
-            origStates: allDescendantAnims(rotateHit.groupId).map(cloneTransformState),
+            origStates: buildGroupOrigStates(allDescendantAnims(rotateHit.groupId)),
             onObjCanvas: true,
           };
         }
@@ -9610,7 +9623,7 @@ objCanvas.addEventListener('mousedown', e => {
           rotateDrag = {
             multi: true,
             center, startAngle: Math.atan2(mathY - cIm, mathX - cRe),
-            origStates: multiSelectionMembers().map(cloneTransformState),
+            origStates: buildGroupOrigStates(multiSelectionMembers()),
             onObjCanvas: true,
           };
         }
@@ -9866,7 +9879,7 @@ isolCanvas.addEventListener('mousedown', e => {
           startMathX: mathX, startMathY: mathY,
           origBounds: groupMathBounds(resizeHit.groupId) ?? frameMathBounds(f),
           origFrameBounds: frameMathBounds(f),
-          origStates: allDescendantAnims(resizeHit.groupId).map(cloneTransformState),
+          origStates: buildGroupOrigStates(allDescendantAnims(resizeHit.groupId)),
           onIsolCanvas: true,
         };
       } else if (resizeHit.multi) {
@@ -9877,7 +9890,7 @@ isolCanvas.addEventListener('mousedown', e => {
           startMathX: mathX, startMathY: mathY,
           origBounds: multiSelectionMathBounds() ?? frameMathBounds(f),
           origFrameBounds: frameMathBounds(f),
-          origStates: multiSelectionMembers().map(cloneTransformState),
+          origStates: buildGroupOrigStates(multiSelectionMembers()),
           onIsolCanvas: true,
         };
       }
@@ -9907,7 +9920,7 @@ isolCanvas.addEventListener('mousedown', e => {
           rotateDrag = {
             groupId: rotateHit.groupId,
             center, startAngle: Math.atan2(mathY - cIm, mathX - cRe),
-            origStates: allDescendantAnims(rotateHit.groupId).map(cloneTransformState),
+            origStates: buildGroupOrigStates(allDescendantAnims(rotateHit.groupId)),
             onIsolCanvas: true,
           };
         }
@@ -9919,7 +9932,7 @@ isolCanvas.addEventListener('mousedown', e => {
           rotateDrag = {
             multi: true,
             center, startAngle: Math.atan2(mathY - cIm, mathX - cRe),
-            origStates: multiSelectionMembers().map(cloneTransformState),
+            origStates: buildGroupOrigStates(multiSelectionMembers()),
             onIsolCanvas: true,
           };
         }
@@ -12238,7 +12251,7 @@ function buildGroupOrigStates(anims) {
   for (const a of anims) {
     if (seen.has(a.id)) continue;
     seen.add(a.id);
-    if (a.curves) {
+    if (a.curves?.length) {
       for (const c of a.curves) {
         if (!seen.has(c.id)) { seen.add(c.id); states.push(cloneTransformState(c)); }
       }
@@ -12926,7 +12939,7 @@ function beginRotationDragFromHit(rotateHit, mathX, mathY, flags = {}) {
         groupId: rotateHit.groupId,
         center: new Cx(cRe, cIm),
         startAngle: Math.atan2(mathY - cIm, mathX - cRe),
-        origStates: allDescendantAnims(rotateHit.groupId).map(cloneTransformState),
+        origStates: buildGroupOrigStates(allDescendantAnims(rotateHit.groupId)),
         ...flags,
       };
     }
@@ -12938,7 +12951,7 @@ function beginRotationDragFromHit(rotateHit, mathX, mathY, flags = {}) {
         multi: true,
         center: new Cx(cRe, cIm),
         startAngle: Math.atan2(mathY - cIm, mathX - cRe),
-        origStates: multiSelectionMembers().map(cloneTransformState),
+        origStates: buildGroupOrigStates(multiSelectionMembers()),
         ...flags,
       };
     }
