@@ -4345,7 +4345,9 @@ function cleanupSingletonGroups() {
   });
   if (selectedGroupId != null && !allDescendantAnims(selectedGroupId).length) selectedGroupId = null;
   groupCandidateIds = new Set([...groupCandidateIds].filter(id => animations.some(a => a.id === id)));
-  multiSelectedIds = new Set([...multiSelectedIds].filter(id => animations.some(a => a.id === id)));
+  multiSelectedIds = new Set([...multiSelectedIds].filter(id =>
+    animations.some(a => a.id === id) || groups.some(g => g.id === id)
+  ));
   if (multiSelectedIds.size < 2) multiSelectionGuideShear = null;
   const validGroupIds = new Set();
   animations.forEach(a => { if (a.groupId != null) validGroupIds.add(a.groupId); });
@@ -4734,8 +4736,32 @@ function clearMultiSelection() {
   multiSelectionGuideShear = null;
 }
 
+function isAnimInMultiSelection(anim) {
+  if (!isMultiSelectionActive()) return false;
+  if (multiSelectedIds.has(anim.id)) return true;
+  let gid = anim.groupId;
+  while (gid != null) {
+    if (multiSelectedIds.has(gid)) return true;
+    const g = groups.find(grp => grp.id === gid);
+    gid = g?.parentGroupId ?? null;
+  }
+  return false;
+}
+
 function multiSelectionMembers() {
-  return animations.filter(a => multiSelectedIds.has(a.id) && a.visible && !a.inPlacementMode);
+  const result = [];
+  const seen = new Set();
+  for (const id of multiSelectedIds) {
+    if (animations.some(a => a.id === id)) {
+      const anim = animations.find(a => a.id === id && a.visible && !a.inPlacementMode);
+      if (anim && !seen.has(anim.id)) { seen.add(anim.id); result.push(anim); }
+    } else {
+      for (const a of allDescendantAnims(id)) {
+        if (a.visible && !a.inPlacementMode && !seen.has(a.id)) { seen.add(a.id); result.push(a); }
+      }
+    }
+  }
+  return result;
 }
 
 function isMultiSelectionActive() {
@@ -4758,7 +4784,10 @@ function findSmallestEnclosingGroup(animIds) {
 }
 
 function selectTemporaryMultiSelection(ids) {
-  const validIds = ids.filter(id => animations.some(a => a.id === id && a.visible && !a.inPlacementMode));
+  const validIds = ids.filter(id =>
+    animations.some(a => a.id === id && a.visible && !a.inPlacementMode) ||
+    (groups.some(g => g.id === id) && allDescendantAnims(id).some(a => a.visible && !a.inPlacementMode))
+  );
   if (validIds.length < 2) {
     clearMultiSelection();
     return false;
@@ -4930,11 +4959,14 @@ function mergeObjects(ids) {
         segments:   _rectPath ? _rectPath.segments : src.segments,
         anchorLocked: _rectPath ? _rectPath.anchors.map(() => false) : (src.anchorLocked ? [...src.anchorLocked] : []),
         anchorLabels: src.anchorLabels ? [...src.anchorLabels] : [],
-        fillColor: src.fillColor ?? null, outlineOpacity: src.outlineOpacity ?? 1,
-        fillOpacity: src.fillOpacity ?? 0.5, fillStyle: src.fillStyle ?? 'solid',
+        fillColor: src.regions?.[0]?.fillColor ?? src.fillColor ?? null,
+        outlineOpacity: src.outlineOpacity ?? 1,
+        fillOpacity: src.regions?.[0]?.fillOpacity ?? src.fillOpacity ?? 0.5,
+        fillStyle: src.regions?.[0]?.fillStyle ?? src.fillStyle ?? 'solid',
         gradientFromArcs: src.gradientFromArcs ? new Set(src.gradientFromArcs) : new Set(),
         gradientToArcs: src.gradientToArcs ? new Set(src.gradientToArcs) : new Set(),
-        gradientToColor: src.gradientToColor ?? null, gradientToOpacity: src.gradientToOpacity ?? null,
+        gradientToColor: src.regions?.[0]?.gradientToColor ?? src.gradientToColor ?? null,
+        gradientToOpacity: src.regions?.[0]?.gradientToOpacity ?? src.gradientToOpacity ?? null,
         text: src.text ?? '', fontSize: src.fontSize ?? 36,
         textScaleX: src.textScaleX ?? 1, textScaleY: src.textScaleY ?? 1,
         textShearX: src.textShearX ?? 0, textShearY: src.textShearY ?? 0,
@@ -4975,6 +5007,44 @@ function mergeObjects(ids) {
   if (objectHasLinkableCurves(merged)) linkObjectCurves(merged);
   snapMergedCorners(merged);
   detectObjectTopology(merged);
+  // Migrate fills from source regions to merged regions using geometric matching:
+  // compute each source region's centroid (average of sampled boundary points in
+  // canvas coords), then find which merged region contains that point.
+  // This is robust to DCEL reordering — region indices can shift when new topology
+  // inserts faces in the middle, but spatial identity is stable.
+  if (merged.regions.length > 0) {
+    const _cmap = buildTopologyCurvesMap(merged);
+    for (const _src of sources) {
+      for (const _sr of (_src.regions ?? [])) {
+        if (!_sr.fillColor) continue;
+        let _sx = 0, _sy = 0, _sc = 0;
+        for (const _e of _sr.boundary) {
+          const _cv = _cmap.get(_e.animId);
+          if (!_cv) continue;
+          const _s0 = Math.min(_e.startIdx, _e.endIdx), _s1 = Math.max(_e.startIdx, _e.endIdx);
+          for (let _s = _s0; _s < _s1; _s++) {
+            const _seg = _cv.segments[_s];
+            if (!_seg?.compiled) continue;
+            for (const _pt of sampleCompiledAdaptive(_seg.compiled)) { _sx += _pt[0]; _sy += _pt[1]; _sc++; }
+          }
+        }
+        if (!_sc) continue;
+        const _rid = hitTestObjectRegion(merged, _sx / _sc, _sy / _sc);
+        if (_rid === null) continue;
+        const _mr = merged.regions.find(r => r.id === _rid);
+        if (!_mr || _mr.fillColor) continue;
+        _mr.fillColor = _sr.fillColor;
+        _mr.fillOpacity = _sr.fillOpacity ?? 0;
+        _mr.fillStyle = _sr.fillStyle ?? 'solid';
+        _mr.gradientToColor = _sr.gradientToColor ?? null;
+        _mr.gradientToOpacity = _sr.gradientToOpacity ?? null;
+        _mr.gradientAngle = _sr.gradientAngle;
+        _mr.patternType = _sr.patternType;
+        _mr.patternAngle = _sr.patternAngle;
+        _mr.patternSpacing = _sr.patternSpacing;
+      }
+    }
+  }
   renderAnimList(); draw(); saveProject();
 }
 
@@ -8085,17 +8155,15 @@ canvas.addEventListener('mousedown', e => {
       frameDrag = {
         groupId: fb.groupId,
         startMathX: mathX, startMathY: mathY,
-        origStates: allDescendantAnims(fb.groupId).map(cloneTransformState),
+        origStates: buildGroupOrigStates(allDescendantAnims(fb.groupId)),
       };
       selectGroup(fb.groupId);
     } else if (fb.multi) {
-      const ids = multiSelectionMembers().map(a => a.id);
       frameDrag = {
         multi: true,
         startMathX: mathX, startMathY: mathY,
-        origStates: multiSelectionMembers().map(cloneTransformState),
+        origStates: buildGroupOrigStates(multiSelectionMembers()),
       };
-      selectTemporaryMultiSelection(ids);
     } else {
       frameDrag = {
         anim: fb,
@@ -8463,7 +8531,7 @@ canvas.addEventListener('mousedown', e => {
     e.preventDefault();
     const hitAnim = effectiveSegHover.anim;
     const hitSegIdx = effectiveSegHover.segIdx;
-    if (isMultiSelectionActive() && multiSelectedIds.has(hitAnim.id)) {
+    if (isAnimInMultiSelection(hitAnim)) {
       const _sha = hitAnim;
       pendingBodyDrag = {
         anim: _sha, startMathX: mathX, startMathY: mathY,
@@ -8546,7 +8614,7 @@ canvas.addEventListener('mousedown', e => {
       return;
     }
     const _fillUnsel = fillHit.id !== selectedId && fillHit.id !== editModeAnimId;
-    if (_fillUnsel && isMultiSelectionActive() && multiSelectedIds.has(fillHit.id)) {
+    if (_fillUnsel && isAnimInMultiSelection(fillHit)) {
       const _fh = fillHit;
       pendingBodyDrag = {
         anim: _fh, startMathX: mathX, startMathY: mathY,
@@ -8582,7 +8650,7 @@ canvas.addEventListener('mousedown', e => {
     } else if (objectGroupId(fillHit) != null &&
                focusedGroupMemberGroupId() === objectGroupId(fillHit)) {
       drillSelectObject(fillHit);
-    } else if (isMultiSelectionActive() && multiSelectedIds.has(fillHit.id)) {
+    } else if (isAnimInMultiSelection(fillHit)) {
       drillSelectObject(fillHit);
     } else {
       selectFromScene(fillHit);
@@ -8977,10 +9045,10 @@ window.addEventListener('mousemove', e => {
       pendingBodyDrag = null;
       pushUndo();
       if (_dc === 'multi') {
-        frameDrag = { multi: true, startMathX: _smx, startMathY: _smy, origStates: multiSelectionMembers().map(cloneTransformState) };
+        frameDrag = { multi: true, startMathX: _smx, startMathY: _smy, origStates: buildGroupOrigStates(multiSelectionMembers()) };
       } else if (_dc === 'group') {
         selectGroup(_pgid);
-        frameDrag = { groupId: _pgid, startMathX: _smx, startMathY: _smy, origStates: allDescendantAnims(_pgid).map(cloneTransformState) };
+        frameDrag = { groupId: _pgid, startMathX: _smx, startMathY: _smy, origStates: buildGroupOrigStates(allDescendantAnims(_pgid)) };
       } else {
         selectedGroupId = null;
         selectedId = _pba.id;
@@ -9054,7 +9122,7 @@ window.addEventListener('mousemove', e => {
       if (_fh && _fh.id !== selectedId && _fh.id !== editModeAnimId) {
         const _canBodyDrag =
           (!objectGroupId(_fh) && !isGroupSelectionActive() && !isMultiSelectionActive()) ||
-          (isMultiSelectionActive() && multiSelectedIds.has(_fh.id)) ||
+          isAnimInMultiSelection(_fh) ||
           (isGroupSelectionActive() && isAnimDescendantOf(_fh, selectedGroupId));
         if (_canBodyDrag) newFillHover = _fh;
       }
@@ -9268,13 +9336,41 @@ window.addEventListener('mouseup', e => {
       };
       const hits = animationsFullyInsideCanvasRect(rect);
       rubberBand = null;
-      if (hits.length > 1) {
-        const enclosingGroup = findSmallestEnclosingGroup(hits.map(a => a.id));
-        if (enclosingGroup) {
-          selectGroup(enclosingGroup.id);
-          renderAnimList(); draw(); updateCursor();
+      // Promote fully-captured top-level groups to their group ID.
+      // A group is fully captured when every descendant animation is either:
+      //   (a) fully inside the rect, or
+      //   (b) has no computable bounds (degenerate/invisible — doesn't block selection).
+      const hitIds = new Set(hits.map(a => a.id));
+      const topLevelGroups = groups.filter(g => (g.parentGroupId ?? null) === null);
+      const promotedGroupIds = new Set();
+      for (const g of topLevelGroups) {
+        const desc = allDescendantAnims(g.id);
+        if (desc.length === 0) continue;
+        if (desc.every(a => hitIds.has(a.id) || selectedObjectCanvasBounds(a) == null)) promotedGroupIds.add(g.id);
+      }
+      const ungroupedHits = hits.filter(a => a.groupId === null);
+      // Collect animations that are in hitIds but not reachable from any promoted group
+      // and not ungrouped — these are "orphaned" (groupId points to a broken/unreachable chain).
+      const coveredByPromoted = new Set();
+      for (const gId of promotedGroupIds) {
+        for (const a of allDescendantAnims(gId)) coveredByPromoted.add(a.id);
+      }
+      const orphanedHits = hits.filter(a => a.groupId !== null && !coveredByPromoted.has(a.id));
+      const finalIds = [...promotedGroupIds, ...ungroupedHits.map(a => a.id), ...orphanedHits.map(a => a.id)];
+      if (finalIds.length > 1) {
+        if (promotedGroupIds.size === 0) {
+          const enclosingGroup = findSmallestEnclosingGroup(ungroupedHits.map(a => a.id));
+          if (enclosingGroup) {
+            selectGroup(enclosingGroup.id);
+            renderAnimList(); draw(); updateCursor(); return;
+          }
+        }
+        selectTemporaryMultiSelection(finalIds);
+      } else if (finalIds.length === 1) {
+        if (promotedGroupIds.has(finalIds[0])) {
+          selectGroup(finalIds[0]);
         } else {
-          selectTemporaryMultiSelection(hits.map(a => a.id));
+          drillSelectObject(ungroupedHits[0]);
         }
       } else if (hits.length === 1) {
         drillSelectObject(hits[0]);
@@ -12132,6 +12228,25 @@ function applyPointTransformFromState(state, transformPoint, options = {}) {
 
   anim.segments = origSegs.map(seg => transformResizeSeg(seg, transformPoint));
   recompileAnim(anim);
+}
+
+// Build origStates for group/multi drag, expanding merged animations to their child curves.
+// Merged animations have anchors:[] — their geometry lives in anim.curves[i].
+function buildGroupOrigStates(anims) {
+  const states = [];
+  const seen = new Set();
+  for (const a of anims) {
+    if (seen.has(a.id)) continue;
+    seen.add(a.id);
+    if (a.curves) {
+      for (const c of a.curves) {
+        if (!seen.has(c.id)) { seen.add(c.id); states.push(cloneTransformState(c)); }
+      }
+    } else {
+      states.push(cloneTransformState(a));
+    }
+  }
+  return states;
 }
 
 function applyGroupTranslation(drag, dx, dy) {
@@ -16606,6 +16721,25 @@ function detectObjectTopology(anim) {
       anim.regions[0].fillOpacity = anim.fillOpacity ?? 0;
       anim.regions[0].fillStyle = anim.fillStyle ?? 'solid';
     }
+    // When merging objects for the first time, migrate fills from sub-curves to regions.
+    // animCurves preserves fillColor on each entry; rawCurves may have primitives converted.
+    if (priorRegions.length === 0 && anim.curves) {
+      const _srcById = new Map(animCurves(anim).map(c => [c.id, c]));
+      for (const region of anim.regions) {
+        if (region.fillColor) continue;
+        for (const edge of region.boundary) {
+          const _c = _srcById.get(edge.animId);
+          if (_c?.fillColor) {
+            region.fillColor = _c.fillColor;
+            region.fillOpacity = _c.fillOpacity ?? 0.5;
+            region.fillStyle = _c.fillStyle ?? 'solid';
+            region.gradientToColor = _c.gradientToColor ?? null;
+            region.gradientToOpacity = _c.gradientToOpacity ?? null;
+            break;
+          }
+        }
+      }
+    }
     // Only clear sub-curve fills for merged objects (anim.curves). For simple curves,
     // preserve anim.fillColor/fillOpacity as a permanent fallback: if region fills ever
     // become null (e.g. due to a DCEL ordering change), the renderer at drawObjectRegionFills
@@ -18598,17 +18732,19 @@ function configureAnimTileDrag(wrap, anim, { singleOnly = false } = {}) {
 
 function appendGroupTrayTile(tilesEl, group, { label = '', path = false, child = true } = {}) {
   const isGroupSel = isGroupSelectionActive() && selectedGroupId === group.id;
+  const isGroupMultiSel = !path && isMultiSelectionActive() && multiSelectedIds.has(group.id);
   const isGroupCandidate = groupSelectionMode && groupGroupCandidateIds.has(group.id);
   const wrap = document.createElement('div');
   wrap.className = 'obj-tile-wrap' +
     (path ? ' tray-path' : '') +
     (child ? ' tray-child' : '') +
-    (isGroupSel ? ' group-selected' : '') +
+    ((isGroupSel || isGroupMultiSel) ? ' group-selected' : '') +
     (isGroupCandidate ? ' group-candidate' : '');
   wrap.dataset.groupId = group.id;
 
   const tile = document.createElement('button');
   tile.className = 'obj-tile obj-group-mosaic-tile' + (isGroupEffectivelyHidden(group.id) ? ' obj-tile-hidden' : '') + (isGroupSel ? ' selected' : '');
+  if (isGroupSel || isGroupMultiSel) { tile.style.borderColor = '#cdd6f4'; tile.style.borderWidth = '2px'; }
   tile.title = groupName(group.id) || 'Group';
   appendTrayLabel(tile, label);
   const thumbCanvas = document.createElement('canvas');
@@ -18644,7 +18780,7 @@ function appendAnimTrayTile(tilesEl, anim, { label = '', child = true, singleOnl
   if (!anim.activeSegments) anim.activeSegments = new Set();
   if (!anim.expandedArcs) anim.expandedArcs = new Set();
   if (!anim.expandedAnchors) anim.expandedAnchors = new Set();
-  const isMultiSelected = isMultiSelectionActive() && multiSelectedIds.has(anim.id);
+  const isMultiSelected = isAnimInMultiSelection(anim);
   const isSelected = selectedId === anim.id || editModeAnimId === anim.id || isMultiSelected;
   const groupCandidate = groupSelectionMode && groupCandidateIds.has(anim.id);
   const wrap = document.createElement('div');
@@ -19501,8 +19637,9 @@ function renderAnimListLegacy() {
     if (type === 'group') {
       const g = item;
       const isGroupSel = isGroupSelectionActive() && selectedGroupId === g.id;
+      const isGroupMultiSel = isMultiSelectionActive() && multiSelectedIds.has(g.id);
       const isGroupCandidate = groupSelectionMode && groupGroupCandidateIds.has(g.id);
-      wrap.className = 'obj-tile-wrap' + (isGroupSel ? ' group-selected' : '') + (isGroupCandidate ? ' group-candidate' : '');
+      wrap.className = 'obj-tile-wrap' + ((isGroupSel || isGroupMultiSel) ? ' group-selected' : '') + (isGroupCandidate ? ' group-candidate' : '');
       wrap.dataset.groupId = g.id;
       wrap.draggable = drillGroupId === null;
       const labelEl = document.createElement('div');
@@ -19510,7 +19647,7 @@ function renderAnimListLegacy() {
       labelEl.textContent = tileLabel;
       const tile = document.createElement('button');
       tile.className = 'obj-tile obj-group-mosaic-tile';
-      if (isGroupSel) { tile.style.borderColor = '#cdd6f4'; tile.style.borderWidth = '2px'; }
+      if (isGroupSel || isGroupMultiSel) { tile.style.borderColor = '#cdd6f4'; tile.style.borderWidth = '2px'; }
       const thumbCanvas = document.createElement('canvas');
       thumbCanvas.draggable = false;
       tile.appendChild(thumbCanvas);
@@ -19570,7 +19707,7 @@ function renderAnimListLegacy() {
       if (!anim.activeSegments) anim.activeSegments = new Set();
       if (!anim.expandedArcs) anim.expandedArcs = new Set();
       if (!anim.expandedAnchors) anim.expandedAnchors = new Set();
-      const isMultiSelected = isMultiSelectionActive() && multiSelectedIds.has(anim.id);
+      const isMultiSelected = isAnimInMultiSelection(anim);
       const isSelected = selectedId === anim.id || editModeAnimId === anim.id || isMultiSelected;
       const groupCandidate = groupSelectionMode && groupCandidateIds.has(anim.id);
       wrap.className = 'obj-tile-wrap' + (groupCandidate ? ' group-candidate' : '');
@@ -19625,7 +19762,7 @@ function renderAnimListLegacy() {
           renderAnimList(); draw(); updateCursor();
           return;
         }
-        if (isMultiSelectionActive() && multiSelectedIds.has(anim.id)) {
+        if (isAnimInMultiSelection(anim)) {
           drillSelectObject(anim);
           renderAnimList(); draw(); updateCursor();
           return;
@@ -21026,7 +21163,7 @@ document.getElementById('animations-panel').addEventListener('click', e => {
 
 document.getElementById('merge-objects-btn').addEventListener('click', e => {
   e.stopPropagation();
-  if (isMultiSelectionActive()) mergeObjects([...multiSelectedIds]);
+  if (isMultiSelectionActive()) mergeObjects(multiSelectionMembers().map(a => a.id));
 });
 
 document.getElementById('group-objects-btn').addEventListener('click', e => {
@@ -21036,8 +21173,8 @@ document.getElementById('group-objects-btn').addEventListener('click', e => {
     return;
   }
   if (isMultiSelectionActive()) {
-    groupCandidateIds = new Set(multiSelectedIds);
-    groupGroupCandidateIds = new Set();
+    groupCandidateIds = new Set([...multiSelectedIds].filter(id => animations.some(a => a.id === id)));
+    groupGroupCandidateIds = new Set([...multiSelectedIds].filter(id => groups.some(g => g.id === id)));
     createGroupFromCandidates();
     return;
   }
