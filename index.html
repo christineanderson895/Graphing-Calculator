@@ -522,7 +522,7 @@
     .anchor-split-btn:hover, .arc-split-btn:hover { color: #cdd6f4; border-color: #89b4fa; background: #252537; }
     .arc-match-btn { color: #89dceb; border-color: #89dceb55; }
     .arc-match-btn:hover { color: #cdd6f4; border-color: #89dceb; background: #1e3040; }
-    .arc-split-btn.split-active { color: #cba6f7; border-color: #cba6f7; background: #252537; }
+    .arc-split-btn.split-active, .anchor-split-btn.split-active { color: #cba6f7; border-color: #cba6f7; background: #252537; }
     .arc-gradient-from-btn { color: #cba6f7; border-color: #cba6f755; }
     .arc-gradient-from-btn.active { background: #2a1e40; border-color: #cba6f7; }
     .arc-gradient-from-btn:hover { color: #cdd6f4; border-color: #cba6f7; background: #2a1e40; }
@@ -2376,6 +2376,93 @@ function splitAnchorPoint(anim, anchorIdx) {
   recompileAnim(anim);
 }
 
+// Convert a primitive (rectangle, triangle, line) to POLYLINE_KIND in-place, adding an arc
+// override on the selected side so that side immediately becomes a free Bézier arc.
+function convertPrimitiveToPolylineWithArc(parentAnim, primitiveAnim, arcLo, arcHi) {
+  const kind = animKind(primitiveAnim);
+  let anchors, segments;
+  if (kind === 'line') {
+    anchors = primitiveAnim.anchors.map(cloneCx);
+    segments = [makeStraightSegment(anchors[0], anchors[1])];
+  } else {
+    let corners;
+    if (kind === 'rectangle') corners = primitiveRectangleCorners(primitiveAnim);
+    else if (kind === 'triangle') corners = primitiveTrianglePoints(primitiveAnim);
+    if (!corners?.length) return;
+    anchors = [...corners.map(cloneCx), cloneCx(corners[0])];
+    segments = anchors.slice(0, -1).map((p, i) => makeStraightSegment(p, anchors[i + 1]));
+  }
+  const arcOverrideSegments = new Set();
+  for (let si = arcLo; si < arcHi; si++) arcOverrideSegments.add(si);
+  pushUndo();
+  Object.assign(primitiveAnim, {
+    kind: POLYLINE_KIND, closed: false, anchors, segments,
+    anchorLocked: anchors.map(() => false),
+    anchorLabels: anchors.map(() => null),
+    arcOverrideSegments,
+    activeSegments: new Set(),
+    expandedAnchors: new Set(), expandedArcs: new Set(),
+    regions: [],
+  });
+  recompileAnim(primitiveAnim);
+  detectObjectTopology(parentAnim.curves ? parentAnim : primitiveAnim);
+  saveProject(); renderAnimList(); draw();
+}
+
+// Split a child curve of a merged object at an existing anchor index, turning it into two
+// child curves that share that anchor as a coincident endpoint. This causes detectObjectTopology
+// to classify that point as a new essential topology node with a schematic label.
+function splitChildCurveAtAnchor(parentAnim, curveId, anchorIdx) {
+  if (!parentAnim.curves) return;
+  const cIdx = parentAnim.curves.findIndex(c => c.id === curveId);
+  if (cIdx === -1) return;
+  const orig = parentAnim.curves[cIdx];
+  if (anchorIdx <= 0 || anchorIdx >= orig.anchors.length - 1) return;
+  pushUndo();
+  const leftAnchors  = orig.anchors.slice(0, anchorIdx + 1).map(cloneCx);
+  const rightAnchors = orig.anchors.slice(anchorIdx).map(cloneCx);
+  const leftSegs  = orig.segments.slice(0, anchorIdx).map(cloneSegment);
+  const rightSegs = orig.segments.slice(anchorIdx).map(cloneSegment);
+  const leftLocked  = orig.anchorLocked ? orig.anchorLocked.slice(0, anchorIdx + 1) : [];
+  const rightLocked = orig.anchorLocked ? orig.anchorLocked.slice(anchorIdx) : [];
+  const leftLabels  = orig.anchorLabels ? orig.anchorLabels.slice(0, anchorIdx + 1) : [];
+  const rightLabels = orig.anchorLabels ? orig.anchorLabels.slice(anchorIdx) : [];
+  const leftOverrides = new Set(), rightOverrides = new Set();
+  if (orig.arcOverrideSegments) {
+    for (const si of orig.arcOverrideSegments) {
+      if (si < anchorIdx) leftOverrides.add(si);
+      else rightOverrides.add(si - anchorIdx);
+    }
+  }
+  const base = {
+    kind: orig.kind, color: orig.color, outlineOpacity: orig.outlineOpacity ?? 1,
+    fillColor: orig.fillColor ?? null, fillOpacity: orig.fillOpacity ?? 0.3,
+    fillStyle: orig.fillStyle ?? 'solid', thickness: orig.thickness,
+    closed: false, visible: orig.visible ?? true, name: null, letter: orig.letter,
+    rotation: 0, inPlacementMode: false, reversePlacement: false,
+    extensionAnchorIdx: null, extensionForward: true, extensionInsertAt: 0,
+    tContinuation: null, expanded: false, groupId: parentAnim.groupId,
+    gradientToColor: orig.gradientToColor ?? null, gradientToOpacity: orig.gradientToOpacity ?? null,
+    gradientAngle: orig.gradientAngle, patternType: orig.patternType,
+    patternAngle: orig.patternAngle, patternSpacing: orig.patternSpacing,
+    gradientFromArcs: new Set(), gradientToArcs: new Set(),
+    activeSegments: new Set(), expandedAnchors: new Set(), expandedArcs: new Set(), regions: [],
+  };
+  const curveLeft  = { ...base, id: Date.now() + Math.random(),
+    anchors: leftAnchors,  segments: leftSegs,  anchorLocked: leftLocked,  anchorLabels: leftLabels,
+    ...(leftOverrides.size  ? { arcOverrideSegments: leftOverrides }  : {}) };
+  const curveRight = { ...base, id: Date.now() + Math.random() + 0.5,
+    anchors: rightAnchors, segments: rightSegs, anchorLocked: rightLocked, anchorLabels: rightLabels,
+    ...(rightOverrides.size ? { arcOverrideSegments: rightOverrides } : {}) };
+  recompileAnim(curveLeft);
+  recompileAnim(curveRight);
+  parentAnim.curves.splice(cIdx, 1, curveLeft, curveRight);
+  detectObjectTopology(parentAnim);
+  drillObjectArc = null;
+  promoteNodeMode = null;
+  saveProject(); renderAnimList(); draw();
+}
+
 let globalSettings = loadGlobalSettings();
 
 
@@ -4067,6 +4154,7 @@ let plusHover    = null; // {anim, end:'A0'|'A2'} | null
 let lockHover    = null; // {anim, anchorIdx} | null — interior anchor lock toggle
 let rubberBand   = null; // {startX,startY,curX,curY,ctrl} | null — drag-region selection
 let splitArcMode = null; // {anim, segIdx} | null — pending arc split waiting for canvas click
+let promoteNodeMode = null; // { animId, curveId, fromIdx, toIdx } | null — click an interior anchor to split child curve and create a topology node
 let pendingBodyDrag = null; // {anim, startMathX, startMathY, startClientX, startClientY, dragContext, groupId, onSelect} — deferred select+move
 let pendingRubberBand = null; // {startX, startY, startClientX, startClientY} — upgrades pendingBodyDrag to rubber-band when an object is already selected
 let fillHover    = null;    // anim | null — unselected object fill under cursor (for grab cursor)
@@ -5322,6 +5410,7 @@ function deleteAnimation(id) {
   editModeAnimId = null;
   selectedId = null;
   if (splitArcMode && splitArcMode.anim.id === id) splitArcMode = null;
+  if (promoteNodeMode && promoteNodeMode.animId === id) promoteNodeMode = null;
   animations = animations.filter(a => a.id !== id);
   cleanupSingletonGroups();
   renumberAnimationsByStackOrder();
@@ -5518,8 +5607,9 @@ document.addEventListener('keydown', e => {
       }
       return;
     }
-    if (splitArcMode !== null) {
+    if (splitArcMode !== null || promoteNodeMode !== null) {
       splitArcMode = null;
+      promoteNodeMode = null;
       renderAnimList(); draw();
       return;
     }
@@ -5601,7 +5691,7 @@ document.addEventListener('keydown', e => {
 function recompileSegment(anim, i) {
   const seg = anim.segments[i];
   if (!seg) return;
-  const A0 = anim.anchors[i], A1 = anim.anchors[i + 1];
+  const A0 = anim.anchors[i], A1 = anim.anchors[i + 1] ?? anim.anchors[0];
   const pts = [A0, seg.h0, seg.h1, A1];
   const bezier = buildBezierFn(pts);
   const composite = LEGACY_ECCENTRICITY_EDITING_ENABLED ? buildCompositeBezierFn(pts) : null;
@@ -5705,6 +5795,7 @@ function exitEditMode() {
   lockHover = null;
   rubberBand = null;
   splitArcMode = null;
+  promoteNodeMode = null;
   renderAnimList();
   draw();
 }
@@ -6187,25 +6278,6 @@ function duplicateAnimation() {
   animations.push(anim);
   recompileAnim(anim);
   if (anim.curves) for (const c of anim.curves) recompileAnim(c);
-  if (anim.curves && src.regions?.length) {
-    detectObjectTopology(anim);
-    const idMap = new Map(src.curves.map((c, i) => [c.id, anim.curves[i].id]));
-    anim.regions.forEach((r, i) => {
-      const s = src.regions[i];
-      if (!s) return;
-      r.fillColor = s.fillColor;
-      r.fillOpacity = s.fillOpacity;
-      r.fillStyle = s.fillStyle;
-      r.gradientToColor = s.gradientToColor;
-      r.gradientToOpacity = s.gradientToOpacity;
-      r.gradientAngle = s.gradientAngle;
-      r.patternType = s.patternType;
-      r.patternAngle = s.patternAngle;
-      r.patternSpacing = s.patternSpacing;
-      r.fill1Arcs = s.fill1Arcs ? s.fill1Arcs.map(e => ({ ...e, animId: idMap.get(e.animId) ?? e.animId })) : null;
-      r.fill2Arcs = s.fill2Arcs ? s.fill2Arcs.map(e => ({ ...e, animId: idMap.get(e.animId) ?? e.animId })) : null;
-    });
-  }
   enterEditMode(anim);
   updateCursor();
 }
@@ -6239,6 +6311,8 @@ function makeTransformedAnimation(src, transformPoint, rotation) {
   const newRegions = src.regions ? src.regions.map(r => ({
     ...r,
     boundary: r.boundary.map(edge => ({ ...edge, animId: curveIdMap.get(edge.animId) ?? edge.animId })),
+    fill1Arcs: r.fill1Arcs ? r.fill1Arcs.map(e => ({ ...e, animId: curveIdMap.get(e.animId) ?? e.animId })) : r.fill1Arcs,
+    fill2Arcs: r.fill2Arcs ? r.fill2Arcs.map(e => ({ ...e, animId: curveIdMap.get(e.animId) ?? e.animId })) : r.fill2Arcs,
   })) : [];
   return {
     id: newAnimId,
@@ -6375,25 +6449,6 @@ function createSideActionCopy(src, kind) {
   animations.push(anim);
   recompileAnim(anim);
   if (anim.curves) for (const c of anim.curves) recompileAnim(c);
-  if (anim.curves && src.regions?.length) {
-    detectObjectTopology(anim);
-    const idMap = new Map(src.curves.map((c, i) => [c.id, anim.curves[i].id]));
-    anim.regions.forEach((r, i) => {
-      const s = src.regions[i];
-      if (!s) return;
-      r.fillColor = s.fillColor;
-      r.fillOpacity = s.fillOpacity;
-      r.fillStyle = s.fillStyle;
-      r.gradientToColor = s.gradientToColor;
-      r.gradientToOpacity = s.gradientToOpacity;
-      r.gradientAngle = s.gradientAngle;
-      r.patternType = s.patternType;
-      r.patternAngle = s.patternAngle;
-      r.patternSpacing = s.patternSpacing;
-      r.fill1Arcs = s.fill1Arcs ? s.fill1Arcs.map(e => ({ ...e, animId: idMap.get(e.animId) ?? e.animId })) : null;
-      r.fill2Arcs = s.fill2Arcs ? s.fill2Arcs.map(e => ({ ...e, animId: idMap.get(e.animId) ?? e.animId })) : null;
-    });
-  }
 
   editModeAnimId = null;
   drillObjectArc = null;
@@ -6667,6 +6722,15 @@ function updateCursor() {
     canvas.style.cursor = 'default';
     objCanvas.style.cursor = onTarget ? SCISSORS_CURSOR : 'not-allowed';
     isolCanvas.style.cursor = onTarget ? SCISSORS_CURSOR : 'not-allowed';
+    return;
+  } else if (promoteNodeMode !== null) {
+    const _pnLo = Math.min(promoteNodeMode.fromIdx, promoteNodeMode.toIdx);
+    const _pnHi = Math.max(promoteNodeMode.fromIdx, promoteNodeMode.toIdx);
+    const _pnOnTarget = anchorHover && anchorHover.anim.id === promoteNodeMode.curveId
+      && anchorHover.anchorIdx > _pnLo && anchorHover.anchorIdx < _pnHi;
+    canvas.style.cursor = 'default';
+    objCanvas.style.cursor = _pnOnTarget ? 'crosshair' : 'default';
+    isolCanvas.style.cursor = _pnOnTarget ? 'crosshair' : 'default';
     return;
   } else if (resizeDrag) {
     const c = resizeCursorForHandle(resizeDrag.handle);
@@ -8061,6 +8125,23 @@ canvas.addEventListener('mousedown', e => {
     return;
   }
 
+  // ── Promote node mode ──
+  if (promoteNodeMode !== null) {
+    e.preventDefault();
+    const _pnAh = queryAnchorHover(mathX, mathY);
+    const _pnLo = Math.min(promoteNodeMode.fromIdx, promoteNodeMode.toIdx);
+    const _pnHi = Math.max(promoteNodeMode.fromIdx, promoteNodeMode.toIdx);
+    if (_pnAh && _pnAh.anim.id === promoteNodeMode.curveId
+        && _pnAh.anchorIdx > _pnLo && _pnAh.anchorIdx < _pnHi) {
+      const _pnParent = animations.find(a => a.id === promoteNodeMode.animId);
+      if (_pnParent) splitChildCurveAtAnchor(_pnParent, promoteNodeMode.curveId, _pnAh.anchorIdx);
+    } else {
+      promoteNodeMode = null;
+      renderAnimList(); draw();
+    }
+    return;
+  }
+
   if (currentTool === 'arc-builder' || currentTool === 'shape' || currentTool === 'text') {
     e.preventDefault();
     const snapped = new Cx(softSnap(mathX), softSnap(mathY));
@@ -8414,14 +8495,6 @@ canvas.addEventListener('mousedown', e => {
           updateCursor(); draw(); return;
         }
       }
-      const _hitReg = hitTestObjectRegion(_topoAnim, cx, cy);
-      if (_hitReg !== null) {
-        e.preventDefault();
-        selectedObjectNode = null; drillObjectArc = null;
-        selectedObjectRegionId = { animId: selectedId, id: _hitReg };
-        activeTopoTab = 'region';
-        renderAnimList(); draw(); return;
-      }
       if (_tas.length) {
         const _arcHitThreshold = 10 * devicePixelRatio;
         const _curvesById = buildTopologyCurvesMap(_topoAnim);
@@ -8438,7 +8511,7 @@ canvas.addEventListener('mousedown', e => {
         }
         if (_bestArcHit && _bestArcDist <= _arcHitThreshold) {
           e.preventDefault();
-          selectedObjectNode = null; selectedObjectRegionId = null;
+          selectedObjectNode = null; selectedObjectRegionId = null; promoteNodeMode = null;
           drillObjectArc = { animId: selectedId, label: _bestArcHit.label, curveId: _bestArcHit.curveId, fromIdx: _bestArcHit.fromIdx, toIdx: _bestArcHit.toIdx };
           activeTopoTab = 'arc';
           if (!_topoAnim.curves) {
@@ -8456,6 +8529,16 @@ canvas.addEventListener('mousedown', e => {
           }
           renderAnimList(); draw(); return;
         }
+      }
+      // Arc check found nothing within threshold; fall back to region.
+      const _hitReg = hitTestObjectRegion(_topoAnim, cx, cy);
+      if (_hitReg !== null) {
+        e.preventDefault();
+        selectedObjectNode = null; drillObjectArc = null;
+        for (const _c of animCurves(_topoAnim)) _c.activeSegments = new Set();
+        selectedObjectRegionId = { animId: selectedId, id: _hitReg };
+        activeTopoTab = 'region';
+        renderAnimList(); draw(); return;
       }
       } // end if (!_overInteractive)
     }
@@ -9224,14 +9307,8 @@ window.addEventListener('mouseup', e => {
       const _topoAnim = animations.find(a => a.id === selectedId);
       if (_topoAnim && !isTextAnim(_topoAnim)) {
         const { topoArcs: _tas } = computeObjectTopologyData(_topoAnim);
-        // Region check first so clicking inside a region always wins over nearby arc boundaries.
-        const _hitReg = hitTestObjectRegion(_topoAnim, _prb.clickCx, _prb.clickCy);
-        if (_hitReg !== null) {
-          selectedObjectNode = null; drillObjectArc = null;
-          selectedObjectRegionId = { animId: selectedId, id: _hitReg };
-          activeTopoTab = 'region';
-          renderAnimList(); draw(); return;
-        }
+        // Arc check first: a click within threshold of a visible segment selects the arc,
+        // even if the point is geometrically inside a region.
         if (_tas.length) {
           const _arcHitThreshold = 10 * devicePixelRatio;
           const _curvesById = buildTopologyCurvesMap(_topoAnim);
@@ -9263,6 +9340,15 @@ window.addEventListener('mouseup', e => {
             }
             renderAnimList(); draw(); return;
           }
+        }
+        // Arc check found nothing within threshold; fall back to region.
+        const _hitReg = hitTestObjectRegion(_topoAnim, _prb.clickCx, _prb.clickCy);
+        if (_hitReg !== null) {
+          selectedObjectNode = null; drillObjectArc = null;
+          for (const _c of animCurves(_topoAnim)) _c.activeSegments = new Set();
+          selectedObjectRegionId = { animId: selectedId, id: _hitReg };
+          activeTopoTab = 'region';
+          renderAnimList(); draw(); return;
         }
       }
     }
@@ -9543,6 +9629,23 @@ objCanvas.addEventListener('mousedown', e => {
         renderAnimList(); draw();
       } else {
         splitArcMode = null;
+        renderAnimList(); draw();
+      }
+      return;
+    }
+
+    // ── Promote node mode ──
+    if (promoteNodeMode !== null) {
+      e.preventDefault();
+      const _pnAh = queryAnchorHover(mathX, mathY);
+      const _pnLo = Math.min(promoteNodeMode.fromIdx, promoteNodeMode.toIdx);
+      const _pnHi = Math.max(promoteNodeMode.fromIdx, promoteNodeMode.toIdx);
+      if (_pnAh && _pnAh.anim.id === promoteNodeMode.curveId
+          && _pnAh.anchorIdx > _pnLo && _pnAh.anchorIdx < _pnHi) {
+        const _pnParent = animations.find(a => a.id === promoteNodeMode.animId);
+        if (_pnParent) splitChildCurveAtAnchor(_pnParent, promoteNodeMode.curveId, _pnAh.anchorIdx);
+      } else {
+        promoteNodeMode = null;
         renderAnimList(); draw();
       }
       return;
@@ -9852,6 +9955,23 @@ isolCanvas.addEventListener('mousedown', e => {
         renderAnimList(); draw();
       } else {
         splitArcMode = null;
+        renderAnimList(); draw();
+      }
+      return;
+    }
+
+    // ── Promote node mode ──
+    if (promoteNodeMode !== null) {
+      e.preventDefault();
+      const _pnAh = queryAnchorHover(mathX, mathY);
+      const _pnLo = Math.min(promoteNodeMode.fromIdx, promoteNodeMode.toIdx);
+      const _pnHi = Math.max(promoteNodeMode.fromIdx, promoteNodeMode.toIdx);
+      if (_pnAh && _pnAh.anim.id === promoteNodeMode.curveId
+          && _pnAh.anchorIdx > _pnLo && _pnAh.anchorIdx < _pnHi) {
+        const _pnParent = animations.find(a => a.id === promoteNodeMode.animId);
+        if (_pnParent) splitChildCurveAtAnchor(_pnParent, promoteNodeMode.curveId, _pnAh.anchorIdx);
+      } else {
+        promoteNodeMode = null;
         renderAnimList(); draw();
       }
       return;
@@ -13187,12 +13307,17 @@ function drawSelectionCrossbeams(anim, frame) {
 function drawTopoArcHandles(curve, fromIdx, toIdx) {
   const dpr = devicePixelRatio;
   const color = curve.color || '#89b4fa';
+  const _pnMode = promoteNodeMode?.curveId === curve.id;
+  const _pnLo = _pnMode ? Math.min(promoteNodeMode.fromIdx, promoteNodeMode.toIdx) : -1;
+  const _pnHi = _pnMode ? Math.max(promoteNodeMode.fromIdx, promoteNodeMode.toIdx) : -1;
   // Anchor dots for each anchor in the arc range
   for (let i = fromIdx; i <= toIdx; i++) {
     const a = curve.anchors[i];
     if (!a) continue;
     const isHov = anchorHover?.anim === curve && anchorHover?.anchorIdx === i;
-    drawAnchorDot(toCanvas(a.re, a.im), color, (isHov ? 7 : 5) * dpr);
+    const isPromotable = _pnMode && i > _pnLo && i < _pnHi;
+    const dotColor = isPromotable ? '#89dceb' : color;
+    drawAnchorDot(toCanvas(a.re, a.im), dotColor, (isHov ? 7 : isPromotable ? 6 : 5) * dpr);
   }
   // Bézier handles for each segment in the arc range
   const isPolyline = isPolylineAnim(curve);
@@ -13233,7 +13358,7 @@ function drawNodeDots(anim) {
   if (selectedObjectRegionId?.animId === anim.id) {
     const selReg = anim.regions?.find(r => r.id === selectedObjectRegionId.id);
     if (selReg) {
-      const curvesMap = new Map(curves.map(c => [c.id, c]));
+      const curvesMap = buildTopologyCurvesMap(anim);
       boundaryPositions = [];
       for (const edge of selReg.boundary) {
         const c = curvesMap.get(edge.animId);
@@ -13928,6 +14053,26 @@ function drawAnimations() {
   drawSelectedMultiSelectionBounds();
   drawPlacementMatchButton();
   drawContourSelectOverlay();
+
+  // Promote node mode: status banner
+  if (promoteNodeMode !== null) {
+    const _dpr = devicePixelRatio;
+    const _msg = 'Promote to node — click a highlighted anchor   •   Esc to cancel';
+    ctx.save();
+    ctx.font = `${11 * _dpr}px system-ui, sans-serif`;
+    const _mw = ctx.measureText(_msg).width;
+    const _bx = (canvas.width - _mw) / 2 - 10 * _dpr;
+    const _by = 10 * _dpr;
+    const _bw = _mw + 20 * _dpr;
+    const _bh = 20 * _dpr;
+    ctx.fillStyle = 'rgba(16,16,32,0.82)';
+    ctx.beginPath();
+    ctx.roundRect(_bx, _by, _bw, _bh, 4 * _dpr);
+    ctx.fill();
+    ctx.fillStyle = '#89dceb';
+    ctx.fillText(_msg, _bx + 10 * _dpr, _by + 14 * _dpr);
+    ctx.restore();
+  }
 
   // Rubber-band selection rectangle
   if (rubberBand) {
@@ -20165,18 +20310,23 @@ function renderAnimListLegacy() {
     })();
     _arcTab.textContent = `${_arcIsPolyline ? 'Segment' : 'Arc'} ${_arcDisplayLabel}`;
     _arcTabBar.appendChild(_arcTab);
-    if (_selCurveForArc) {
+    if (_selCurveForArc && animKind(_selCurveForArc) !== 'freeform') {
       const _arcToggleBtn = document.createElement('button');
       _arcToggleBtn.className = 'arc-type-toggle-btn';
       _arcToggleBtn.textContent = _arcIsPolyline ? '→ Arc' : '→ Segment';
       _arcToggleBtn.title = _arcIsPolyline ? 'Convert to Bézier arc (handles become free)' : 'Straighten to line segment';
       _arcToggleBtn.addEventListener('click', e => {
         e.stopPropagation();
-        pushUndo();
         if (_arcIsPolyline) {
+          if (isPrimitiveAnim(_selCurveForArc)) {
+            convertPrimitiveToPolylineWithArc(anim, _selCurveForArc, _arcLo, _arcHi);
+            return;
+          }
+          pushUndo();
           if (!_selCurveForArc.arcOverrideSegments) _selCurveForArc.arcOverrideSegments = new Set();
           for (let _si = _arcLo; _si < _arcHi; _si++) _selCurveForArc.arcOverrideSegments.add(_si);
         } else {
+          pushUndo();
           for (let _si = _arcLo; _si < _arcHi; _si++) {
             _selCurveForArc.arcOverrideSegments?.delete(_si);
             const _seg = _selCurveForArc.segments[_si];
@@ -20190,6 +20340,24 @@ function renderAnimListLegacy() {
         saveProject(); renderAnimList(); draw();
       });
       _arcTabBar.appendChild(_arcToggleBtn);
+    }
+    // "Promote to node" — only for merged objects with interior anchors; not for primitives
+    if (anim.curves && _selCurveForArc && !isPrimitiveAnim(_selCurveForArc) && Math.abs(_arcToIdx - _arcFromIdx) > 1) {
+      const _pnActive = promoteNodeMode?.curveId === _selCurveForArc.id;
+      const _pnBtn = document.createElement('button');
+      _pnBtn.className = 'anchor-split-btn' + (_pnActive ? ' split-active' : '');
+      _pnBtn.textContent = 'Promote to node';
+      _pnBtn.title = 'Click an interior anchor on this arc to split it at that point, creating a new topology node';
+      _pnBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        if (promoteNodeMode?.curveId === _selCurveForArc.id) {
+          promoteNodeMode = null;
+        } else {
+          promoteNodeMode = { animId: anim.id, curveId: _selCurveForArc.id, fromIdx: _arcFromIdx, toIdx: _arcToIdx };
+        }
+        renderAnimList(); draw();
+      });
+      _arcTabBar.appendChild(_pnBtn);
     }
     _arcExp.appendChild(_arcTabBar);
     const _arcPanel = document.createElement('div'); _arcPanel.className = 'color-tab-content';
