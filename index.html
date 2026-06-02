@@ -8380,16 +8380,35 @@ canvas.addEventListener('mousedown', e => {
             if (Math.hypot(cx - _emCx, cy - _emCy) <= _emHIT) { _rbSkip = true; break; }
           }
         }
+        // Also skip rubber-band when clicking on the edit-mode object's arc body so the
+        // click falls through to topology arc selection rather than triggering rubber-band.
+        if (!_rbSkip) {
+          const _emSeg = segmentHover ?? querySegmentHover(cx, cy);
+          if (_emSeg?.anim?.id === editModeAnimId) _rbSkip = true;
+        }
       }
     } else if (selectedId !== null) {
       // In selection-frame mode: allow dragging topology nodes without deselecting
       const _sfAnim = animations.find(a => a.id === selectedId);
       if (_sfAnim && !isTextAnim(_sfAnim)) {
-        const { essentialPoints: _sfEps } = computeObjectTopologyData(_sfAnim);
-        const _sfHIT = 14 * devicePixelRatio;
-        for (const _sfEp of _sfEps) {
-          const [_sfCx, _sfCy] = toCanvas(_sfEp.pos.re, _sfEp.pos.im);
-          if (Math.hypot(cx - _sfCx, cy - _sfCy) <= _sfHIT) { _rbSkip = true; break; }
+        // Skip rubber-band when clicking on the selected object's arc so the click falls
+        // through to topology arc selection instead of triggering rubber-band.
+        const _sfSeg = segmentHover ?? querySegmentHover(cx, cy);
+        if (_sfSeg?.anim?.id === selectedId) _rbSkip = true;
+        // Also skip when clicking a Bézier control point of an already-drilled arc
+        // (merged objects where editModeAnimId is not set after arc selection).
+        if (!_rbSkip && drillObjectArc?.animId === selectedId) {
+          const _aHit = anchorHover ?? queryAnchorHover(mathX, mathY);
+          const _hHit = !_aHit ? (handleHover ?? queryHandleHover(mathX, mathY)) : null;
+          if (_aHit || _hHit) _rbSkip = true;
+        }
+        if (!_rbSkip) {
+          const { essentialPoints: _sfEps } = computeObjectTopologyData(_sfAnim);
+          const _sfHIT = 14 * devicePixelRatio;
+          for (const _sfEp of _sfEps) {
+            const [_sfCx, _sfCy] = toCanvas(_sfEp.pos.re, _sfEp.pos.im);
+            if (Math.hypot(cx - _sfCx, cy - _sfCy) <= _sfHIT) { _rbSkip = true; break; }
+          }
         }
       }
     }
