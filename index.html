@@ -857,6 +857,15 @@
       background: #313244;
       color: #cdd6f4;
     }
+    .seg-rigid-toggle { display: flex; gap: 3px; margin-left: auto; margin-bottom: 2px; }
+    .seg-rigid-btn {
+      padding: 2px 8px; font-size: 0.68rem; font-weight: 600;
+      background: #1e1e2e; border: 1px solid #45475a; border-radius: 4px;
+      cursor: pointer; white-space: nowrap;
+    }
+    .seg-rigid-btn.active { color: #cba6f7; border-color: #cba6f7; }
+    .seg-rigid-btn.inactive { color: #45475a; border-color: #313244; }
+    .seg-rigid-btn:hover { background: #313244; }
     .color-tab {
       padding: 4px 14px;
       font-size: 0.72rem;
@@ -2412,13 +2421,25 @@ function convertPrimitiveToPolylineWithArc(parentAnim, primitiveAnim, arcLo, arc
 // Split a child curve of a merged object at an existing anchor index, turning it into two
 // child curves that share that anchor as a coincident endpoint. This causes detectObjectTopology
 // to classify that point as a new essential topology node with a schematic label.
-function splitChildCurveAtAnchor(parentAnim, curveId, anchorIdx) {
-  if (!parentAnim.curves) return;
-  const cIdx = parentAnim.curves.findIndex(c => c.id === curveId);
-  if (cIdx === -1) return;
-  const orig = parentAnim.curves[cIdx];
-  if (anchorIdx <= 0 || anchorIdx >= orig.anchors.length - 1) return;
-  pushUndo();
+function _splitCurveBaseProps(orig, parentGroupId) {
+  return {
+    kind: orig.kind, color: orig.color, outlineOpacity: orig.outlineOpacity ?? 1,
+    freeformPen: orig.freeformPen ?? false,
+    fillColor: orig.fillColor ?? null, fillOpacity: orig.fillOpacity ?? 0.3,
+    fillStyle: orig.fillStyle ?? 'solid', thickness: orig.thickness,
+    closed: false, visible: orig.visible ?? true, name: null, letter: orig.letter,
+    rotation: 0, inPlacementMode: false, reversePlacement: false,
+    extensionAnchorIdx: null, extensionForward: true, extensionInsertAt: 0,
+    tContinuation: null, expanded: false, groupId: parentGroupId,
+    gradientToColor: orig.gradientToColor ?? null, gradientToOpacity: orig.gradientToOpacity ?? null,
+    gradientAngle: orig.gradientAngle, patternType: orig.patternType,
+    patternAngle: orig.patternAngle, patternSpacing: orig.patternSpacing,
+    gradientFromArcs: new Set(), gradientToArcs: new Set(),
+    activeSegments: new Set(), expandedAnchors: new Set(), expandedArcs: new Set(), regions: [],
+  };
+}
+
+function _splitCurveHalves(orig, anchorIdx) {
   const leftAnchors  = orig.anchors.slice(0, anchorIdx + 1).map(cloneCx);
   const rightAnchors = orig.anchors.slice(anchorIdx).map(cloneCx);
   const leftSegs  = orig.segments.slice(0, anchorIdx).map(cloneSegment);
@@ -2434,20 +2455,47 @@ function splitChildCurveAtAnchor(parentAnim, curveId, anchorIdx) {
       else rightOverrides.add(si - anchorIdx);
     }
   }
-  const base = {
-    kind: orig.kind, color: orig.color, outlineOpacity: orig.outlineOpacity ?? 1,
-    fillColor: orig.fillColor ?? null, fillOpacity: orig.fillOpacity ?? 0.3,
-    fillStyle: orig.fillStyle ?? 'solid', thickness: orig.thickness,
-    closed: false, visible: orig.visible ?? true, name: null, letter: orig.letter,
-    rotation: 0, inPlacementMode: false, reversePlacement: false,
-    extensionAnchorIdx: null, extensionForward: true, extensionInsertAt: 0,
-    tContinuation: null, expanded: false, groupId: parentAnim.groupId,
-    gradientToColor: orig.gradientToColor ?? null, gradientToOpacity: orig.gradientToOpacity ?? null,
-    gradientAngle: orig.gradientAngle, patternType: orig.patternType,
-    patternAngle: orig.patternAngle, patternSpacing: orig.patternSpacing,
-    gradientFromArcs: new Set(), gradientToArcs: new Set(),
-    activeSegments: new Set(), expandedAnchors: new Set(), expandedArcs: new Set(), regions: [],
-  };
+  return { leftAnchors, rightAnchors, leftSegs, rightSegs, leftLocked, rightLocked,
+           leftLabels, rightLabels, leftOverrides, rightOverrides };
+}
+
+function splitChildCurveAtAnchor(parentAnim, curveId, anchorIdx) {
+  if (!parentAnim.curves) {
+    // Single-curve object: convert in-place to a merged container.
+    if (parentAnim.id !== curveId) return;
+    const orig = parentAnim;
+    if (anchorIdx <= 0 || anchorIdx >= orig.anchors.length - 1) return;
+    pushUndo();
+    const { leftAnchors, rightAnchors, leftSegs, rightSegs, leftLocked, rightLocked,
+            leftLabels, rightLabels, leftOverrides, rightOverrides } = _splitCurveHalves(orig, anchorIdx);
+    const base = _splitCurveBaseProps(orig, orig.groupId);
+    const curveLeft  = { ...base, id: Date.now() + Math.random(),
+      anchors: leftAnchors,  segments: leftSegs,  anchorLocked: leftLocked,  anchorLabels: leftLabels,
+      ...(leftOverrides.size  ? { arcOverrideSegments: leftOverrides }  : {}) };
+    const curveRight = { ...base, id: Date.now() + Math.random() + 0.5,
+      anchors: rightAnchors, segments: rightSegs, anchorLocked: rightLocked, anchorLabels: rightLabels,
+      ...(rightOverrides.size ? { arcOverrideSegments: rightOverrides } : {}) };
+    recompileAnim(curveLeft);
+    recompileAnim(curveRight);
+    parentAnim.curves = [curveLeft, curveRight];
+    parentAnim.anchors = []; parentAnim.segments = []; parentAnim.anchorLocked = []; parentAnim.anchorLabels = [];
+    parentAnim.activeSegments = new Set();
+    delete parentAnim.arcOverrideSegments;
+    if (editModeAnimId === parentAnim.id) editModeAnimId = null;
+    detectObjectTopology(parentAnim);
+    drillObjectArc = null;
+    promoteNodeMode = null;
+    saveProject(); renderAnimList(); draw();
+    return;
+  }
+  const cIdx = parentAnim.curves.findIndex(c => c.id === curveId);
+  if (cIdx === -1) return;
+  const orig = parentAnim.curves[cIdx];
+  if (anchorIdx <= 0 || anchorIdx >= orig.anchors.length - 1) return;
+  pushUndo();
+  const { leftAnchors, rightAnchors, leftSegs, rightSegs, leftLocked, rightLocked,
+          leftLabels, rightLabels, leftOverrides, rightOverrides } = _splitCurveHalves(orig, anchorIdx);
+  const base = _splitCurveBaseProps(orig, parentAnim.groupId);
   const curveLeft  = { ...base, id: Date.now() + Math.random(),
     anchors: leftAnchors,  segments: leftSegs,  anchorLocked: leftLocked,  anchorLabels: leftLabels,
     ...(leftOverrides.size  ? { arcOverrideSegments: leftOverrides }  : {}) };
@@ -3515,7 +3563,6 @@ function buildPendingPlacementArc(p0, p1, tContinuation, nextPoint) {
   return { seg: bisectorArc(p0, p1, tOut, tIn, f0, f1), tOut, tIn };
 }
 
-// Outgoing tangent at the end of a cubic Bézier (used by startExtendedPlacement).
 function tangentAtBezierEnd(anchor, h1) {
   const dx = anchor.re - h1.re, dy = anchor.im - h1.im;
   const L = Math.hypot(dx, dy);
@@ -3999,12 +4046,43 @@ function isSegmentStraight(seg, p0, p1) {
          Math.hypot(seg.h1.re - eh1re, seg.h1.im - eh1im) < tol;
 }
 
+// Scale a Bézier handle proportionally when one endpoint of its segment moves.
+// fixedAnchor: the endpoint that does NOT move.
+// movingOrig / movingNew: the other endpoint before and after the drag.
+// h: the handle's original position.
+function scaleHandleRigid(h, fixedAnchor, movingOrig, movingNew) {
+  const dhre = h.re - fixedAnchor.re, dhim = h.im - fixedAnchor.im;
+  const cre = movingOrig.re - fixedAnchor.re, cim = movingOrig.im - fixedAnchor.im;
+  const len2 = cre * cre + cim * cim;
+  if (len2 < 1e-20) {
+    const dre = movingNew.re - movingOrig.re, dim = movingNew.im - movingOrig.im;
+    return new Cx(h.re + dre, h.im + dim);
+  }
+  const ur = (dhre * cre + dhim * cim) / len2;
+  const ui = (dhim * cre - dhre * cim) / len2;
+  const cnre = movingNew.re - fixedAnchor.re, cnim = movingNew.im - fixedAnchor.im;
+  return new Cx(fixedAnchor.re + ur * cnre - ui * cnim, fixedAnchor.im + ur * cnim + ui * cnre);
+}
+
+// Returns true when the drag of a connected node should preserve this segment's shape.
+// - Explicit seg.rigid flag takes priority.
+// - Arc-builder curves (non-freeformPen, non-POLYLINE_KIND) default rigid when eccentricity===0.
+function isSegmentRigid(anim, segIdx) {
+  if (!anim || anim.freeformPen || anim.kind === POLYLINE_KIND) return false;
+  const seg = anim.segments[segIdx];
+  if (!seg) return false;
+  if (seg.rigid === true) return true;
+  if (seg.rigid === false) return false;
+  return (seg.eccentricity ?? -1) === 0;
+}
+
 function cloneSegment(seg) {
   return seg ? {
     h0: cloneCx(seg.h0),
     h1: cloneCx(seg.h1),
     eccentricity: seg.eccentricity ?? 1,
     visible: seg.visible ?? true,
+    ...(typeof seg.rigid === 'boolean' ? { rigid: seg.rigid } : {}),
     compiled: null,
     compiledRef: null,
   } : null;
@@ -4112,6 +4190,7 @@ let hoveredRegionGroupId = null;
 let colorEditTarget = 'outline';
 let gradientColorTab = 1; // 1 or 2, active sub-tab when editing gradient fill
 let objectFillTab = 1;   // 1=Fill1, 2=Fill2, 3=Style — active sub-tab in object panel
+let _globalCanvasDimFactor = 1; // multiplied into animOutlineOpacity/animFillOpacity to dim non-selected objects
 let eyedropperTarget = null; // 'outline' | 'fill' | 'gradientTo' | 'region-fill' | 'arc-stroke' | null
 let eyedropperAnimId = null;
 let eyedropperRegionId = null; // region id when target is 'region-fill'
@@ -4150,7 +4229,6 @@ let sideActionMenuOpen = false;
 let freeformPenActive  = false;
 let freeformPenCapture = null; // null | {points:[{x,y},...]} in device pixels
 let freeformPenTolerance = 2; // CSS pixels, used by RDP simplification
-let plusHover    = null; // {anim, end:'A0'|'A2'} | null
 let lockHover    = null; // {anim, anchorIdx} | null — interior anchor lock toggle
 let rubberBand   = null; // {startX,startY,curX,curY,ctrl} | null — drag-region selection
 let splitArcMode = null; // {anim, segIdx} | null — pending arc split waiting for canvas click
@@ -4192,11 +4270,13 @@ function snapshotAnimations() {
     textShearY: a.textShearY ?? 0,
     visible: a.visible, thickness: a.thickness, rotation: a.rotation ?? 0,
     anchors: a.anchors.map(p => new Cx(p.re, p.im)),
+    freeformPen: a.freeformPen ?? false,
     segments: a.segments.map(s => s ? ({
       h0: new Cx(s.h0.re, s.h0.im),
       h1: new Cx(s.h1.re, s.h1.im),
       eccentricity: s.eccentricity,
       visible: s.visible ?? true,
+      ...(typeof s.rigid === 'boolean' ? { rigid: s.rigid } : {}),
     }) : null),
     anchorLocked: [...(a.anchorLocked ?? [])],
     anchorLabels: [...(a.anchorLabels ?? [])],
@@ -4217,6 +4297,7 @@ function snapshotAnimations() {
     name: a.name ?? null,
     curves: a.curves ? a.curves.map(c => ({
       id: c.id, color: c.color, kind: c.kind || 'freeform',
+      freeformPen: c.freeformPen ?? false,
       fillColor: c.fillColor ?? null, outlineOpacity: c.outlineOpacity ?? 1,
       fillOpacity: c.fillOpacity ?? 0.5, fillStyle: normalizeFillStyle(c.fillStyle),
       closed: !!c.closed, text: c.text ?? '', fontSize: c.fontSize ?? 36,
@@ -4226,7 +4307,7 @@ function snapshotAnimations() {
       textShearX: c.textShearX ?? 0, textShearY: c.textShearY ?? 0,
       visible: c.visible, thickness: c.thickness, rotation: c.rotation ?? 0,
       anchors: c.anchors.map(p => new Cx(p.re, p.im)),
-      segments: c.segments.map(s => s ? ({ h0: new Cx(s.h0.re, s.h0.im), h1: new Cx(s.h1.re, s.h1.im), eccentricity: s.eccentricity, visible: s.visible ?? true }) : null),
+      segments: c.segments.map(s => s ? ({ h0: new Cx(s.h0.re, s.h0.im), h1: new Cx(s.h1.re, s.h1.im), eccentricity: s.eccentricity, visible: s.visible ?? true, ...(typeof s.rigid === 'boolean' ? { rigid: s.rigid } : {}) }) : null),
       anchorLocked: [...(c.anchorLocked ?? [])],
       anchorLabels: [...(c.anchorLabels ?? [])],
       activeSegments: [...(c.activeSegments ?? [])],
@@ -4296,6 +4377,7 @@ function restoreSnapshot(snap) {
   animations = animSnap.map(s => {
     const anim = {
       id: s.id, letter: s.letter, color: s.color, kind: s.kind || 'freeform',
+      freeformPen: s.freeformPen ?? false,
       groupId: s.groupId ?? null,
       fillColor: s.fillColor ?? null,
       outlineOpacity: s.outlineOpacity ?? 1,
@@ -4319,6 +4401,7 @@ function restoreSnapshot(snap) {
         h1: new Cx(sg.h1.re, sg.h1.im),
         eccentricity: sg.eccentricity ?? 1,
         visible: sg.visible ?? true,
+        ...(typeof sg.rigid === 'boolean' ? { rigid: sg.rigid } : {}),
         compiled: null, compiledRef: null,
       }) : null),
       anchorLocked: s.anchorLocked ? [...s.anchorLocked] : [],
@@ -4340,6 +4423,7 @@ function restoreSnapshot(snap) {
       name: s.name ?? null,
       curves: s.curves ? s.curves.map(c => ({
         id: c.id, color: c.color, kind: c.kind || 'freeform',
+        freeformPen: c.freeformPen ?? false,
         fillColor: c.fillColor ?? null, outlineOpacity: c.outlineOpacity ?? 1,
         fillOpacity: c.fillOpacity ?? 0.5, fillStyle: normalizeFillStyle(c.fillStyle),
         closed: !!c.closed, text: c.text ?? '', fontSize: c.fontSize ?? 36,
@@ -4352,6 +4436,7 @@ function restoreSnapshot(snap) {
         segments: c.segments.map(sg => sg ? ({
           h0: new Cx(sg.h0.re, sg.h0.im), h1: new Cx(sg.h1.re, sg.h1.im),
           eccentricity: sg.eccentricity ?? 1, visible: sg.visible ?? true,
+          ...(typeof sg.rigid === 'boolean' ? { rigid: sg.rigid } : {}),
           compiled: null, compiledRef: null,
         }) : null),
         anchorLocked: c.anchorLocked ? [...c.anchorLocked] : [],
@@ -4370,6 +4455,7 @@ function restoreSnapshot(snap) {
     if (!anim.inPlacementMode) detectObjectTopology(anim);
     return anim;
   });
+  animations = animations.filter(a => !a.inPlacementMode);
   cleanupSingletonGroups();
   if (snapSelectedId !== null && animations.some(a => a.id === snapSelectedId)) selectedId = snapSelectedId;
   if (snapEditModeId !== null && animations.some(a => a.id === snapEditModeId)) editModeAnimId = snapEditModeId;
@@ -4749,7 +4835,6 @@ function clearSelectionHovers() {
   segmentHover = null;
   anchorHover = null;
   handleHover = null;
-  plusHover = null;
   lockHover = null;
 }
 
@@ -5229,6 +5314,17 @@ function hasActiveArcSelection(anim) {
   return activeArcIndex(anim) !== null;
 }
 
+function clearTopoFeatureSelection() {
+  const hadArc = drillObjectArc !== null;
+  if (hadArc) {
+    const _anim = animations.find(a => a.id === drillObjectArc.animId);
+    if (_anim) for (const _c of animCurves(_anim)) _c.activeSegments = new Set();
+    drillObjectArc = null;
+  }
+  selectedObjectRegionId = null;
+  if (hadArc && editModeAnimId !== null) exitEditMode();
+}
+
 function clearSelectionShearGuides(exceptAnim = null) {
   animations.forEach(anim => {
     if (anim !== exceptAnim) anim.selectionGuideShear = null;
@@ -5271,11 +5367,11 @@ function animFillColor(anim) {
 }
 
 function animOutlineOpacity(anim) {
-  return isFinite(anim?.outlineOpacity) ? clamp(anim.outlineOpacity, 0, 1) : 1;
+  return (isFinite(anim?.outlineOpacity) ? clamp(anim.outlineOpacity, 0, 1) : 1) * _globalCanvasDimFactor;
 }
 
 function animFillOpacity(anim) {
-  return isFinite(anim?.fillOpacity) ? clamp(anim.fillOpacity, 0, 1) : 0.5;
+  return (isFinite(anim?.fillOpacity) ? clamp(anim.fillOpacity, 0, 1) : 0.5) * _globalCanvasDimFactor;
 }
 
 function normalizeFillStyle(style, legacyRadialIsCircular = false) {
@@ -5394,7 +5490,6 @@ function clearAnimationInteractionState(id) {
   if (eccDrag?.anim?.id === id) eccDrag = null;
   if (frameDrag?.anim?.id === id) frameDrag = null;
   if (frameHover?.id === id) frameHover = null;
-  if (plusHover?.anim?.id === id) plusHover = null;
   if (lockHover?.anim?.id === id) lockHover = null;
   if (openColorMenuAnimId === id) openColorMenuAnimId = null;
   if (eccentricitySliderActiveKey?.animId === id) eccentricitySliderActiveKey = null;
@@ -5620,8 +5715,20 @@ document.addEventListener('keydown', e => {
       renderAnimList(); draw();
       return;
     }
+    // Step 1: clear arc/region selection, keep object selected
+    if (drillObjectArc !== null || selectedObjectRegionId !== null) {
+      clearTopoFeatureSelection();
+      renderAnimList(); draw();
+      return;
+    }
+    // Step 2: exit edit mode but keep object selected
     if (editModeAnimId !== null) {
       exitEditMode();
+      renderAnimList(); draw();
+      return;
+    }
+    // Step 3: deselect the object
+    if (selectedId !== null) {
       selectedId = null;
       animations.forEach(a => {
         a.expanded = false;
@@ -5791,7 +5898,6 @@ function exitEditMode() {
   segmentHover = null;
   anchorHover = null;
   handleHover = null;
-  plusHover = null;
   lockHover = null;
   rubberBand = null;
   splitArcMode = null;
@@ -5819,7 +5925,6 @@ function deleteArc(anim, segIdx) {
   if (anim.segments.length === 0) {
     if (editModeAnimId === anim.id) editModeAnimId = null;
     if (eccentricitySliderActiveKey?.animId === anim.id) eccentricitySliderActiveKey = null;
-    if (plusHover?.anim?.id === anim.id) plusHover = null;
     if (selectedId === anim.id) selectedId = null;
     animations = animations.filter(a => a.id !== anim.id);
     renderAnimList(); draw(); updateCursor(); return;
@@ -6169,6 +6274,7 @@ function commitFreeformPenStroke() {
   anim.anchors = mathPts;
   anim.segments = segs;
   anim.anchorLocked = mathPts.map(() => true);
+  anim.freeformPen = true;
   anim.inPlacementMode = false;
   recompileAnim(anim);
   detectObjectTopology(anim);
@@ -6745,8 +6851,6 @@ function updateCursor() {
     canvas.style.cursor = 'grab';
   } else if (anchorHover || handleHover || lockHover) {
     canvas.style.cursor = 'grab';
-  } else if (plusHover) {
-    canvas.style.cursor = 'default';
   } else if (frameHover) {
     canvas.style.cursor = 'move';
   } else if (anchorDrag || handleDrag || curveDrag || eccDrag || frameDrag || dragging || objDragging || pendingBodyDrag) {
@@ -7487,75 +7591,6 @@ function rayExitRect(px, py, dx, dy, rx, ry, rw, rh) {
   return t === Infinity ? 0 : Math.max(0, t);
 }
 
-function getPlusPositions(anim) {
-  if (isTextAnim(anim) || isPrimitiveAnim(anim)) return [];
-  if (isClosedPathAnim(anim)) return [];
-  if (anim.anchors.length === 0) return [];
-  if (anim.segments.length === 0) {
-    const dpr = devicePixelRatio;
-    const [ax, ay] = toCanvas(anim.anchors[0].re, anim.anchors[0].im);
-    return [{ end: 'A2', cx: ax, cy: ay - 22 * dpr, anchorIdx: 0, forward: true }];
-  }
-  const dpr = devicePixelRatio;
-  const OFFSET = 17 * dpr;
-  const result = [];
-  const activeCount = anim.activeSegments?.size || 0;
-  const showBackward = activeCount === 0 || anim.activeSegments.has(0);
-  const showForward  = activeCount === 0 || anim.activeSegments.has(anim.segments.length - 1);
-
-  if (showBackward && anim.segments[0]) {
-    const A0cp = toCanvas(anim.anchors[0].re, anim.anchors[0].im);
-    const h0cp = toCanvas(anim.segments[0].h0.re, anim.segments[0].h0.im);
-    let dx0 = A0cp[0] - h0cp[0], dy0 = A0cp[1] - h0cp[1];
-    if (Math.hypot(dx0, dy0) < 1e-9) {
-      const A1cp = toCanvas(anim.anchors[1].re, anim.anchors[1].im);
-      dx0 = A0cp[0] - A1cp[0]; dy0 = A0cp[1] - A1cp[1];
-    }
-    const l0 = Math.hypot(dx0, dy0) || 1;
-    const ux = dx0 / l0, uy = dy0 / l0;
-    result.push({ end: 'A0', cx: A0cp[0] + OFFSET * ux, cy: A0cp[1] + OFFSET * uy, anchorIdx: 0, forward: false });
-  }
-  if (showForward && anim.segments[anim.segments.length - 1]) {
-    const lastSegIdx = anim.segments.length - 1;
-    const A2cp = toCanvas(anim.anchors[lastSegIdx + 1].re, anim.anchors[lastSegIdx + 1].im);
-    const h1cp = toCanvas(anim.segments[lastSegIdx].h1.re, anim.segments[lastSegIdx].h1.im);
-    let dx1 = A2cp[0] - h1cp[0], dy1 = A2cp[1] - h1cp[1];
-    if (Math.hypot(dx1, dy1) < 1e-9) {
-      const A0cp2 = toCanvas(anim.anchors[lastSegIdx].re, anim.anchors[lastSegIdx].im);
-      dx1 = A2cp[0] - A0cp2[0]; dy1 = A2cp[1] - A0cp2[1];
-    }
-    const l1 = Math.hypot(dx1, dy1) || 1;
-    const ux = dx1 / l1, uy = dy1 / l1;
-    result.push({ end: 'A2', cx: A2cp[0] + OFFSET * ux, cy: A2cp[1] + OFFSET * uy, anchorIdx: lastSegIdx + 1, forward: true });
-  }
-  return result;
-}
-
-function queryPlusHover(cx, cy) {
-  if (!editModeAnimId) return null;
-  const anim = animations.find(a => a.id === editModeAnimId);
-  if (isPrimitiveAnim(anim) || isTextAnim(anim)) return null;
-  if (!anim || anim.inPlacementMode || anim.anchors.length === 0) return null;
-  const threshold = 14 * devicePixelRatio;
-  for (const pp of getPlusPositions(anim)) {
-    if (Math.hypot(cx - pp.cx, cy - pp.cy) < threshold)
-      return { anim, end: pp.end, anchorIdx: pp.anchorIdx, forward: pp.forward };
-  }
-  return null;
-}
-
-function drawPlusSign(cx, cy, color, dpr, isHovered) {
-  const arm = (isHovered ? 7 : 5) * dpr;
-  ctx.save();
-  ctx.strokeStyle = color;
-  ctx.lineWidth = (isHovered ? 2 : 1.5) * dpr;
-  ctx.globalAlpha = isHovered ? 1 : 0.7;
-  ctx.lineCap = 'round';
-  ctx.beginPath(); ctx.moveTo(cx - arm, cy); ctx.lineTo(cx + arm, cy); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(cx, cy - arm); ctx.lineTo(cx, cy + arm); ctx.stroke();
-  ctx.restore();
-}
-
 function getActiveHandleInfo(anim) {
   const active = anim.activeSegments;
   if (!active || active.size === 0) return { anchorSet: new Set(anim.anchors.map((_, i) => i)), handlePairs: [] };
@@ -7667,41 +7702,6 @@ function drawLockToggle(lx, ly, locked, isHovered, color, dpr) {
   ctx.stroke();
 
   ctx.restore();
-}
-
-function startExtendedPlacement(fromAnim, anchorIdx, forward) {
-  pushUndo();
-  exitEditMode();
-  animations.forEach(a => {
-    a.expanded = false;
-    a.expandedArcs = new Set();
-    a.expandedAnchors = new Set();
-  });
-  fromAnim.inPlacementMode = true;
-  fromAnim.extensionAnchorIdx = anchorIdx;
-  fromAnim.extensionForward = forward;
-  fromAnim.extensionInsertAt = forward ? anchorIdx + 1 : anchorIdx;
-  fromAnim.reversePlacement = !forward;
-  // Compute tContinuation — the tangent the new arc must honour at the extension anchor
-  let tCont = new Cx(0, -1); // fallback for dots
-  const segs = fromAnim.segments, anch = fromAnim.anchors;
-  if (forward && segs.length > 0 && anchorIdx > 0) {
-    // Outgoing tangent at anch[anchorIdx] from the segment that ends there
-    const seg = segs[anchorIdx - 1];
-    if (seg) tCont = tangentAtBezierEnd(anch[anchorIdx], seg.h1);
-  } else if (!forward && segs.length > 0) {
-    // Start tangent at anch[anchorIdx] from the segment that begins there
-    const seg = segs[anchorIdx];
-    if (seg) {
-      const dx = seg.h0.re - anch[anchorIdx].re, dy = seg.h0.im - anch[anchorIdx].im;
-      const L = Math.hypot(dx, dy);
-      if (L > 1e-9) tCont = new Cx(dx/L, dy/L);
-    }
-  }
-  fromAnim.tContinuation = tCont;
-  fromAnim.expanded = true;
-  selectedId = fromAnim.id;
-  renderAnimList(); draw(); updateCursor();
 }
 
 function hitTestCurve(cx, cy) {
@@ -8341,14 +8341,6 @@ canvas.addEventListener('mousedown', e => {
     updateCursor(); draw(); return;
   }
 
-  // ── Plus (extend placement) ──
-  const plusHit = plusHover ?? queryPlusHover(cx, cy);
-  if (plusHit) {
-    e.preventDefault();
-    startExtendedPlacement(plusHit.anim, plusHit.anchorIdx, plusHit.forward);
-    return;
-  }
-
   // ── Lock toggle ──
   const lockHit = lockHover ?? queryLockHover(cx, cy);
   if (lockHit) {
@@ -8490,8 +8482,12 @@ canvas.addEventListener('mousedown', e => {
             anim: _prim.anim, anchorIdx: _prim.anchorIdx, startMathX: mathX, startMathY: mathY,
             origAnchor: _primOrig, origH0: _primH0, origH1: _primH1,
             linkedIdx: null, linkedOrigH0: null, linkedOrigH1: null,
+            origOutH1: _primOutSeg ? cloneCx(_primOutSeg.h1) : null,
+            origInH0: _primInSeg ? cloneCx(_primInSeg.h0) : null,
             outStraight: _primNextAnch ? isSegmentStraight(_primOutSeg, _primOrig, _primNextAnch) : false,
             inStraight: _primPrevAnch ? isSegmentStraight(_primInSeg, _primPrevAnch, _primOrig) : false,
+            outRigid: _primNextAnch ? isSegmentRigid(_prim.anim, _prim.anchorIdx) : false,
+            inRigid: _primPrevAnch ? isSegmentRigid(_prim.anim, _prim.anchorIdx - 1) : false,
             nextAnchor: _primNextAnch ? cloneCx(_primNextAnch) : null,
             prevAnchor: _primPrevAnch ? cloneCx(_primPrevAnch) : null,
             coincidentAnchors: _nodeAnchors.slice(1).map(({ anim: _ca, anchorIdx: _cai }) => {
@@ -8563,6 +8559,34 @@ canvas.addEventListener('mousedown', e => {
     }
   }
 
+  // ── Frame border click: return to object from arc/region selection ──
+  if ((drillObjectArc !== null || selectedObjectRegionId !== null) && selectedId !== null) {
+    const _fbAnim = animations.find(a => a.id === selectedId);
+    if (_fbAnim) {
+      const _fbBounds = selectedObjectCanvasBounds(_fbAnim);
+      if (_fbBounds) {
+        const _lw = isPrimitiveAnim(_fbAnim) ? primitiveStrokeWidth(_fbAnim)
+          : (1 + 5 * (_fbAnim.thickness / 10)) * devicePixelRatio;
+        const _fbFrame = frameMetricsFromCanvasBounds(_fbBounds, _lw);
+        if (_fbFrame) {
+          const _tol = 12 * devicePixelRatio;
+          const { outerX: _fx, outerY: _fy, outerW: _fw, outerH: _fh, extend: _fext } = _fbFrame;
+          const _ox = _fx - _fext, _oy = _fy - _fext;
+          const _ow = _fw + _fext * 2, _oh = _fh + _fext * 2;
+          const _onBorder = cx >= _ox - _tol && cx <= _ox + _ow + _tol &&
+                            cy >= _oy - _tol && cy <= _oy + _oh + _tol &&
+                            (cx <= _ox + _tol || cx >= _ox + _ow - _tol ||
+                             cy <= _oy + _tol || cy >= _oy + _oh - _tol);
+          if (_onBorder) {
+            e.preventDefault();
+            clearTopoFeatureSelection();
+            renderAnimList(); draw(); return;
+          }
+        }
+      }
+    }
+  }
+
   // ── Anchor drag ──
   const anchorHit = anchorHover ?? queryAnchorHover(mathX, mathY);
   if (anchorHit) {
@@ -8592,8 +8616,12 @@ canvas.addEventListener('mousedown', e => {
     anchorDrag = {
       anim: aHitAnim, anchorIdx, startMathX: mathX, startMathY: mathY,
       origAnchor, origH0, origH1, linkedIdx, linkedOrigH0, linkedOrigH1,
+      origOutH1: _outSeg ? cloneCx(_outSeg.h1) : null,
+      origInH0: _inSeg ? cloneCx(_inSeg.h0) : null,
       outStraight: _nextAnch ? isSegmentStraight(_outSeg, origAnchor, _nextAnch) : false,
       inStraight: _prevAnch ? isSegmentStraight(_inSeg, _prevAnch, origAnchor) : false,
+      outRigid: _nextAnch ? isSegmentRigid(aHitAnim, anchorIdx) : false,
+      inRigid: _prevAnch ? isSegmentRigid(aHitAnim, anchorIdx - 1) : false,
       nextAnchor: _nextAnch ? cloneCx(_nextAnch) : null,
       prevAnchor: _prevAnch ? cloneCx(_prevAnch) : null,
       coincidentAnchors: [],
@@ -8617,8 +8645,12 @@ canvas.addEventListener('mousedown', e => {
                 anim: _sib, anchorIdx: _ai, origAnchor: _saOrig,
                 origH0: _saOutSeg ? cloneCx(_saOutSeg.h0) : null,
                 origH1: _saInSeg ? cloneCx(_saInSeg.h1) : null,
+                origOutH1: _saOutSeg ? cloneCx(_saOutSeg.h1) : null,
+                origInH0: _saInSeg ? cloneCx(_saInSeg.h0) : null,
                 outStraight: _saN ? isSegmentStraight(_saOutSeg, _saOrig, _saN) : false,
                 inStraight: _saP ? isSegmentStraight(_saInSeg, _saP, _saOrig) : false,
+                outRigid: _saN ? isSegmentRigid(_sib, _ai) : false,
+                inRigid: _saP ? isSegmentRigid(_sib, _ai - 1) : false,
                 nextAnchor: _saN ? cloneCx(_saN) : null,
                 prevAnchor: _saP ? cloneCx(_saP) : null,
               });
@@ -9027,7 +9059,11 @@ window.addEventListener('mousemove', e => {
       const isInterior = origH0 !== null && origH1 !== null;
       // Outgoing segment (anchorIdx → anchorIdx+1): update h0 and h1
       if (anim.segments[anchorIdx]) {
-        if (anchorDrag.outStraight && anchorDrag.nextAnchor) {
+        if (anchorDrag.outRigid && anchorDrag.nextAnchor && origH0 !== null) {
+          const p1 = anchorDrag.nextAnchor, snapPt = new Cx(snapX, snapY), orig0 = anchorDrag.origAnchor;
+          anim.segments[anchorIdx].h0 = scaleHandleRigid(origH0, p1, orig0, snapPt);
+          if (anchorDrag.origOutH1 !== null) anim.segments[anchorIdx].h1 = scaleHandleRigid(anchorDrag.origOutH1, p1, orig0, snapPt);
+        } else if (anchorDrag.outStraight && anchorDrag.nextAnchor) {
           const p1 = anchorDrag.nextAnchor;
           anim.segments[anchorIdx].h0 = new Cx(snapX + (p1.re - snapX) / 3, snapY + (p1.im - snapY) / 3);
           anim.segments[anchorIdx].h1 = new Cx(snapX + 2 * (p1.re - snapX) / 3, snapY + 2 * (p1.im - snapY) / 3);
@@ -9037,7 +9073,11 @@ window.addEventListener('mousemove', e => {
       }
       // Incoming segment (anchorIdx-1 → anchorIdx): update h0 and h1
       if (anchorIdx > 0 && anim.segments[anchorIdx - 1]) {
-        if (anchorDrag.inStraight && anchorDrag.prevAnchor) {
+        if (anchorDrag.inRigid && anchorDrag.prevAnchor && origH1 !== null) {
+          const p0 = anchorDrag.prevAnchor, snapPt = new Cx(snapX, snapY), orig0 = anchorDrag.origAnchor;
+          if (anchorDrag.origInH0 !== null) anim.segments[anchorIdx - 1].h0 = scaleHandleRigid(anchorDrag.origInH0, p0, orig0, snapPt);
+          anim.segments[anchorIdx - 1].h1 = scaleHandleRigid(origH1, p0, orig0, snapPt);
+        } else if (anchorDrag.inStraight && anchorDrag.prevAnchor) {
           const p0 = anchorDrag.prevAnchor;
           anim.segments[anchorIdx - 1].h0 = new Cx(p0.re + (snapX - p0.re) / 3, p0.im + (snapY - p0.im) / 3);
           anim.segments[anchorIdx - 1].h1 = new Cx(p0.re + 2 * (snapX - p0.re) / 3, p0.im + 2 * (snapY - p0.im) / 3);
@@ -9052,13 +9092,19 @@ window.addEventListener('mousemove', e => {
       for (const _cc of anchorDrag.coincidentAnchors) {
         const { anim: _ca, anchorIdx: _cai, origAnchor: _cOrig,
                 origH0: _cOrigH0, origH1: _cOrigH1,
+                origOutH1: _cOrigOutH1, origInH0: _cOrigInH0,
                 outStraight: _cOutStraight, inStraight: _cInStraight,
+                outRigid: _cOutRigid, inRigid: _cInRigid,
                 nextAnchor: _cNext, prevAnchor: _cPrev } = _cc;
         _ca.anchors[_cai] = new Cx(_cOrig.re + sdx, _cOrig.im + sdy);
         const _cSnapX = _cOrig.re + sdx, _cSnapY = _cOrig.im + sdy;
         const _cIsInterior = _cOrigH0 !== null && _cOrigH1 !== null;
         if (_ca.segments[_cai]) {
-          if (_cOutStraight && _cNext) {
+          if (_cOutRigid && _cNext && _cOrigH0 !== null) {
+            const _cSnapPt = new Cx(_cSnapX, _cSnapY);
+            _ca.segments[_cai].h0 = scaleHandleRigid(_cOrigH0, _cNext, _cOrig, _cSnapPt);
+            if (_cOrigOutH1 !== null) _ca.segments[_cai].h1 = scaleHandleRigid(_cOrigOutH1, _cNext, _cOrig, _cSnapPt);
+          } else if (_cOutStraight && _cNext) {
             _ca.segments[_cai].h0 = new Cx(_cSnapX + (_cNext.re - _cSnapX) / 3, _cSnapY + (_cNext.im - _cSnapY) / 3);
             _ca.segments[_cai].h1 = new Cx(_cSnapX + 2 * (_cNext.re - _cSnapX) / 3, _cSnapY + 2 * (_cNext.im - _cSnapY) / 3);
           } else if (_cOrigH0 !== null) {
@@ -9066,7 +9112,11 @@ window.addEventListener('mousemove', e => {
           }
         }
         if (_cai > 0 && _ca.segments[_cai - 1]) {
-          if (_cInStraight && _cPrev) {
+          if (_cInRigid && _cPrev && _cOrigH1 !== null) {
+            const _cSnapPt = new Cx(_cSnapX, _cSnapY);
+            if (_cOrigInH0 !== null) _ca.segments[_cai - 1].h0 = scaleHandleRigid(_cOrigInH0, _cPrev, _cOrig, _cSnapPt);
+            _ca.segments[_cai - 1].h1 = scaleHandleRigid(_cOrigH1, _cPrev, _cOrig, _cSnapPt);
+          } else if (_cInStraight && _cPrev) {
             _ca.segments[_cai - 1].h0 = new Cx(_cPrev.re + (_cSnapX - _cPrev.re) / 3, _cPrev.im + (_cSnapY - _cPrev.im) / 3);
             _ca.segments[_cai - 1].h1 = new Cx(_cPrev.re + 2 * (_cSnapX - _cPrev.re) / 3, _cPrev.im + 2 * (_cSnapY - _cPrev.im) / 3);
           } else if (_cOrigH1 !== null) {
@@ -9200,7 +9250,7 @@ window.addEventListener('mousemove', e => {
                      e.clientY >= isolBB.top  && e.clientY <= isolBB.bottom;
 
     let newSideActionHover = null, newResizeHover = null, newFrameHover = null;
-    let newPlusHover = null, newLockHover = null, newAnchorHover = null;
+    let newLockHover = null, newAnchorHover = null;
     let newHandleHover = null, newRotationHover = null, newSegmentHover = null;
 
     if (overIsol) {
@@ -9211,22 +9261,20 @@ window.addEventListener('mousemove', e => {
         newSideActionHover = querySideActionButtonHover(iCx, iCy);
         newRotationHover = newSideActionHover ? null : queryRotationWheelHover(iCx, iCy);
         newResizeHover   = (newSideActionHover || newRotationHover) ? null : queryResizeHandleHover(iCx, iCy);
-        newPlusHover     = (newSideActionHover || newRotationHover || newResizeHover) ? null : queryPlusHover(iCx, iCy);
-        newLockHover     = (newSideActionHover || newRotationHover || newResizeHover || newPlusHover) ? null : queryLockHover(iCx, iCy);
-        newAnchorHover   = (newSideActionHover || newRotationHover || newResizeHover || newPlusHover || newLockHover) ? null : queryAnchorHover(iMx, iMy);
-        newHandleHover   = (newSideActionHover || newRotationHover || newResizeHover || newPlusHover || newAnchorHover || newLockHover) ? null : queryHandleHover(iMx, iMy);
-        newSegmentHover  = (newSideActionHover || newRotationHover || newResizeHover || newPlusHover || newAnchorHover || newHandleHover || newLockHover) ? null : querySegmentHover(iCx, iCy);
+        newLockHover     = (newSideActionHover || newRotationHover || newResizeHover) ? null : queryLockHover(iCx, iCy);
+        newAnchorHover   = (newSideActionHover || newRotationHover || newResizeHover || newLockHover) ? null : queryAnchorHover(iMx, iMy);
+        newHandleHover   = (newSideActionHover || newRotationHover || newResizeHover || newAnchorHover || newLockHover) ? null : queryHandleHover(iMx, iMy);
+        newSegmentHover  = (newSideActionHover || newRotationHover || newResizeHover || newAnchorHover || newHandleHover || newLockHover) ? null : querySegmentHover(iCx, iCy);
       });
     } else {
       newSideActionHover = querySideActionButtonHover(cx, cy);
       newRotationHover = newSideActionHover ? null : queryRotationWheelHover(cx, cy);
       newResizeHover  = (newSideActionHover || newRotationHover) ? null : queryResizeHandleHover(cx, cy);
       newFrameHover   = (newSideActionHover || newRotationHover || newResizeHover) ? null : queryFrameBorderHover(cx, cy);
-      newPlusHover    = (newSideActionHover || newRotationHover || newResizeHover || newFrameHover) ? null : queryPlusHover(cx, cy);
-      newLockHover    = (newSideActionHover || newRotationHover || newResizeHover || newFrameHover || newPlusHover) ? null : queryLockHover(cx, cy);
-      newAnchorHover  = (newSideActionHover || newRotationHover || newResizeHover || newFrameHover || newPlusHover || newLockHover) ? null : queryAnchorHover(mathX, mathY);
-      newHandleHover  = (newSideActionHover || newRotationHover || newResizeHover || newPlusHover || newAnchorHover || newLockHover) ? null : queryHandleHover(mathX, mathY);
-      newSegmentHover = (newSideActionHover || newResizeHover || newFrameHover || newPlusHover || newRotationHover || newAnchorHover || newHandleHover || newLockHover) ? null : querySegmentHover(cx, cy);
+      newLockHover    = (newSideActionHover || newRotationHover || newResizeHover || newFrameHover) ? null : queryLockHover(cx, cy);
+      newAnchorHover  = (newSideActionHover || newRotationHover || newResizeHover || newFrameHover || newLockHover) ? null : queryAnchorHover(mathX, mathY);
+      newHandleHover  = (newSideActionHover || newRotationHover || newResizeHover || newAnchorHover || newLockHover) ? null : queryHandleHover(mathX, mathY);
+      newSegmentHover = (newSideActionHover || newResizeHover || newFrameHover || newRotationHover || newAnchorHover || newHandleHover || newLockHover) ? null : querySegmentHover(cx, cy);
     }
 
     // Fill hover: show grab cursor over unselected objects whose body is draggable
@@ -9247,9 +9295,8 @@ window.addEventListener('mousemove', e => {
     const resizeChanged = (newResizeHover?.anim !== resizeHover?.anim) || (newResizeHover?.groupId !== resizeHover?.groupId) || (newResizeHover?.multi !== resizeHover?.multi) || (newResizeHover?.handle !== resizeHover?.handle);
     const frameChanged = (newFrameHover?.id !== frameHover?.id) || (newFrameHover?.groupId !== frameHover?.groupId) || (newFrameHover?.multi !== frameHover?.multi);
     const rotationChanged = (newRotationHover?.anim !== rotateHover?.anim) || (newRotationHover?.groupId !== rotateHover?.groupId) || (newRotationHover?.multi !== rotateHover?.multi);
-    const plusChanged = (newPlusHover?.anim !== plusHover?.anim) || (newPlusHover?.end !== plusHover?.end);
     const lockChanged = (newLockHover?.anim !== lockHover?.anim) || (newLockHover?.anchorIdx !== lockHover?.anchorIdx);
-    const changed = sideActionChanged || resizeChanged || frameChanged || rotationChanged || plusChanged || lockChanged || (newAnchorHover !== anchorHover) || (newHandleHover !== handleHover) ||
+    const changed = sideActionChanged || resizeChanged || frameChanged || rotationChanged || lockChanged || (newAnchorHover !== anchorHover) || (newHandleHover !== handleHover) ||
       (newSegmentHover !== segmentHover &&
         !(newSegmentHover && segmentHover && newSegmentHover.anim === segmentHover.anim && newSegmentHover.segIdx === segmentHover.segIdx)) ||
       (newFillHover !== fillHover);
@@ -9258,7 +9305,6 @@ window.addEventListener('mousemove', e => {
     frameHover   = newFrameHover;
     rotateHover  = newRotationHover;
     lockHover    = newLockHover;
-    plusHover    = newPlusHover;
     anchorHover  = newAnchorHover;
     handleHover  = newHandleHover;
     segmentHover = newSegmentHover;
@@ -9596,8 +9642,8 @@ canvas.addEventListener('mouseleave', () => {
   // so dragging past the canvas edge continues to work correctly.
   pendingBodyDrag = null;
   pendingRubberBand = null;
-  if (anchorHover || handleHover || segmentHover || resizeHover || rotateHover || sideActionHover || frameHover || plusHover || lockHover || fillHover) {
-    anchorHover = null; handleHover = null; segmentHover = null; resizeHover = null; rotateHover = null; sideActionHover = null; frameHover = null; plusHover = null; lockHover = null; fillHover = null;
+  if (anchorHover || handleHover || segmentHover || resizeHover || rotateHover || sideActionHover || frameHover || lockHover || fillHover) {
+    anchorHover = null; handleHover = null; segmentHover = null; resizeHover = null; rotateHover = null; sideActionHover = null; frameHover = null; lockHover = null; fillHover = null;
     updateCursor(); draw();
   }
 });
@@ -9751,13 +9797,6 @@ objCanvas.addEventListener('mousedown', e => {
         }
       }
       updateCursor(); draw(); return;
-    }
-
-    const plusHit = queryPlusHover(cx, cy);
-    if (plusHit) {
-      e.preventDefault();
-      startExtendedPlacement(plusHit.anim, plusHit.anchorIdx, plusHit.forward);
-      return;
     }
 
     const lockHit = queryLockHover(cx, cy);
@@ -10079,13 +10118,6 @@ isolCanvas.addEventListener('mousedown', e => {
       updateCursor(); draw(); return;
     }
 
-    const plusHit = queryPlusHover(cx, cy);
-    if (plusHit) {
-      e.preventDefault();
-      startExtendedPlacement(plusHit.anim, plusHit.anchorIdx, plusHit.forward);
-      return;
-    }
-
     const lockHit = queryLockHover(cx, cy);
     if (lockHit) {
       e.preventDefault();
@@ -10251,9 +10283,9 @@ isolCanvas.addEventListener('auxclick', e => { if (AUX_WINDOWS_ENABLED && e.butt
 
 isolCanvas.addEventListener('mouseleave', () => {
   if (!AUX_WINDOWS_ENABLED) return;
-  if (anchorHover || handleHover || segmentHover || resizeHover || rotateHover || sideActionHover || plusHover || lockHover) {
+  if (anchorHover || handleHover || segmentHover || resizeHover || rotateHover || sideActionHover || lockHover) {
     anchorHover = null; handleHover = null; segmentHover = null;
-    resizeHover = null; rotateHover = null; sideActionHover = null; plusHover = null; lockHover = null;
+    resizeHover = null; rotateHover = null; sideActionHover = null; lockHover = null;
     updateCursor(); draw();
   }
 });
@@ -10360,20 +10392,25 @@ function drawHandles(anim) {
     ctx.restore();
   }
 
-  // "+" signs always visible in edit mode
-  for (const pp of getPlusPositions(anim)) {
-    const isHov = plusHover?.anim === anim && plusHover?.end === pp.end;
-    drawPlusSign(pp.cx, pp.cy, CANVAS_BUTTON_COLOR, dpr, isHov);
-  }
-
   // Anchor dots visible whenever in edit mode
   const softColor = softenedSelectionColor(anim.color);
+  const ARC_HANDLE_COLOR = '#b8ddff';
+  // Topo-arc fade: when a multi-segment arc is selected via drillObjectArc, activeArcIndex returns
+  // null but we still want to dim anchors outside the selected arc's span.
+  const _topoSpan = (activeArc === null && drillObjectArc?.animId === anim.id && !anim.curves)
+    ? { min: drillObjectArc.fromIdx, max: drillObjectArc.toIdx }
+    : null;
   for (let i = 0; i < anim.anchors.length; i++) {
     if (!anim.anchors[i]) continue;
     const isHov = anchorHover?.anim === anim && anchorHover?.anchorIdx === i;
     const isExp = anim.expandedAnchors?.has(i);
-    const anchorColor = activeArc === null || i === activeArc || i === activeArc + 1 ? anim.color : softColor;
+    const isActiveAnchor = activeArc !== null && (i === activeArc || i === activeArc + 1);
+    const isInTopoSpan = _topoSpan !== null && i >= _topoSpan.min && i <= _topoSpan.max;
+    const anchorColor = activeArc === null ? anim.color : (isActiveAnchor ? ARC_HANDLE_COLOR : softColor);
+    const _dimAnchor = (activeArc !== null && !isActiveAnchor) || (_topoSpan !== null && !isInTopoSpan);
+    if (_dimAnchor) { ctx.save(); ctx.globalAlpha = 0.38; }
     drawAnchorDot(toCanvas(anim.anchors[i].re, anim.anchors[i].im), anchorColor, (isHov || isExp ? 7 : 5) * dpr);
+    if (_dimAnchor) ctx.restore();
   }
 
   // Bézier handles and lock toggles only visible when an arc is selected
@@ -10387,12 +10424,12 @@ function drawHandles(anim) {
     const Acp = toCanvas(anim.anchors[anchorIdx].re, anim.anchors[anchorIdx].im);
     const hcp = toCanvas(anim.segments[segIdx][side].re, anim.segments[segIdx][side].im);
     ctx.save();
-    ctx.globalAlpha = 0.45; ctx.strokeStyle = anim.color;
+    ctx.globalAlpha = 0.55; ctx.strokeStyle = ARC_HANDLE_COLOR;
     ctx.lineWidth = 1.2 * dpr; ctx.setLineDash([3*dpr, 3*dpr]);
     ctx.beginPath(); ctx.moveTo(Acp[0], Acp[1]); ctx.lineTo(hcp[0], hcp[1]); ctx.stroke();
     ctx.setLineDash([]); ctx.restore();
     const isHov = handleHover?.anim === anim && handleHover?.segIdx === segIdx && handleHover?.side === side;
-    drawHandleDot(hcp, anim.color, (isHov ? 5 : 3.5) * dpr);
+    drawHandleDot(hcp, ARC_HANDLE_COLOR, (isHov ? 5 : 3.5) * dpr);
   }
   // Lock toggles only for interior anchors adjacent to the selected arc
   if (!isPolylineAnim(anim)) {
@@ -11398,10 +11435,6 @@ function selectedArcCanvasBounds(anim) {
     for (const pt of sampleCompiledAdaptive(seg.compiled)) bounds = includeCanvasPoint(bounds, pt);
   }
   bounds = includeArcHandleInfluenceBounds(bounds, anim, segIdx);
-  // Include plus-sign positions so the selection frame doesn't cover them
-  for (const pp of getPlusPositions(anim)) {
-    bounds = includeCanvasPoint(bounds, [pp.cx, pp.cy]);
-  }
   return bounds;
 }
 
@@ -11602,14 +11635,6 @@ function selectionFrameMetrics(anim) {
   const arcBounds = selectedArcCanvasBounds(anim);
   let bounds = arcBounds || selectedObjectCanvasBounds(anim);
   if (!bounds) return null;
-  // Expand bounds to encompass plus-sign buttons when in edit mode
-  if (!arcBounds && editModeAnimId === anim.id) {
-    const arm = 7 * devicePixelRatio;
-    for (const pp of getPlusPositions(anim)) {
-      bounds = includeCanvasPoint(bounds, [pp.cx - arm, pp.cy - arm]);
-      bounds = includeCanvasPoint(bounds, [pp.cx + arm, pp.cy + arm]);
-    }
-  }
   const dpr = devicePixelRatio;
   const lineWidth = isPrimitiveAnim(anim) ? primitiveStrokeWidth(anim) : (1 + 5 * (anim.thickness / 10)) * dpr;
   return frameMetricsFromCanvasBounds(bounds, lineWidth);
@@ -13355,14 +13380,6 @@ function drawTopoArcHandles(curve, fromIdx, toIdx) {
       drawHandleDot(hcp, color, (isHov ? 5 : 3.5) * dpr);
     }
   }
-  // Plus signs only at arc endpoints that coincide with curve endpoints
-  for (const pp of getPlusPositions(curve)) {
-    if ((pp.anchorIdx === 0 && fromIdx === 0) ||
-        (pp.anchorIdx === curve.anchors.length - 1 && toIdx === curve.anchors.length - 1)) {
-      const isHov = plusHover?.anim === curve && plusHover?.end === pp.end;
-      drawPlusSign(pp.cx, pp.cy, CANVAS_BUTTON_COLOR, dpr, isHov);
-    }
-  }
 }
 
 function drawNodeDots(anim) {
@@ -13390,10 +13407,26 @@ function drawNodeDots(anim) {
     }
   }
 
+  // When an arc is selected, collect the anchor positions that belong to that arc
+  let arcAnchorPositions = null;
+  if (drillObjectArc?.animId === anim.id) {
+    const _da = drillObjectArc;
+    const _daCurve = animCurves(anim).find(c => c.id === _da.curveId);
+    if (_daCurve) {
+      arcAnchorPositions = [];
+      for (let i = _da.fromIdx; i <= _da.toIdx; i++) {
+        const a = _daCurve.anchors[i];
+        if (a) arcAnchorPositions.push(a);
+      }
+    }
+  }
+
   ctx.save();
   for (const ep of essentialPoints) {
     const onBoundary = boundaryPositions === null ||
       boundaryPositions.some(a => Math.hypot(a.re - ep.pos.re, a.im - ep.pos.im) < 1e-4);
+    const onArcAnchor = arcAnchorPositions === null ||
+      arcAnchorPositions.some(a => Math.hypot(a.re - ep.pos.re, a.im - ep.pos.im) < 1e-4);
     let dotColor = null;
     outer: for (const c of curves) {
       if (isPrimitiveAnim(c) || isTextAnim(c) || !c.anchors?.length) continue;
@@ -13404,7 +13437,7 @@ function drawNodeDots(anim) {
         }
       }
     }
-    ctx.globalAlpha = onBoundary ? 1 : 0.45;
+    ctx.globalAlpha = (onBoundary && onArcAnchor) ? 1 : 0.45;
     const [ncx, ncy] = toCanvas(ep.pos.re, ep.pos.im);
     drawAnchorDot([ncx, ncy], dotColor || anim.color, 5 * dpr);
   }
@@ -13435,12 +13468,6 @@ function drawTopoFeatureSelectionBounds(anim) {
       if (seg.h1) bounds = includeCanvasPoint(bounds, toCanvas(seg.h1.re, seg.h1.im));
     }
     // Include plus-sign positions when arc endpoint coincides with curve endpoint
-    for (const pp of getPlusPositions(curve)) {
-      if ((pp.anchorIdx === 0 && fromIdx === 0) ||
-          (pp.anchorIdx === curve.anchors.length - 1 && toIdx === curve.anchors.length - 1)) {
-        bounds = includeCanvasPoint(bounds, [pp.cx, pp.cy]);
-      }
-    }
   } else if (selectedObjectRegionId?.animId === anim.id) {
     const region = (anim.regions ?? []).find(r => r.id === selectedObjectRegionId.id);
     if (!region) return;
@@ -13469,12 +13496,39 @@ function drawSelectedObjectBounds(anim) {
   const groupCandidate = groupSelectionMode && groupCandidateIds.has(anim.id);
   const isActive = selectedId === anim.id || editModeAnimId === anim.id;
   if (!isActive && !groupCandidate) return;
-  if (!groupCandidate &&
-      (drillObjectArc?.animId === anim.id ||
-       selectedObjectRegionId?.animId === anim.id)) {
-    drawTopoFeatureSelectionBounds(anim);
+
+  const topoFeatureActive = !groupCandidate &&
+    (drillObjectArc?.animId === anim.id || selectedObjectRegionId?.animId === anim.id);
+
+  // When arc/region is selected: draw a simplified white object frame (no interactive handles)
+  if (topoFeatureActive) {
+    const _objBounds = selectedObjectCanvasBounds(anim);
+    if (!_objBounds) return;
+    const dpr = devicePixelRatio;
+    const _lw = isPrimitiveAnim(anim) ? primitiveStrokeWidth(anim) : (1 + 5 * (anim.thickness / 10)) * dpr;
+    const _frame = frameMetricsFromCanvasBounds(_objBounds, _lw);
+    if (!_frame) return;
+    const { x, y, w, h, outerX, outerY, outerW, outerH, extend } = _frame;
+    ctx.save();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1.25 * dpr;
+    ctx.globalAlpha = 0.28;
+    ctx.shadowBlur = 6 * dpr;
+    ctx.shadowColor = '#ffffff';
+    ctx.strokeRect(x, y, w, h);
+    ctx.strokeStyle = 'black';
+    ctx.lineWidth = 0.9 * dpr;
+    ctx.globalAlpha = 0.7;
+    ctx.shadowBlur = 0;
+    ctx.strokeRect(outerX, outerY, outerW, outerH);
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1.8 * dpr;
+    ctx.globalAlpha = 0.14;
+    ctx.strokeRect(outerX - extend, outerY - extend, outerW + extend * 2, outerH + extend * 2);
+    ctx.restore();
     return;
   }
+
   const arcSelected = hasActiveArcSelection(anim);
   const frame = selectionFrameMetrics(anim);
   if (!frame) return;
@@ -13483,22 +13537,22 @@ function drawSelectedObjectBounds(anim) {
   const { x, y, w, h, outerX, outerY, outerW, outerH, extend } = frame;
 
   ctx.save();
-  ctx.fillStyle = CANVAS_TOOL_COLOR;
-  ctx.globalAlpha = 0.05;
+  ctx.fillStyle = '#ffffff';
+  ctx.globalAlpha = 0.04;
   ctx.fillRect(x, y, w, h);
 
-  ctx.strokeStyle = CANVAS_TOOL_COLOR;
+  ctx.strokeStyle = '#ffffff';
   ctx.lineWidth = 1.25 * dpr;
-  ctx.globalAlpha = 0.48;
+  ctx.globalAlpha = 0.55;
   ctx.shadowBlur = 8 * dpr;
-  ctx.shadowColor = CANVAS_TOOL_COLOR;
+  ctx.shadowColor = '#ffffff';
   ctx.strokeRect(x, y, w, h);
 
   ctx.strokeStyle = 'black';
   ctx.lineWidth = 0.9 * dpr;
   ctx.globalAlpha = 1.0;
   ctx.strokeRect(outerX, outerY, outerW, outerH);
-  ctx.strokeStyle = CANVAS_TOOL_COLOR;
+  ctx.strokeStyle = '#ffffff';
 
   ctx.lineWidth = 2 * dpr;
   ctx.globalAlpha = 0.3;
@@ -13519,11 +13573,11 @@ function drawSelectedObjectBounds(anim) {
     const wheelVisible = isRotationModeActiveForAnim(anim) || rotateDrag?.anim === anim;
     const wheelActive = rotateDrag?.anim === anim || rotateHover?.anim === anim;
     if (wheelVisible && wheel && wheel.r > 0) {
-      ctx.strokeStyle = wheelActive ? CANVAS_TOOL_COLOR : CANVAS_CONTROL_IDLE_COLOR;
+      ctx.strokeStyle = wheelActive ? '#ffffff' : CANVAS_CONTROL_IDLE_COLOR;
       ctx.lineWidth = (wheelActive ? 2.6 : 1.65) * dpr;
       ctx.globalAlpha = wheelActive ? 0.66 : 0.5;
       ctx.shadowBlur = wheelActive ? 6 * dpr : 0;
-      ctx.shadowColor = CANVAS_TOOL_COLOR;
+      ctx.shadowColor = '#ffffff';
       ctx.beginPath();
       ctx.arc(wheel.cx, wheel.cy, wheel.r, 0, Math.PI * 2);
       ctx.stroke();
@@ -13768,18 +13822,14 @@ function drawCommittedAnimation(anim, { deferOverlay = false } = {}) {
     } else if (_fStyle === 'pattern') {
       drawCurvePattern(anim);
     } else if (animFillColor(anim)) {
-      const softFill = activeArc !== null && animFillColor(anim)
-        ? softenedSelectionColor(animFillColor(anim))
-        : null;
       const isClosedFill = !!(anim.closed && findLoopRange(anim));
-      drawCurveFill(anim, softFill, activeArc !== null ? 0.55 : 1, isClosedFill ? [] : higherLayerBlockersFor(anim));
+      drawCurveFill(anim, null, activeArc !== null ? 0.45 : 1, isClosedFill ? [] : higherLayerBlockersFor(anim));
     }
   }
   if (activeArc !== null) {
-    const thickDim   = Math.max(1, anim.thickness - 2);
     const thickBoost = Math.min(10, anim.thickness + 2);
     for (let i = 0; i < anim.segments.length; i++) {
-      if (i !== activeArc) drawSegment(anim, i, softColor, 1, thickDim);
+      if (i !== activeArc) drawSegment(anim, i, null, 0.45);
     }
     drawSegment(anim, activeArc, null, 1, thickBoost);
   } else if (_topoFade) {
@@ -14044,7 +14094,15 @@ function drawAnimations() {
     }
 
     const mainSelId = editModeAnimId ?? selectedId;
+    const _selAnim = mainSelId !== null ? animations.find(a => a.id === mainSelId) : null;
+    const _anyDim = (_selAnim != null && !_selAnim.inPlacementMode)
+      || selectedGroupId !== null || multiSelectedIds.size > 0;
+    const _thisSelected = anim.id === mainSelId
+      || (selectedGroupId !== null && anim.groupId === selectedGroupId)
+      || multiSelectedIds.has(anim.id);
+    _globalCanvasDimFactor = (_anyDim && !_thisSelected) ? 0.35 : 1;
     drawCommittedAnimation(anim, { deferOverlay: anim.id === mainSelId });
+    _globalCanvasDimFactor = 1;
   }
 
   // Draw the selected object's frame and handles last so they always appear on top
@@ -14058,8 +14116,6 @@ function drawAnimations() {
         const _da = drillObjectArc;
         const _daCurve = animCurves(mainSel).find(c => c.id === _da.curveId) ?? mainSel;
         drawTopoArcHandles(_daCurve, _da.fromIdx, _da.toIdx);
-      } else if (editModeAnimId === mainSel.id) {
-        drawHandles(mainSel);
       }
     }
   }
@@ -17755,7 +17811,7 @@ function drawObjectRegionFillsForAnim(anim) {
     const _rOpBase = _useRegion ? (region.fillOpacity ?? 0.3) : animFillOpacity(anim);
     const _rGradTo = _useRegion ? region.gradientToColor : anim.gradientToColor;
     const _rGradToOp = _useRegion ? (region.gradientToOpacity ?? 0) : (anim.gradientToOpacity ?? 0);
-    const opacity = _rOpBase * (_fadeTopo ? 0.45 : (_selRegionId !== null && region.id !== _selRegionId ? 0.35 : 1));
+    const opacity = _rOpBase * _globalCanvasDimFactor * (_fadeTopo ? 0.45 : (_selRegionId !== null && region.id !== _selRegionId ? 0.35 : 1));
     ctx.save();
     if (_rStyle === 'contour-gradient') {
       const { b1, b2 } = resolveContourBoundaries(region);
@@ -18532,7 +18588,7 @@ function renderGroupArcsTab(tabContent, groupId, grpObj) {
         color:${isSelected ? '#cdd6f4' : isInterior ? '#6c7086' : '#9399b2'};
         background:${isSelected ? '#252537' : 'transparent'};`;
       const lbl = document.createElement('span');
-      lbl.textContent = `${isSegKind ? 'Segment' : 'Arc'} ${i + 1}`;
+      lbl.textContent = `Arc ${i + 1}`;
       const tag = document.createElement('span');
       tag.style.cssText = 'font-size:0.68rem; color:#45475a; font-style:italic;';
       tag.textContent = isInterior ? 'interior' : '';
@@ -20079,6 +20135,16 @@ function renderAnimListLegacy() {
   const _detailIdx = _detailItems.findIndex(it => it.type === 'anim' && it.item.id === anim.id);
   const objectLabelNumber = _detailIdx >= 0 ? getDrillPrefix() + (_detailIdx + 1) : animations.indexOf(anim) + 1;
   numSpan.textContent = `Object ${objectLabelNumber}`;
+  const _topoActive = drillObjectArc?.animId === anim.id || selectedObjectRegionId?.animId === anim.id;
+  if (_topoActive) {
+    numSpan.style.cursor = 'pointer';
+    numSpan.title = 'Back to object';
+    numSpan.addEventListener('click', e => {
+      e.stopPropagation();
+      clearTopoFeatureSelection();
+      renderAnimList(); draw();
+    });
+  }
   leftGroup.appendChild(numSpan);
 
   // Right: color + hide + delete
@@ -20248,7 +20314,7 @@ function renderAnimListLegacy() {
   const { essentialPoints, topoArcs } = computeObjectTopologyData(anim);
   const _topoMap = new Map(animCurves(anim).map(c => [c.id, c]));
 
-  const segmentLabel = animCurves(anim).every(c => isPolylineAnim(c)) ? 'Segment' : 'Arc';
+  const segmentLabel = 'Arc';
   const curveColor = !anim.visible ? '#585b70' : anim.color;
 
   // ── Shared geometric schematic ──
@@ -20327,12 +20393,41 @@ function renderAnimListLegacy() {
       for (let _si = _arcLo; _si < _arcHi; _si++) { if (_arcOverrides.has(_si)) return false; }
       return true;
     })();
-    _arcTab.textContent = `${_arcIsPolyline ? 'Segment' : 'Arc'} ${_arcDisplayLabel}`;
+    _arcTab.textContent = `Arc ${_arcDisplayLabel}`;
     _arcTabBar.appendChild(_arcTab);
+    if (_selCurveForArc && animKind(_selCurveForArc) === 'freeform' && !_selCurveForArc.freeformPen) {
+      const _arcIsRigid = (() => {
+        for (let _si = _arcLo; _si < _arcHi; _si++) { if (!isSegmentRigid(_selCurveForArc, _si)) return false; }
+        return _arcLo < _arcHi;
+      })();
+      const _rigidWrap = document.createElement('div'); _rigidWrap.className = 'seg-rigid-toggle';
+      ['Rigid', 'Flexible'].forEach(label => {
+        const _rb = document.createElement('button');
+        const _isActive = _arcIsRigid === (label === 'Rigid');
+        _rb.className = 'seg-rigid-btn ' + (_isActive ? 'active' : 'inactive');
+        _rb.textContent = label;
+        _rb.title = label === 'Rigid'
+          ? 'When a node moves, this arc\'s shape scales proportionally'
+          : 'When a node moves, the angle at the node is preserved';
+        _rb.addEventListener('click', e => {
+          e.stopPropagation();
+          if (_isActive) return;
+          pushUndo();
+          const _makeRigid = label === 'Rigid';
+          for (let _si = _arcLo; _si < _arcHi; _si++) {
+            const _seg = _selCurveForArc.segments[_si];
+            if (_seg) _seg.rigid = _makeRigid;
+          }
+          saveProject(); renderAnimList(); draw();
+        });
+        _rigidWrap.appendChild(_rb);
+      });
+      _arcTabBar.appendChild(_rigidWrap);
+    }
     if (_selCurveForArc && animKind(_selCurveForArc) !== 'freeform') {
       const _arcToggleBtn = document.createElement('button');
       _arcToggleBtn.className = 'arc-type-toggle-btn';
-      _arcToggleBtn.textContent = _arcIsPolyline ? '→ Arc' : '→ Segment';
+      _arcToggleBtn.textContent = _arcIsPolyline ? '→ Arc' : '→ Straight';
       _arcToggleBtn.title = _arcIsPolyline ? 'Convert to Bézier arc (handles become free)' : 'Straighten to line segment';
       _arcToggleBtn.addEventListener('click', e => {
         e.stopPropagation();
@@ -20360,8 +20455,8 @@ function renderAnimListLegacy() {
       });
       _arcTabBar.appendChild(_arcToggleBtn);
     }
-    // "Promote to node" — only for merged objects with interior anchors; not for primitives
-    if (anim.curves && _selCurveForArc && !isPrimitiveAnim(_selCurveForArc) && Math.abs(_arcToIdx - _arcFromIdx) > 1) {
+    // "Promote to node" — for any object with interior anchors on the selected arc; not for primitives
+    if (_selCurveForArc && !isPrimitiveAnim(_selCurveForArc) && Math.abs(_arcToIdx - _arcFromIdx) > 1) {
       const _pnActive = promoteNodeMode?.curveId === _selCurveForArc.id;
       const _pnBtn = document.createElement('button');
       _pnBtn.className = 'anchor-split-btn' + (_pnActive ? ' split-active' : '');
@@ -20716,7 +20811,7 @@ function _skipOld() { // dead code stub — body deleted
     };
 
     let visibleArcNum = 0;
-    const segmentLabel = animCurves(anim).every(c => isPolylineAnim(c)) ? 'Segment' : 'Arc';
+    const segmentLabel = 'Arc';
     const appendArcItem = segIdx => {
       const seg = anim.segments[segIdx];
       if (!seg) return;
