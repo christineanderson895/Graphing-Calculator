@@ -2448,6 +2448,8 @@ function _splitCurveHalves(orig, anchorIdx) {
   const rightLocked = orig.anchorLocked ? orig.anchorLocked.slice(anchorIdx) : [];
   const leftLabels  = orig.anchorLabels ? orig.anchorLabels.slice(0, anchorIdx + 1) : [];
   const rightLabels = orig.anchorLabels ? orig.anchorLabels.slice(anchorIdx) : [];
+  const leftPromoted  = orig.promotedAnchors ? orig.promotedAnchors.slice(0, anchorIdx + 1) : [];
+  const rightPromoted = orig.promotedAnchors ? orig.promotedAnchors.slice(anchorIdx) : [];
   const leftOverrides = new Set(), rightOverrides = new Set();
   if (orig.arcOverrideSegments) {
     for (const si of orig.arcOverrideSegments) {
@@ -2456,7 +2458,7 @@ function _splitCurveHalves(orig, anchorIdx) {
     }
   }
   return { leftAnchors, rightAnchors, leftSegs, rightSegs, leftLocked, rightLocked,
-           leftLabels, rightLabels, leftOverrides, rightOverrides };
+           leftLabels, rightLabels, leftPromoted, rightPromoted, leftOverrides, rightOverrides };
 }
 
 function splitChildCurveAtAnchor(parentAnim, curveId, anchorIdx) {
@@ -2467,18 +2469,20 @@ function splitChildCurveAtAnchor(parentAnim, curveId, anchorIdx) {
     if (anchorIdx <= 0 || anchorIdx >= orig.anchors.length - 1) return;
     pushUndo();
     const { leftAnchors, rightAnchors, leftSegs, rightSegs, leftLocked, rightLocked,
-            leftLabels, rightLabels, leftOverrides, rightOverrides } = _splitCurveHalves(orig, anchorIdx);
+            leftLabels, rightLabels, leftPromoted, rightPromoted, leftOverrides, rightOverrides } = _splitCurveHalves(orig, anchorIdx);
     const base = _splitCurveBaseProps(orig, orig.groupId);
     const curveLeft  = { ...base, id: Date.now() + Math.random(),
       anchors: leftAnchors,  segments: leftSegs,  anchorLocked: leftLocked,  anchorLabels: leftLabels,
+      promotedAnchors: leftPromoted,
       ...(leftOverrides.size  ? { arcOverrideSegments: leftOverrides }  : {}) };
     const curveRight = { ...base, id: Date.now() + Math.random() + 0.5,
       anchors: rightAnchors, segments: rightSegs, anchorLocked: rightLocked, anchorLabels: rightLabels,
+      promotedAnchors: rightPromoted,
       ...(rightOverrides.size ? { arcOverrideSegments: rightOverrides } : {}) };
     recompileAnim(curveLeft);
     recompileAnim(curveRight);
     parentAnim.curves = [curveLeft, curveRight];
-    parentAnim.anchors = []; parentAnim.segments = []; parentAnim.anchorLocked = []; parentAnim.anchorLabels = [];
+    parentAnim.anchors = []; parentAnim.segments = []; parentAnim.anchorLocked = []; parentAnim.anchorLabels = []; parentAnim.promotedAnchors = [];
     parentAnim.activeSegments = new Set();
     delete parentAnim.arcOverrideSegments;
     if (editModeAnimId === parentAnim.id) editModeAnimId = null;
@@ -2494,13 +2498,15 @@ function splitChildCurveAtAnchor(parentAnim, curveId, anchorIdx) {
   if (anchorIdx <= 0 || anchorIdx >= orig.anchors.length - 1) return;
   pushUndo();
   const { leftAnchors, rightAnchors, leftSegs, rightSegs, leftLocked, rightLocked,
-          leftLabels, rightLabels, leftOverrides, rightOverrides } = _splitCurveHalves(orig, anchorIdx);
+          leftLabels, rightLabels, leftPromoted, rightPromoted, leftOverrides, rightOverrides } = _splitCurveHalves(orig, anchorIdx);
   const base = _splitCurveBaseProps(orig, parentAnim.groupId);
   const curveLeft  = { ...base, id: Date.now() + Math.random(),
     anchors: leftAnchors,  segments: leftSegs,  anchorLocked: leftLocked,  anchorLabels: leftLabels,
+    promotedAnchors: leftPromoted,
     ...(leftOverrides.size  ? { arcOverrideSegments: leftOverrides }  : {}) };
   const curveRight = { ...base, id: Date.now() + Math.random() + 0.5,
     anchors: rightAnchors, segments: rightSegs, anchorLocked: rightLocked, anchorLabels: rightLabels,
+    promotedAnchors: rightPromoted,
     ...(rightOverrides.size ? { arcOverrideSegments: rightOverrides } : {}) };
   recompileAnim(curveLeft);
   recompileAnim(curveRight);
@@ -4180,7 +4186,9 @@ let selectedGroupArc = null;     // { groupId, animId, segIdx }
 let selectedObjectNode = null;     // { animId, num } — selected node in Nodes tab
 let drillObjectArc = null;         // { animId, label } — topo arc being drilled into
 let selectedObjectRegionId = null; // { animId, id: regionId } — selected region in Regions tab
-let activeTopoTab = 'arc';         // 'arc' | 'region' — active tab in topo panel
+let objectDetailTab = 'arcs';      // 'anchors' | 'arcs' | 'regions' — active tab in detail panel
+let selectedArcKeys = new Set();   // arc labels selected in Arcs tab
+let regionFillSubTab = 1;          // 1=Color1, 2=Color2, 3=Style — sub-tab in Regions tab
 let _lastDetailAnimId = null;      // detect object change to reset tab
 let hoveredObjectNodeNum = null;   // number | null — hovered node badge in schematic
 let hoveredObjectArcLabel = null;  // string | null — hovered arc label in schematic
@@ -4280,6 +4288,7 @@ function snapshotAnimations() {
     }) : null),
     anchorLocked: [...(a.anchorLocked ?? [])],
     anchorLabels: [...(a.anchorLabels ?? [])],
+    promotedAnchors: [...(a.promotedAnchors ?? [])],
     activeSegments: [...(a.activeSegments ?? [])],
     inPlacementMode: a.inPlacementMode,
     reversePlacement: a.reversePlacement ?? false,
@@ -4295,6 +4304,7 @@ function snapshotAnimations() {
     gradientToColor: a.gradientToColor ?? null,
     gradientToOpacity: a.gradientToOpacity ?? null,
     name: a.name ?? null,
+    arcStyles: a.arcStyles && Object.keys(a.arcStyles).length ? { ...a.arcStyles } : null,
     curves: a.curves ? a.curves.map(c => ({
       id: c.id, color: c.color, kind: c.kind || 'freeform',
       freeformPen: c.freeformPen ?? false,
@@ -4310,6 +4320,7 @@ function snapshotAnimations() {
       segments: c.segments.map(s => s ? ({ h0: new Cx(s.h0.re, s.h0.im), h1: new Cx(s.h1.re, s.h1.im), eccentricity: s.eccentricity, visible: s.visible ?? true, ...(typeof s.rigid === 'boolean' ? { rigid: s.rigid } : {}) }) : null),
       anchorLocked: [...(c.anchorLocked ?? [])],
       anchorLabels: [...(c.anchorLabels ?? [])],
+      promotedAnchors: [...(c.promotedAnchors ?? [])],
       activeSegments: [...(c.activeSegments ?? [])],
       gradientFromArcs: [...(c.gradientFromArcs ?? [])],
       gradientToArcs: [...(c.gradientToArcs ?? [])],
@@ -4406,6 +4417,7 @@ function restoreSnapshot(snap) {
       }) : null),
       anchorLocked: s.anchorLocked ? [...s.anchorLocked] : [],
       anchorLabels: s.anchorLabels ? [...s.anchorLabels] : [],
+      promotedAnchors: s.promotedAnchors ? [...s.promotedAnchors] : [],
       activeSegments: new Set(s.activeSegments ?? []),
       inPlacementMode: s.inPlacementMode,
       reversePlacement: s.reversePlacement ?? false,
@@ -4421,6 +4433,7 @@ function restoreSnapshot(snap) {
       gradientToColor: s.gradientToColor ?? null,
       gradientToOpacity: s.gradientToOpacity ?? null,
       name: s.name ?? null,
+      arcStyles: s.arcStyles ? { ...s.arcStyles } : {},
       curves: s.curves ? s.curves.map(c => ({
         id: c.id, color: c.color, kind: c.kind || 'freeform',
         freeformPen: c.freeformPen ?? false,
@@ -4441,6 +4454,7 @@ function restoreSnapshot(snap) {
         }) : null),
         anchorLocked: c.anchorLocked ? [...c.anchorLocked] : [],
         anchorLabels: c.anchorLabels ? [...c.anchorLabels] : [],
+        promotedAnchors: c.promotedAnchors ? [...c.promotedAnchors] : [],
         activeSegments: new Set(c.activeSegments ?? []),
         gradientFromArcs: new Set(c.gradientFromArcs ?? []),
         gradientToArcs: new Set(c.gradientToArcs ?? []),
@@ -5354,6 +5368,7 @@ function clearTopoFeatureSelection() {
     const _anim = animations.find(a => a.id === drillObjectArc.animId);
     if (_anim) for (const _c of animCurves(_anim)) _c.activeSegments = new Set();
     drillObjectArc = null;
+    selectedArcKeys = new Set();
   }
   selectedObjectRegionId = null;
   if (hadArc && editModeAnimId !== null) exitEditMode();
@@ -6962,22 +6977,36 @@ function queryAnchorHover(mathX, mathY, thresholdPx = 7 * devicePixelRatio) {
 
 function queryHandleHover(mathX, mathY) {
   let curve = null;
-  if (editModeAnimId) {
-    const anim = animations.find(a => a.id === editModeAnimId);
-    if (!anim || isPrimitiveAnim(anim) || isTextAnim(anim)) return null;
-    if (!anim.curves) curve = anim; // Single-curve only; merged falls through to drillObjectArc
-  }
-  if (!curve && drillObjectArc) {
+  let usingDrillArc = false;
+  // drillObjectArc takes priority: it always identifies the exact curve and range
+  if (drillObjectArc) {
     const parentAnim = animations.find(a => a.id === drillObjectArc.animId);
     if (!parentAnim || !isAnimEffectivelyVisible(parentAnim)) return null;
-    curve = animCurves(parentAnim).find(c => c.id === drillObjectArc.curveId) ?? null;
+    curve = animCurves(parentAnim).find(c => c.id === drillObjectArc.curveId) ?? (parentAnim.curves ? null : parentAnim);
     if (!curve || isPrimitiveAnim(curve) || isTextAnim(curve)) return null;
+    usingDrillArc = true;
+  } else if (editModeAnimId) {
+    const anim = animations.find(a => a.id === editModeAnimId);
+    if (!anim || isPrimitiveAnim(anim) || isTextAnim(anim)) return null;
+    if (!anim.curves) curve = anim;
   }
   if (!curve) return null;
-  const { handlePairs } = getActiveHandleInfo(curve);
   const thresholdPx = 7 * devicePixelRatio;
   const [cx, cy] = toCanvas(mathX, mathY);
   let best = null, bestDist = Infinity;
+  let handlePairs;
+  if (usingDrillArc) {
+    const { fromIdx, toIdx } = drillObjectArc;
+    handlePairs = [];
+    for (let si = fromIdx; si < toIdx; si++) {
+      if (curve.segments[si]) {
+        handlePairs.push({ segIdx: si, side: 'h0' });
+        handlePairs.push({ segIdx: si, side: 'h1' });
+      }
+    }
+  } else {
+    ({ handlePairs } = getActiveHandleInfo(curve));
+  }
   for (const { segIdx, side } of handlePairs) {
     const h = curve.segments[segIdx]?.[side];
     if (!h) continue;
@@ -7175,7 +7204,8 @@ function selectTopologyArc(parentAnim, arc) {
     fromIdx: arc.fromIdx,
     toIdx: arc.toIdx,
   };
-  activeTopoTab = 'arc';
+  objectDetailTab = 'arcs';
+  selectedArcKeys = new Set([arc.label]);
   if (!parentAnim.curves) {
     if (editModeAnimId !== parentAnim.id) enterEditMode(parentAnim, new Set());
     parentAnim.activeSegments = new Set();
@@ -8604,12 +8634,21 @@ canvas.addEventListener('mousedown', e => {
         const _qh = queryHandleHover(mathX, mathY);
         if (!_qh) return false;
         const { fromIdx, toIdx } = drillObjectArc;
-        // Handles that sit exactly on a junction boundary node (h0 at fromIdx anchor,
-        // h1 at toIdx anchor) share their position with the node. Returning false here
-        // lets the topology section run so it can switch to the adjacent arc instead of
-        // accidentally starting a handle drag that can erase the junction node.
         const _qhAnchorIdx = _qh.side === 'h0' ? _qh.segIdx : _qh.segIdx + 1;
-        if (_qhAnchorIdx === fromIdx || _qhAnchorIdx === toIdx) return false;
+        if (_qhAnchorIdx === fromIdx || _qhAnchorIdx === toIdx) {
+          // Only yield to the topo section when the handle coincides with its junction
+          // anchor (unedited segment). Once the handle has been moved away, the cursor
+          // is closer to the handle dot than to the node — drag the handle directly.
+          const _bSeg = _qh.anim.segments[_qh.segIdx];
+          const _bHpt = _bSeg?.[_qh.side];
+          const _bAnch = _qh.anim.anchors[_qhAnchorIdx];
+          if (_bHpt && _bAnch) {
+            const [_bhx, _bhy] = toCanvas(_bHpt.re, _bHpt.im);
+            const [_bax, _bay] = toCanvas(_bAnch.re, _bAnch.im);
+            if (Math.hypot(cx - _bhx, cy - _bhy) < Math.hypot(cx - _bax, cy - _bay)) return true;
+          }
+          return false;
+        }
         // Extra adjacent handles (outside [fromIdx, toIdx)) must not block arc-body clicks.
         return _qh.segIdx >= fromIdx && _qh.segIdx < toIdx;
       })();
@@ -8762,12 +8801,16 @@ canvas.addEventListener('mousedown', e => {
       // Arc check found nothing within threshold; fall back to region.
       const _hitReg = hitTestObjectRegion(_topoAnim, cx, cy);
       if (_hitReg !== null) {
-        e.preventDefault();
-        selectedObjectNode = null; drillObjectArc = null;
-        for (const _c of animCurves(_topoAnim)) _c.activeSegments = new Set();
-        selectedObjectRegionId = { animId: selectedId, id: _hitReg };
-        activeTopoTab = 'region';
-        renderAnimList(); draw(); return;
+        const _rAHit = anchorHover ?? queryAnchorHover(mathX, mathY);
+        const _rHHit = !_rAHit ? (handleHover ?? queryHandleHover(mathX, mathY)) : null;
+        if (!_rAHit && !_rHHit) {
+          e.preventDefault();
+          selectedObjectNode = null; drillObjectArc = null;
+          for (const _c of animCurves(_topoAnim)) _c.activeSegments = new Set();
+          selectedObjectRegionId = { animId: selectedId, id: _hitReg };
+          objectDetailTab = 'regions';
+          renderAnimList(); draw(); return;
+        }
       }
       } // end if (!_overInteractive)
     }
@@ -8792,9 +8835,13 @@ canvas.addEventListener('mousedown', e => {
                             (cx <= _ox + _tol || cx >= _ox + _ow - _tol ||
                              cy <= _oy + _tol || cy >= _oy + _oh - _tol);
           if (_onBorder) {
-            e.preventDefault();
-            clearTopoFeatureSelection();
-            renderAnimList(); draw(); return;
+            const _fbAHit = anchorHover ?? queryAnchorHover(mathX, mathY);
+            const _fbHHit = !_fbAHit ? (handleHover ?? queryHandleHover(mathX, mathY)) : null;
+            if (!_fbAHit && !_fbHHit) {
+              e.preventDefault();
+              clearTopoFeatureSelection();
+              renderAnimList(); draw(); return;
+            }
           }
         }
       }
@@ -9687,7 +9734,8 @@ window.addEventListener('mouseup', e => {
           if (_bestArcHit && _bestArcDist <= _arcHitThreshold) {
             selectedObjectNode = null; selectedObjectRegionId = null;
             drillObjectArc = { animId: selectedId, label: _bestArcHit.label, curveId: _bestArcHit.curveId, fromIdx: _bestArcHit.fromIdx, toIdx: _bestArcHit.toIdx };
-            activeTopoTab = 'arc';
+            objectDetailTab = 'arcs';
+            selectedArcKeys = new Set([_bestArcHit.label]);
             if (!_topoAnim.curves) {
               if (editModeAnimId !== _topoAnim.id) enterEditMode(_topoAnim, new Set());
               _topoAnim.activeSegments = new Set();
@@ -9705,11 +9753,15 @@ window.addEventListener('mouseup', e => {
         // Arc check found nothing within threshold; fall back to region.
         const _hitReg = hitTestObjectRegion(_topoAnim, _prb.clickCx, _prb.clickCy);
         if (_hitReg !== null) {
-          selectedObjectNode = null; drillObjectArc = null;
-          for (const _c of animCurves(_topoAnim)) _c.activeSegments = new Set();
-          selectedObjectRegionId = { animId: selectedId, id: _hitReg };
-          activeTopoTab = 'region';
-          renderAnimList(); draw(); return;
+          const _rbAHit = queryAnchorHover(_prb.clickMathX, _prb.clickMathY);
+          const _rbHHit = !_rbAHit ? queryHandleHover(_prb.clickMathX, _prb.clickMathY) : null;
+          if (!_rbAHit && !_rbHHit) {
+            selectedObjectNode = null; drillObjectArc = null;
+            for (const _c of animCurves(_topoAnim)) _c.activeSegments = new Set();
+            selectedObjectRegionId = { animId: selectedId, id: _hitReg };
+            objectDetailTab = 'regions';
+            renderAnimList(); draw(); return;
+          }
         }
       }
     }
@@ -9803,7 +9855,8 @@ window.addEventListener('mouseup', e => {
           if (_adBestArc && _adBestDist <= _adThresh) {
             selectedObjectNode = null; selectedObjectRegionId = null; promoteNodeMode = null;
             drillObjectArc = { animId: selectedId, label: _adBestArc.label, curveId: _adBestArc.curveId, fromIdx: _adBestArc.fromIdx, toIdx: _adBestArc.toIdx };
-            activeTopoTab = 'arc';
+            objectDetailTab = 'arcs';
+            selectedArcKeys = new Set([_adBestArc.label]);
             if (!_adParent.curves) {
               if (editModeAnimId !== _adParent.id) enterEditMode(_adParent, new Set());
               _adParent.activeSegments = new Set();
@@ -10724,7 +10777,7 @@ function drawAnchorDot(canvasPt, color, r) {
   ctx.fill();
   ctx.beginPath();
   ctx.arc(canvasPt[0], canvasPt[1], r, 0, Math.PI * 2);
-  ctx.strokeStyle = color;
+  ctx.strokeStyle = '#f0f4ff';
   ctx.lineWidth = 2 * devicePixelRatio;
   ctx.stroke();
 }
@@ -10732,12 +10785,12 @@ function drawAnchorDot(canvasPt, color, r) {
 function drawHandleDot(canvasPt, color, r) {
   ctx.beginPath();
   ctx.arc(canvasPt[0], canvasPt[1], r, 0, Math.PI * 2);
-  ctx.fillStyle = color;
+  ctx.fillStyle = '#f0f4ff';
   ctx.fill();
 }
 
 function drawHandles(anim) {
-  if (isTextAnim(anim) || isPrimitiveAnim(anim)) return;
+  if (isTextAnim(anim) || isPrimitiveAnim(anim) || anim.curves) return;
   const dpr = devicePixelRatio;
   const activeArc = activeArcIndex(anim);
 
@@ -10752,12 +10805,24 @@ function drawHandles(anim) {
 
   // Anchor dots visible whenever in edit mode
   const softColor = softenedSelectionColor(anim.color);
-  const ARC_HANDLE_COLOR = '#b8ddff';
+  const ARC_HANDLE_COLOR = '#f0f4ff';
   // Topo-arc fade: when a multi-segment arc is selected via drillObjectArc, activeArcIndex returns
   // null but we still want to dim anchors outside the selected arc's span.
   const _topoSpan = (activeArc === null && drillObjectArc?.animId === anim.id && !anim.curves)
     ? { min: drillObjectArc.fromIdx, max: drillObjectArc.toIdx }
     : null;
+  // Build a set of anchor indices that are topology nodes
+  const _nodeIdxs = new Set();
+  {
+    const { essentialPoints } = computeObjectTopologyData(anim);
+    for (const ep of essentialPoints) {
+      for (let j = 0; j < anim.anchors.length; j++) {
+        const a = anim.anchors[j];
+        if (a && Math.hypot(a.re - ep.pos.re, a.im - ep.pos.im) < 1e-4) _nodeIdxs.add(j);
+      }
+    }
+  }
+
   for (let i = 0; i < anim.anchors.length; i++) {
     if (!anim.anchors[i]) continue;
     const isHov = anchorHover?.anim === anim && anchorHover?.anchorIdx === i;
@@ -10766,8 +10831,9 @@ function drawHandles(anim) {
     const isInTopoSpan = _topoSpan !== null && i >= _topoSpan.min && i <= _topoSpan.max;
     const anchorColor = activeArc === null ? anim.color : (isActiveAnchor ? ARC_HANDLE_COLOR : softColor);
     const _dimAnchor = (activeArc !== null && !isActiveAnchor) || (_topoSpan !== null && !isInTopoSpan);
+    const baseR = _nodeIdxs.has(i) ? 6 : 4;
     if (_dimAnchor) { ctx.save(); ctx.globalAlpha = 0.38; }
-    drawAnchorDot(toCanvas(anim.anchors[i].re, anim.anchors[i].im), anchorColor, (isHov || isExp ? 7 : 5) * dpr);
+    drawAnchorDot(toCanvas(anim.anchors[i].re, anim.anchors[i].im), anchorColor, (isHov || isExp ? 8 : baseR) * dpr);
     if (_dimAnchor) ctx.restore();
   }
 
@@ -11318,14 +11384,14 @@ function drawClosedSegmentFill(anim, fillColorOverride = null, opacityScale = 1)
   drawCurveFill(anim, fillColorOverride, opacityScale, []);
 }
 
-function drawSegment(anim, segIdx, colorOverride = null, opacityScale = 1, thicknessOverride = null) {
+function drawSegment(anim, segIdx, colorOverride = null, opacityScale = 1, thicknessOverride = null, absOpacity = null) {
   const seg = anim.segments[segIdx];
   if (!seg || !seg.compiled) return;
   const dpr = devicePixelRatio;
   const effectiveThickness = thicknessOverride !== null ? thicknessOverride : anim.thickness;
   const cw = (1 + 5 * (effectiveThickness / 10)) * dpr;
   const color = colorOverride || anim.color;
-  const opacity = animOutlineOpacity(anim) * opacityScale;
+  const opacity = absOpacity !== null ? absOpacity : animOutlineOpacity(anim) * opacityScale;
   if (seg.visible === false) {
     if (editModeAnimId !== anim.id) return;
     drawCompiledCurve(seg.compiled, color, cw * 0.4, 0.18 * opacityScale);
@@ -11792,7 +11858,24 @@ function selectedArcCanvasBounds(anim) {
   if (seg.compiled) {
     for (const pt of sampleCompiledAdaptive(seg.compiled)) bounds = includeCanvasPoint(bounds, pt);
   }
-  bounds = includeArcHandleInfluenceBounds(bounds, anim, segIdx);
+  const curvesToBound = anim.curves ?? [anim];
+  for (const c of curvesToBound) {
+    for (const anchor of (c.anchors ?? [])) {
+      if (anchor) bounds = includeCanvasPoint(bounds, toCanvas(anchor.re, anchor.im));
+    }
+    for (const s of (c.segments ?? [])) {
+      if (!s) continue;
+      if (s.h0) bounds = includeCanvasPoint(bounds, toCanvas(s.h0.re, s.h0.im));
+      if (s.h1) bounds = includeCanvasPoint(bounds, toCanvas(s.h1.re, s.h1.im));
+    }
+  }
+  if (!isPolylineAnim(anim)) {
+    for (const anchorIdx of [segIdx, segIdx + 1]) {
+      if (anchorIdx > 0 && anchorIdx < anim.anchors.length - 1) {
+        bounds = includeCanvasPoint(bounds, lockTogglePosition(anim, anchorIdx, segIdx));
+      }
+    }
+  }
   return bounds;
 }
 
@@ -13722,7 +13805,9 @@ function drawTopoArcHandles(curve, fromIdx, toIdx) {
     const isHov = anchorHover?.anim === curve && anchorHover?.anchorIdx === i;
     const isPromotable = _pnMode && i > _pnLo && i < _pnHi;
     const dotColor = isPromotable ? '#89dceb' : color;
-    drawAnchorDot(toCanvas(a.re, a.im), dotColor, (isHov ? 7 : isPromotable ? 6 : 5) * dpr);
+    const isNodeAnchor = (i === fromIdx || i === toIdx);
+    const baseR = isNodeAnchor ? 6 : 4;
+    drawAnchorDot(toCanvas(a.re, a.im), dotColor, (isHov ? 8 : isPromotable ? 7 : baseR) * dpr);
   }
   // Bézier handles for each segment in the arc range
   const isPolyline = isPolylineAnim(curve);
@@ -13733,7 +13818,7 @@ function drawTopoArcHandles(curve, fromIdx, toIdx) {
       const Acp = toCanvas(curve.anchors[anchorIdx].re, curve.anchors[anchorIdx].im);
       const hcp = toCanvas(seg[side].re, seg[side].im);
       ctx.save();
-      ctx.globalAlpha = 0.45; ctx.strokeStyle = color;
+      ctx.globalAlpha = 0.45; ctx.strokeStyle = '#f0f4ff';
       ctx.lineWidth = 1.2 * dpr; ctx.setLineDash([3*dpr, 3*dpr]);
       ctx.beginPath(); ctx.moveTo(Acp[0], Acp[1]); ctx.lineTo(hcp[0], hcp[1]); ctx.stroke();
       ctx.setLineDash([]); ctx.restore();
@@ -13800,7 +13885,7 @@ function drawNodeDots(anim) {
     }
     ctx.globalAlpha = (onBoundary && onArcAnchor) ? 1 : 0.45;
     const [ncx, ncy] = toCanvas(ep.pos.re, ep.pos.im);
-    drawAnchorDot([ncx, ncy], dotColor || anim.color, 5 * dpr);
+    drawAnchorDot([ncx, ncy], dotColor || anim.color, 6 * dpr);
   }
   ctx.restore();
 }
@@ -13863,8 +13948,15 @@ function drawSelectedObjectBounds(anim) {
 
   // When arc/region is selected: draw a simplified white object frame (no interactive handles)
   if (topoFeatureActive) {
-    const _objBounds = selectedObjectCanvasBounds(anim);
+    let _objBounds = selectedObjectCanvasBounds(anim);
     if (!_objBounds) return;
+    for (const c of (anim.curves ?? [anim])) {
+      for (const s of (c.segments ?? [])) {
+        if (!s) continue;
+        if (s.h0) _objBounds = includeCanvasPoint(_objBounds, toCanvas(s.h0.re, s.h0.im));
+        if (s.h1) _objBounds = includeCanvasPoint(_objBounds, toCanvas(s.h1.re, s.h1.im));
+      }
+    }
     const dpr = devicePixelRatio;
     const _lw = isPrimitiveAnim(anim) ? primitiveStrokeWidth(anim) : (1 + 5 * (anim.thickness / 10)) * dpr;
     const _frame = frameMetricsFromCanvasBounds(_objBounds, _lw);
@@ -13873,18 +13965,18 @@ function drawSelectedObjectBounds(anim) {
     ctx.save();
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 1.25 * dpr;
-    ctx.globalAlpha = 0.45;
-    ctx.shadowBlur = 6 * dpr;
+    ctx.globalAlpha = 0.55;
+    ctx.shadowBlur = 8 * dpr;
     ctx.shadowColor = '#ffffff';
     ctx.strokeRect(x, y, w, h);
     ctx.strokeStyle = 'black';
     ctx.lineWidth = 0.9 * dpr;
-    ctx.globalAlpha = 0.85;
+    ctx.globalAlpha = 1.0;
     ctx.shadowBlur = 0;
     ctx.strokeRect(outerX, outerY, outerW, outerH);
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 1.8 * dpr;
-    ctx.globalAlpha = 0.25;
+    ctx.globalAlpha = 0.3;
     ctx.strokeRect(outerX - extend, outerY - extend, outerW + extend * 2, outerH + extend * 2);
     ctx.restore();
     return;
@@ -14129,6 +14221,7 @@ function drawCommittedAnimation(anim, { deferOverlay = false } = {}) {
         }
       }
     }
+    const _arcEditColor = _fadingArc ? colorWithLightness(anim.color, 0.5) : null;
     for (const c of anim.curves) {
       const proxy = makeCurveProxy(anim, c);
       const _isDimmed = !!(_fadingArc && c.id !== _fadingArc.curveId);
@@ -14148,11 +14241,26 @@ function drawCommittedAnimation(anim, { deferOverlay = false } = {}) {
           drawCurveFill(_fillProxy, null, _fillOp, []);
         }
         for (let i = 0; i < proxy.segments.length; i++) {
-          let segOp;
-          if (_isDimmed) segOp = 0.45;
-          else if (_boundarySegs !== null) segOp = _boundarySegs.has(`${c.id}:${i}`) ? 1 : 0.45;
-          else segOp = 1;
-          drawSegment(proxy, i, null, segOp);
+          if (_fadingArc && !_isDimmed) {
+            const _inArc = i >= _fadingArc.fromIdx && i < _fadingArc.toIdx;
+            if (_inArc) drawSegment(proxy, i, _arcEditColor, 1, 5, 1);
+            else drawSegment(proxy, i, null, 1, null, 0.45);
+          } else if (_isDimmed) {
+            drawSegment(proxy, i, null, 1, null, 0.45);
+          } else {
+            if (_boundarySegs !== null) {
+              const segOp = _boundarySegs.has(`${c.id}:${i}`) ? 1 : 0.45;
+              drawSegment(proxy, i, null, segOp);
+            } else {
+              const _as = getArcStyleForSegment(anim, c.id, i);
+              if (_as && (_as.color || _as.thickness !== undefined || _as.opacity !== undefined)) {
+                drawSegment(proxy, i, _as.color ?? null, 1, _as.thickness ?? null,
+                  _as.opacity !== undefined ? _as.opacity * _globalCanvasDimFactor : null);
+              } else {
+                drawSegment(proxy, i);
+              }
+            }
+          }
         }
       }
     }
@@ -14189,21 +14297,35 @@ function drawCommittedAnimation(anim, { deferOverlay = false } = {}) {
   }
   if (activeArc !== null) {
     const thickBoost = Math.min(10, anim.thickness + 2);
+    const _activeArcIsTopo = drillObjectArc?.animId === anim.id;
+    const _topoArcColor = _activeArcIsTopo ? colorWithLightness(anim.color, 0.5) : null;
     for (let i = 0; i < anim.segments.length; i++) {
-      if (i !== activeArc) drawSegment(anim, i, null, 0.45);
+      if (i !== activeArc) {
+        if (_activeArcIsTopo) drawSegment(anim, i, null, 1, null, 0.45);
+        else drawSegment(anim, i, null, 0.45);
+      }
     }
-    drawSegment(anim, activeArc, null, 1, thickBoost);
+    if (_activeArcIsTopo) drawSegment(anim, activeArc, _topoArcColor, 1, 5, 1);
+    else drawSegment(anim, activeArc, null, 1, thickBoost);
   } else if (_topoFade) {
-    const thickBoost = Math.min(10, anim.thickness + 2);
+    const _arcEditColor = colorWithLightness(anim.color, 0.5);
     for (let i = 0; i < anim.segments.length; i++) {
       if (i >= _topoFade.fromIdx && i < _topoFade.toIdx) {
-        drawSegment(anim, i, null, 1, thickBoost);
+        drawSegment(anim, i, _arcEditColor, 1, 5, 1);
       } else {
-        drawSegment(anim, i, null, 0.45);
+        drawSegment(anim, i, null, 1, null, 0.45);
       }
     }
   } else {
-    for (let i = 0; i < anim.segments.length; i++) drawSegment(anim, i);
+    for (let i = 0; i < anim.segments.length; i++) {
+      const _as = getArcStyleForSegment(anim, anim.id, i);
+      if (_as && (_as.color || _as.thickness !== undefined || _as.opacity !== undefined)) {
+        drawSegment(anim, i, _as.color ?? null, 1, _as.thickness ?? null,
+          _as.opacity !== undefined ? _as.opacity * _globalCanvasDimFactor : null);
+      } else {
+        drawSegment(anim, i);
+      }
+    }
   }
   if (!deferOverlay) drawSelectedObjectBounds(anim);
   if (!deferOverlay && inEditMode) drawHandles(anim);
@@ -14461,9 +14583,7 @@ function drawAnimations() {
     const _thisSelected = anim.id === mainSelId
       || (selectedGroupId !== null && anim.groupId === selectedGroupId)
       || multiSelectedIds.has(anim.id);
-    _globalCanvasDimFactor = (_anyDim && !_thisSelected) ? 0.35 : 1;
     drawCommittedAnimation(anim, { deferOverlay: anim.id === mainSelId });
-    _globalCanvasDimFactor = 1;
   }
 
   // Draw the selected object's frame and handles last so they always appear on top
@@ -15010,6 +15130,34 @@ function mixHexColor(a, b, t = 0.5) {
 
 function softenedSelectionColor(color) {
   return mixHexColor(color, '#000000', 0.5);
+}
+
+function colorWithLightness(hex, targetL) {
+  const c = parseHexColor(hex);
+  if (!c) return hex;
+  const r = c.r / 255, g = c.g / 255, b = c.b / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+  const l = (max + min) / 2;
+  const s = d < 1e-6 ? 0 : d / (1 - Math.abs(2 * l - 1));
+  let h = 0;
+  if (d > 1e-6) {
+    if (max === r) h = ((g - b) / d + 6) % 6;
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    h /= 6;
+  }
+  const C = (1 - Math.abs(2 * targetL - 1)) * s;
+  const X = C * (1 - Math.abs((h * 6) % 2 - 1));
+  const m = targetL - C / 2;
+  let nr, ng, nb;
+  const hh = h * 6;
+  if (hh < 1) [nr, ng, nb] = [C, X, 0];
+  else if (hh < 2) [nr, ng, nb] = [X, C, 0];
+  else if (hh < 3) [nr, ng, nb] = [0, C, X];
+  else if (hh < 4) [nr, ng, nb] = [0, X, C];
+  else if (hh < 5) [nr, ng, nb] = [X, 0, C];
+  else [nr, ng, nb] = [C, 0, X];
+  return rgbToHex(Math.round((nr + m) * 255), Math.round((ng + m) * 255), Math.round((nb + m) * 255));
 }
 
 function appendColorMenuLabel(parent, text) {
@@ -17445,21 +17593,29 @@ function computeObjectTopologyData(anim) {
     }
   }
 
-  // Essential = curve endpoint OR any anchor position shared by 2+ distinct curves (interior junction)
+  // Essential = open-curve endpoint OR interior junction OR user-promoted anchor.
+  // Corner detection is removed; closed curves use anchor 0 as default when no other essential exists.
   const endpointRoots = new Set();
   const _rootCurves = new Map();
   for (let j = 0; j < pts.length; j++) {
     const { c, i } = pts[j];
     const root = find(j);
-    if (i === 0 || i === c.anchors.length - 1) endpointRoots.add(root);
+    if (!c.closed && (i === 0 || i === c.anchors.length - 1)) endpointRoots.add(root);
     if (!_rootCurves.has(root)) _rootCurves.set(root, new Set());
     _rootCurves.get(root).add(c);
+    if (c.promotedAnchors?.[i]) endpointRoots.add(root);
   }
   for (const [root, cs] of _rootCurves) {
     if (cs.size >= 2) endpointRoots.add(root);
   }
+  // For closed curves with no essential points: anchor 0 becomes the default node
+  const _cwEss = new Set();
   for (let j = 0; j < pts.length; j++) {
-    if (isCornerAnchor(pts[j].c, pts[j].i)) endpointRoots.add(find(j));
+    if (endpointRoots.has(find(j))) _cwEss.add(pts[j].c);
+  }
+  for (let j = 0; j < pts.length; j++) {
+    const { c, i } = pts[j];
+    if (c.closed && i === 0 && !_cwEss.has(c)) { endpointRoots.add(find(j)); _cwEss.add(c); }
   }
 
   const rootToNum = new Map();
@@ -17497,11 +17653,45 @@ function computeObjectTopologyData(anim) {
         if (fromNum !== undefined && toNum !== undefined)
           topoArcs.push({ label: `${nodeNumToLetter(fromNum)}-${nodeNumToLetter(toNum)}`, fromNum, toNum, curveId: c.id, fromIdx: fi, toIdx: ti });
       }
+    } else if (essIdxs.length === 1 && c.closed) {
+      // Single node on a closed curve: one looping arc back to itself
+      const fi = essIdxs[0];
+      const fromNum = rootToNum.get(find(offset + fi));
+      if (fromNum !== undefined) {
+        const letter = nodeNumToLetter(fromNum);
+        topoArcs.push({ label: `${letter}-${letter}`, fromNum, toNum: fromNum, curveId: c.id, fromIdx: fi, toIdx: fi + c.anchors.length });
+      }
     }
     offset += c.anchors.length;
   }
 
   return { essentialPoints, topoArcs };
+}
+
+function arcStyleKey(curveId, fromIdx, toIdx) {
+  return `${curveId}:${Math.min(fromIdx, toIdx)}:${Math.max(fromIdx, toIdx)}`;
+}
+
+function getArcStyle(anim, curveId, fromIdx, toIdx) {
+  return anim.arcStyles?.[arcStyleKey(curveId, fromIdx, toIdx)] ?? null;
+}
+
+function getArcStyleForSegment(anim, curveId, segIdx) {
+  if (!anim.arcStyles) return null;
+  for (const [key, style] of Object.entries(anim.arcStyles)) {
+    const parts = key.split(':');
+    if (parts[0] === String(curveId)) {
+      const lo = parseInt(parts[1]), hi = parseInt(parts[2]);
+      if (segIdx >= lo && segIdx < hi) return style;
+    }
+  }
+  return null;
+}
+
+function setArcStyle(anim, curveId, fromIdx, toIdx, updates) {
+  if (!anim.arcStyles) anim.arcStyles = {};
+  const key = arcStyleKey(curveId, fromIdx, toIdx);
+  anim.arcStyles[key] = { ...(anim.arcStyles[key] ?? {}), ...updates };
 }
 
 function regionLabel(region, topoArcs) {
@@ -20731,175 +20921,452 @@ function renderAnimListLegacy() {
     });
   }
 
-  // ── Context-aware color controls ──
-  const _selArcForPanel = drillObjectArc?.animId === anim.id ? drillObjectArc : null;
-  const _regions = anim.regions ?? [];
-  const _selRegForPanel = selectedObjectRegionId?.animId === anim.id
-    ? _regions.find(r => r.id === selectedObjectRegionId.id) ?? null : null;
-  const _normArcLabel = arc => arc.fromNum <= arc.toNum
-    ? `${nodeNumToLetter(arc.fromNum)}-${nodeNumToLetter(arc.toNum)}`
-    : `${nodeNumToLetter(arc.toNum)}-${nodeNumToLetter(arc.fromNum)}`;
+  // ── Reset tab state when selected object changes ──
+  if (_lastDetailAnimId !== anim.id) {
+    _lastDetailAnimId = anim.id;
+    // Preserve tab + selection if a canvas click just set them for this object
+    const _hasArcSel = drillObjectArc?.animId === anim.id;
+    const _hasRegSel = selectedObjectRegionId?.animId === anim.id;
+    if (!_hasArcSel && !_hasRegSel) { objectDetailTab = 'arcs'; selectedArcKeys = new Set(); }
+    else if (_hasRegSel && !_hasArcSel) { objectDetailTab = 'regions'; }
+    regionFillSubTab = 1;
+  }
 
-  if (_selArcForPanel) {
-    // Arc selected: label bar + stroke color picker
-    const _arcObj = topoArcs.find(a => a.label === _selArcForPanel.label);
-    const _arcDisplayLabel = _arcObj ? _normArcLabel(_arcObj) : _selArcForPanel.label;
-    const _arcExp = document.createElement('div');
-    _arcExp.className = 'color-expansion';
-    _arcExp.addEventListener('mousedown', e => e.stopPropagation());
-    _arcExp.addEventListener('click', e => e.stopPropagation());
-    const _selCurveForArc = animCurves(anim).find(c => c.id === _selArcForPanel.curveId) ?? null;
-    const _arcTabBar = document.createElement('div'); _arcTabBar.className = 'color-tab-bar';
-    const _arcTab = document.createElement('div'); _arcTab.className = 'color-tab active'; _arcTab.style.cursor = 'default';
-    const { fromIdx: _arcFromIdx, toIdx: _arcToIdx } = _selArcForPanel;
-    const _arcLo = Math.min(_arcFromIdx, _arcToIdx), _arcHi = Math.max(_arcFromIdx, _arcToIdx);
-    const _arcOverrides = _selCurveForArc?.arcOverrideSegments;
-    const _arcIsPolyline = !_arcOverrides || (() => {
-      for (let _si = _arcLo; _si < _arcHi; _si++) { if (_arcOverrides.has(_si)) return false; }
-      return true;
-    })();
-    _arcTab.textContent = `Arc ${_arcDisplayLabel}`;
-    _arcTabBar.appendChild(_arcTab);
-    if (_selCurveForArc && animKind(_selCurveForArc) === 'freeform' && !_selCurveForArc.freeformPen) {
-      const _arcIsRigid = (() => {
-        for (let _si = _arcLo; _si < _arcHi; _si++) { if (!isSegmentRigid(_selCurveForArc, _si)) return false; }
-        return _arcLo < _arcHi;
-      })();
-      const _rigidWrap = document.createElement('div'); _rigidWrap.className = 'seg-rigid-toggle';
-      ['Rigid', 'Flexible'].forEach(label => {
-        const _rb = document.createElement('button');
-        const _isActive = _arcIsRigid === (label === 'Rigid');
-        _rb.className = 'seg-rigid-btn ' + (_isActive ? 'active' : 'inactive');
-        _rb.textContent = label;
-        _rb.title = label === 'Rigid'
-          ? 'When a node moves, this arc\'s shape scales proportionally'
-          : 'When a node moves, the angle at the node is preserved';
-        _rb.addEventListener('click', e => {
+  // ── 3-tab bar: Anchors | Arcs | Regions ──
+  const _dtTabBar = document.createElement('div');
+  _dtTabBar.className = 'color-tab-bar';
+  _dtTabBar.style.cssText = 'margin-top:4px;padding:0 8px;';
+  ['Anchors', 'Arcs', 'Regions'].forEach(t => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'color-tab' + (objectDetailTab === t.toLowerCase() ? ' active' : '');
+    btn.textContent = t;
+    btn.style.cssText = 'flex:1;padding:4px 6px;font-size:0.7rem;';
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      objectDetailTab = t.toLowerCase();
+      renderAnimList();
+    });
+    _dtTabBar.appendChild(btn);
+  });
+  detailEl.appendChild(_dtTabBar);
+
+  const _dtContent = document.createElement('div');
+  _dtContent.className = 'color-tab-content';
+  _dtContent.style.cssText = 'padding:6px;max-height:320px;overflow-y:auto;';
+  _dtContent.addEventListener('mousedown', e => e.stopPropagation());
+  _dtContent.addEventListener('click', e => e.stopPropagation());
+  detailEl.appendChild(_dtContent);
+
+  const _regions = anim.regions ?? [];
+
+  if (objectDetailTab === 'anchors') {
+    // ── Anchors tab ──
+    const _allCurves = animCurves(anim).filter(c => !isTextAnim(c) && !isPrimitiveAnim(c));
+    if (_allCurves.length === 0) {
+      const _note = document.createElement('div');
+      _note.style.cssText = 'padding:12px 4px;font-size:0.7rem;color:#6c7086;text-align:center;';
+      _note.textContent = 'No editable anchors.';
+      _dtContent.appendChild(_note);
+    }
+    for (const _ac of _allCurves) {
+      if (_allCurves.length > 1) {
+        const _chdr = document.createElement('div');
+        _chdr.style.cssText = 'font-size:0.6rem;color:#6c7086;padding:4px 2px 2px;border-top:1px solid #313244;margin-top:2px;';
+        _chdr.textContent = `Curve ${_allCurves.indexOf(_ac) + 1}`;
+        _dtContent.appendChild(_chdr);
+      }
+      for (let _ai = 0; _ai < _ac.anchors.length; _ai++) {
+        const _isOpenEndpt = !_ac.closed && (_ai === 0 || _ai === _ac.anchors.length - 1);
+        const _isPromoted = !!(_ac.promotedAnchors?.[_ai]);
+        const _isNode = _isOpenEndpt || _isPromoted;
+        const _isLocked = !!(_ac.anchorLocked?.[_ai]);
+
+        const _arow = document.createElement('div');
+        _arow.style.cssText = 'display:flex;align-items:center;gap:4px;padding:2px 0;';
+
+        const _nodeDot = document.createElement('span');
+        _nodeDot.style.cssText = 'font-size:10px;min-width:10px;color:' + (_isNode ? '#cdd6f4' : '#45475a') + ';';
+        _nodeDot.textContent = _isNode ? '●' : '○';
+        _arow.appendChild(_nodeDot);
+
+        const _aLbl = document.createElement('span');
+        _aLbl.style.cssText = 'flex:1;font-size:0.65rem;color:#cdd6f4;';
+        _aLbl.textContent = _isOpenEndpt ? `Anchor ${_ai} (endpoint)` : `Anchor ${_ai}`;
+        _arow.appendChild(_aLbl);
+
+        // Lock toggle
+        const _lockBtn = document.createElement('button');
+        _lockBtn.style.cssText = 'width:22px;height:20px;border:1px solid #313244;border-radius:4px;background:' + (_isLocked ? '#45475a' : '#1e1e2e') + ';cursor:pointer;font-size:9px;color:#cdd6f4;padding:0;flex-shrink:0;';
+        _lockBtn.title = _isLocked ? 'Unlock anchor' : 'Lock anchor';
+        _lockBtn.textContent = _isLocked ? '🔒' : '🔓';
+        _lockBtn.addEventListener('click', e => {
           e.stopPropagation();
-          if (_isActive) return;
-          pushUndo();
-          const _makeRigid = label === 'Rigid';
-          for (let _si = _arcLo; _si < _arcHi; _si++) {
-            const _seg = _selCurveForArc.segments[_si];
-            if (_seg) _seg.rigid = _makeRigid;
-          }
-          saveProject(); renderAnimList(); draw();
+          if (!_ac.anchorLocked) _ac.anchorLocked = Array(_ac.anchors.length).fill(false);
+          _ac.anchorLocked[_ai] = !_isLocked;
+          saveProject(); draw(); renderAnimList();
         });
-        _rigidWrap.appendChild(_rb);
-      });
-      _arcTabBar.appendChild(_rigidWrap);
-    }
-    if (_selCurveForArc && animKind(_selCurveForArc) !== 'freeform') {
-      const _arcToggleBtn = document.createElement('button');
-      _arcToggleBtn.className = 'arc-type-toggle-btn';
-      _arcToggleBtn.textContent = _arcIsPolyline ? '→ Arc' : '→ Straight';
-      _arcToggleBtn.title = _arcIsPolyline ? 'Convert to Bézier arc (handles become free)' : 'Straighten to line segment';
-      _arcToggleBtn.addEventListener('click', e => {
-        e.stopPropagation();
-        if (_arcIsPolyline) {
-          if (isPrimitiveAnim(_selCurveForArc)) {
-            convertPrimitiveToPolylineWithArc(anim, _selCurveForArc, _arcLo, _arcHi);
-            return;
-          }
-          pushUndo();
-          if (!_selCurveForArc.arcOverrideSegments) _selCurveForArc.arcOverrideSegments = new Set();
-          for (let _si = _arcLo; _si < _arcHi; _si++) _selCurveForArc.arcOverrideSegments.add(_si);
-        } else {
-          pushUndo();
-          for (let _si = _arcLo; _si < _arcHi; _si++) {
-            _selCurveForArc.arcOverrideSegments?.delete(_si);
-            const _seg = _selCurveForArc.segments[_si];
-            const _p0 = _selCurveForArc.anchors[_si], _p1 = _selCurveForArc.anchors[_si + 1];
-            if (!_seg || !_p0 || !_p1) continue;
-            const _s = makeStraightSegment(_p0, _p1);
-            _seg.h0 = _s.h0; _seg.h1 = _s.h1;
-          }
+        _arow.appendChild(_lockBtn);
+
+        // Promote / Demote button (not for structural endpoints)
+        if (!_isOpenEndpt) {
+          const _pdBtn = document.createElement('button');
+          _pdBtn.style.cssText = 'height:20px;border:1px solid #313244;border-radius:4px;background:#1e1e2e;cursor:pointer;font-size:0.6rem;color:#cdd6f4;padding:0 5px;flex-shrink:0;';
+          _pdBtn.textContent = _isPromoted ? 'Demote' : 'Promote';
+          _pdBtn.addEventListener('click', e => {
+            e.stopPropagation();
+            pushUndo();
+            if (!_ac.promotedAnchors) _ac.promotedAnchors = Array(_ac.anchors.length).fill(false);
+            _ac.promotedAnchors[_ai] = !_isPromoted;
+            detectObjectTopology(anim);
+            saveProject(); renderAnimList(); draw();
+          });
+          _arow.appendChild(_pdBtn);
         }
-        recompileAnim(_selCurveForArc);
-        saveProject(); renderAnimList(); draw();
-      });
-      _arcTabBar.appendChild(_arcToggleBtn);
+
+        _dtContent.appendChild(_arow);
+      }
     }
-    // "Promote to node" — for any object with interior anchors on the selected arc; not for primitives
-    if (_selCurveForArc && !isPrimitiveAnim(_selCurveForArc) && Math.abs(_arcToIdx - _arcFromIdx) > 1) {
-      const _pnActive = promoteNodeMode?.curveId === _selCurveForArc.id;
-      const _pnBtn = document.createElement('button');
-      _pnBtn.className = 'anchor-split-btn' + (_pnActive ? ' split-active' : '');
-      _pnBtn.textContent = 'Promote to node';
-      _pnBtn.title = 'Click an interior anchor on this arc to split it at that point, creating a new topology node';
-      _pnBtn.addEventListener('click', e => {
+
+  } else if (objectDetailTab === 'arcs') {
+    // ── Arcs tab ──
+
+    // Select All button
+    const _arcTopRow = document.createElement('div');
+    _arcTopRow.style.cssText = 'display:flex;gap:4px;margin-bottom:6px;align-items:center;';
+    const _selAllBtn = document.createElement('button');
+    _selAllBtn.style.cssText = 'height:22px;border:1px solid #313244;border-radius:4px;background:#1e1e2e;cursor:pointer;font-size:0.65rem;color:#cdd6f4;padding:0 8px;';
+    _selAllBtn.textContent = 'Select All';
+    _selAllBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      selectedArcKeys = new Set(topoArcs.map(a => a.label));
+      if (topoArcs.length > 0) {
+        const _la = topoArcs[topoArcs.length - 1];
+        drillObjectArc = { animId: anim.id, label: _la.label, curveId: _la.curveId, fromIdx: _la.fromIdx, toIdx: _la.toIdx };
+      }
+      renderAnimList(); draw();
+    });
+    _arcTopRow.appendChild(_selAllBtn);
+    _dtContent.appendChild(_arcTopRow);
+
+    if (topoArcs.length === 0) {
+      const _note = document.createElement('div');
+      _note.style.cssText = 'font-size:0.7rem;color:#6c7086;padding:8px 2px;';
+      _note.textContent = 'No arcs detected. Draw a curve to get started.';
+      _dtContent.appendChild(_note);
+    }
+
+    for (const _arc of topoArcs) {
+      const _arcKey = _arc.label;
+      const _arcSel = selectedArcKeys.has(_arcKey);
+      const _arcStyle = getArcStyle(anim, _arc.curveId, _arc.fromIdx, _arc.toIdx);
+      const _effColor = _arcStyle?.color ?? anim.color;
+      const _normColor = normalizeColorString(_effColor) || _effColor;
+
+      const _arcRow = document.createElement('div');
+      _arcRow.style.cssText = 'display:flex;align-items:center;gap:6px;padding:3px 4px;cursor:pointer;border-radius:4px;margin-bottom:1px;background:' + (_arcSel ? '#313244' : 'transparent') + ';';
+
+      const _swatch = document.createElement('div');
+      _swatch.style.cssText = `width:13px;height:13px;border-radius:3px;background:${_normColor};border:1px solid #45475a;flex-shrink:0;`;
+      _arcRow.appendChild(_swatch);
+
+      const _arcLblSpan = document.createElement('span');
+      _arcLblSpan.style.cssText = 'flex:1;font-size:0.7rem;color:#cdd6f4;';
+      _arcLblSpan.textContent = _arc.label;
+      _arcRow.appendChild(_arcLblSpan);
+
+      const _arcCb = document.createElement('input');
+      _arcCb.type = 'checkbox';
+      _arcCb.checked = _arcSel;
+      _arcCb.style.cssText = 'cursor:pointer;flex-shrink:0;accent-color:#89b4fa;';
+      _arcCb.addEventListener('change', e => {
         e.stopPropagation();
-        if (promoteNodeMode?.curveId === _selCurveForArc.id) {
-          promoteNodeMode = null;
+        if (_arcCb.checked) {
+          selectedArcKeys.add(_arcKey);
+          drillObjectArc = { animId: anim.id, label: _arc.label, curveId: _arc.curveId, fromIdx: _arc.fromIdx, toIdx: _arc.toIdx };
         } else {
-          promoteNodeMode = { animId: anim.id, curveId: _selCurveForArc.id, fromIdx: _arcFromIdx, toIdx: _arcToIdx };
+          selectedArcKeys.delete(_arcKey);
+          if (drillObjectArc?.label === _arcKey) drillObjectArc = null;
         }
         renderAnimList(); draw();
       });
-      _arcTabBar.appendChild(_pnBtn);
-    }
-    _arcExp.appendChild(_arcTabBar);
-    const _arcPanel = document.createElement('div'); _arcPanel.className = 'color-tab-content';
-    const _arcInitColor = _selCurveForArc?.color ?? anim.color ?? '#89b4fa';
-    let _arcOpacityCtrl = null;
-    let _arcPreviewHex = normalizeColorString(_arcInitColor) || _arcInitColor;
-    appendHslColorPicker(_arcPanel, _arcInitColor, (color, meta = {}) => {
-      if (_selCurveForArc) _selCurveForArc.color = color;
-      else for (const c of animCurves(anim)) { if (!isPrimitiveAnim(c) && !isTextAnim(c)) c.color = color; }
-      saveProject(); if (meta.fromHueClick) renderAnimList(); draw();
-    }, { withUndo: true, fallbackHue: colorToHsl(_arcInitColor).h,
-      onPreviewChange(hex) { _arcPreviewHex = hex; _arcOpacityCtrl?.setTrack(opacitySliderTrack(hex)); } });
-    const _arcInitOpacity = _selCurveForArc?.outlineOpacity ?? anim.outlineOpacity ?? 1;
-    _arcOpacityCtrl = appendSliderRow(_arcPanel, 'Opacity', 0, 100, 1, Math.round(clamp(_arcInitOpacity, 0, 1) * 100),
-      v => `${Math.round(v)}%`,
-      v => {
-        const _op = clamp(parseFloat(v) / 100, 0, 1);
-        if (_selCurveForArc) _selCurveForArc.outlineOpacity = _op;
-        else for (const c of animCurves(anim)) { if (!isPrimitiveAnim(c) && !isTextAnim(c)) c.outlineOpacity = _op; }
-        saveProject(); draw();
-      },
-      false, { colorTrack: opacitySliderTrack(_arcPreviewHex) });
-    {
-      const _arcDropperSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21l1.5-4.5L15.5 6l3 3L8 20.5z"/><path d="M18.5 6l1.5-1.5c.8-.8.8-2.2 0-3s-2.2-.8-3 0L15.5 3"/></svg>`;
-      const _arcDropIsActive = eyedropperTarget === 'arc-stroke' && eyedropperAnimId === anim.id && eyedropperCurveId === (_selCurveForArc?.id ?? null);
-      const _arcDropBtn = document.createElement('button');
-      _arcDropBtn.className = 'eyedropper-btn' + (_arcDropIsActive ? ' active' : '');
-      _arcDropBtn.title = _arcDropIsActive ? 'Click a canvas to sample color (Escape to cancel)' : 'Pick color from canvas';
-      _arcDropBtn.innerHTML = _arcDropperSvg + (_arcDropIsActive ? ' Sampling…' : ' Sample color');
-      _arcDropBtn.addEventListener('click', e => {
+      _arcRow.appendChild(_arcCb);
+
+      _arcRow.addEventListener('click', e => {
         e.stopPropagation();
-        if (_arcDropIsActive) { deactivateEyedropper(); } else {
-          eyedropperTarget = 'arc-stroke';
-          eyedropperAnimId = anim.id;
-          eyedropperCurveId = _selCurveForArc?.id ?? null;
-          eyedropperRegionId = null;
-          updateCursor();
+        if (e.target === _arcCb) return;
+        if (selectedArcKeys.has(_arcKey)) {
+          selectedArcKeys.delete(_arcKey);
+          if (drillObjectArc?.label === _arcKey) drillObjectArc = null;
+        } else {
+          selectedArcKeys.add(_arcKey);
+          drillObjectArc = { animId: anim.id, label: _arc.label, curveId: _arc.curveId, fromIdx: _arc.fromIdx, toIdx: _arc.toIdx };
         }
-        renderAnimList();
+        renderAnimList(); draw();
       });
-      _arcPanel.appendChild(_arcDropBtn);
+
+      _dtContent.appendChild(_arcRow);
     }
-    _arcExp.appendChild(_arcPanel);
-    detailEl.appendChild(_arcExp);
-  } else if (_selRegForPanel) {
-    // Region selected: label bar + full fill controls
-    const _regIdx = _regions.indexOf(_selRegForPanel);
-    appendRegionColorExpansion(detailEl, _selRegForPanel, anim);
-    const _regExp = detailEl.lastElementChild;
-    if (_regExp?.classList.contains('color-expansion')) {
-      const _regTabBar = document.createElement('div'); _regTabBar.className = 'color-tab-bar';
-      const _regTab = document.createElement('div'); _regTab.className = 'color-tab active'; _regTab.style.cursor = 'default';
-      _regTab.textContent = `Region ${_regIdx + 1}`;
-      _regTabBar.appendChild(_regTab);
-      _regExp.insertBefore(_regTabBar, _regExp.firstChild);
+
+    // Controls for selected arc(s)
+    const _selArcObjs = topoArcs.filter(a => selectedArcKeys.has(a.label));
+    if (_selArcObjs.length > 0) {
+      const _ctrlDiv = document.createElement('div');
+      _ctrlDiv.style.cssText = 'margin-top:6px;border-top:1px solid #313244;padding-top:6px;';
+
+      const _firstArc = _selArcObjs[0];
+      const _firstStyle = getArcStyle(anim, _firstArc.curveId, _firstArc.fromIdx, _firstArc.toIdx);
+      const _isWholeArc = topoArcs.length === 1;
+      const _allSelected = selectedArcKeys.size === topoArcs.length;
+      const _initArcColor = _firstStyle?.color ?? anim.color;
+      let _arcColorPreview = normalizeColorString(_initArcColor) || _initArcColor;
+      let _arcOpacityCtrl = null;
+
+      const _applyArc = updates => {
+        if (_isWholeArc && _allSelected) {
+          if ('color' in updates) anim.color = updates.color;
+          if ('opacity' in updates) anim.outlineOpacity = updates.opacity;
+          if ('thickness' in updates) anim.thickness = updates.thickness;
+          if ('innerSoftness' in updates || 'outerSoftness' in updates) {
+            for (const _sa of _selArcObjs) setArcStyle(anim, _sa.curveId, _sa.fromIdx, _sa.toIdx, updates);
+          }
+        } else {
+          for (const _sa of _selArcObjs) setArcStyle(anim, _sa.curveId, _sa.fromIdx, _sa.toIdx, updates);
+        }
+        saveProject(); draw();
+      };
+
+      appendHslColorPicker(_ctrlDiv, _initArcColor, (color, meta = {}) => {
+        _applyArc({ color });
+        if (meta.fromHueClick) renderAnimList();
+      }, { withUndo: true, fallbackHue: colorToHsl(_initArcColor).h,
+        onPreviewChange(hex) { _arcColorPreview = hex; _arcOpacityCtrl?.setTrack(opacitySliderTrack(hex)); } });
+
+      const _initArcOpacity = _firstStyle?.opacity ?? anim.outlineOpacity ?? 1;
+      _arcOpacityCtrl = appendSliderRow(_ctrlDiv, 'Opacity', 0, 100, 1, Math.round(clamp(_initArcOpacity, 0, 1) * 100),
+        v => `${Math.round(v)}%`, v => { _applyArc({ opacity: clamp(parseFloat(v) / 100, 0, 1) }); },
+        false, { colorTrack: opacitySliderTrack(_arcColorPreview) });
+
+      appendSliderRow(_ctrlDiv, 'Thickness', 1, 10, 1, _firstStyle?.thickness ?? anim.thickness ?? 2,
+        v => `${Math.round(v)}`, v => { _applyArc({ thickness: parseInt(v, 10) }); },
+        false, { valAlign: 'center' });
+
+      appendSliderRow(_ctrlDiv, 'Inner Edge', 0, 100, 1, Math.round((_firstStyle?.innerSoftness ?? 0) * 100),
+        v => `${Math.round(v)}%`, v => { _applyArc({ innerSoftness: parseFloat(v) / 100 }); }, false, {});
+
+      appendSliderRow(_ctrlDiv, 'Outer Edge', 0, 100, 1, Math.round((_firstStyle?.outerSoftness ?? 0) * 100),
+        v => `${Math.round(v)}%`, v => { _applyArc({ outerSoftness: parseFloat(v) / 100 }); }, false, {});
+
+      _dtContent.appendChild(_ctrlDiv);
     }
+
   } else {
-    // General: Outline / Fill expansion (same as color button)
-    openColorMenuAnimId = anim.id;
-    appendColorExpansion(detailEl, anim);
+    // ── Regions tab ──
+
+    // Top buttons
+    const _regTopRow = document.createElement('div');
+    _regTopRow.style.cssText = 'display:flex;gap:4px;margin-bottom:6px;align-items:center;';
+
+    const _regSelAllBtn = document.createElement('button');
+    _regSelAllBtn.style.cssText = 'height:22px;border:1px solid #313244;border-radius:4px;background:#1e1e2e;cursor:pointer;font-size:0.65rem;color:#cdd6f4;padding:0 8px;';
+    _regSelAllBtn.textContent = 'Select All';
+    _regSelAllBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      if (_regions.length > 0) { selectedObjectRegionId = { animId: anim.id, id: _regions[0].id }; anim._treatRegionsAsOne = false; }
+      renderAnimList(); draw();
+    });
+    _regTopRow.appendChild(_regSelAllBtn);
+
+    const _treatIsOne = !!anim._treatRegionsAsOne;
+    const _treatBtn = document.createElement('button');
+    _treatBtn.style.cssText = 'height:22px;border:1px solid #313244;border-radius:4px;background:' + (_treatIsOne ? '#45475a' : '#1e1e2e') + ';cursor:pointer;font-size:0.65rem;color:' + (_treatIsOne ? '#cdd6f4' : '#6c7086') + ';padding:0 8px;';
+    _treatBtn.textContent = 'Treat as One';
+    _treatBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      anim._treatRegionsAsOne = !_treatIsOne;
+      if (anim._treatRegionsAsOne) selectedObjectRegionId = null;
+      renderAnimList(); draw();
+    });
+    _regTopRow.appendChild(_treatBtn);
+    _dtContent.appendChild(_regTopRow);
+
+    if (_regions.length === 0) {
+      const _note = document.createElement('div');
+      _note.style.cssText = 'font-size:0.7rem;color:#6c7086;padding:8px 2px;';
+      _note.textContent = 'No regions. Regions form where curves enclose an area.';
+      _dtContent.appendChild(_note);
+    }
+
+    for (const _reg of _regions) {
+      const _regSel = selectedObjectRegionId?.id === _reg.id && !anim._treatRegionsAsOne;
+      const _rColor = _reg.fillColor || anim.color;
+      const _rNorm = normalizeColorString(_rColor) || _rColor;
+      const _rIdx = _regions.indexOf(_reg);
+
+      const _regRow = document.createElement('div');
+      _regRow.style.cssText = 'display:flex;align-items:center;gap:6px;padding:3px 4px;cursor:pointer;border-radius:4px;margin-bottom:1px;background:' + (_regSel ? '#313244' : 'transparent') + ';';
+
+      const _rSwatch = document.createElement('div');
+      _rSwatch.style.cssText = `width:13px;height:13px;border-radius:3px;background:${_rNorm};border:1px solid #45475a;flex-shrink:0;opacity:${_reg.fillOpacity ?? 1};`;
+      _regRow.appendChild(_rSwatch);
+
+      const _rLbl = document.createElement('span');
+      _rLbl.style.cssText = 'flex:1;font-size:0.7rem;color:#cdd6f4;';
+      _rLbl.textContent = regionLabel(_reg, topoArcs) || `Region ${_rIdx + 1}`;
+      _regRow.appendChild(_rLbl);
+
+      _regRow.addEventListener('click', e => {
+        e.stopPropagation();
+        selectedObjectRegionId = { animId: anim.id, id: _reg.id };
+        anim._treatRegionsAsOne = false;
+        objectDetailTab = 'regions';
+        renderAnimList(); draw();
+      });
+
+      _dtContent.appendChild(_regRow);
+    }
+
+    // Fill controls for selected/treated region
+    const _activeReg = (!anim._treatRegionsAsOne && selectedObjectRegionId?.animId === anim.id)
+      ? _regions.find(r => r.id === selectedObjectRegionId.id) ?? null
+      : (anim._treatRegionsAsOne && _regions.length > 0 ? _regions[0] : null);
+
+    if (_activeReg) {
+      const _fillWrap = document.createElement('div');
+      _fillWrap.style.cssText = 'margin-top:6px;border-top:1px solid #313244;padding-top:6px;';
+
+      const _fillStyle = _activeReg.fillStyle || 'solid';
+      const _hasColor2 = _fillStyle !== 'solid';
+
+      // Sub-tabs: Color 1 | Color 2 | Style
+      const _subBar = document.createElement('div');
+      _subBar.className = 'color-tab-bar';
+      _subBar.style.marginBottom = '6px';
+      ['Color 1', 'Color 2', 'Style'].forEach((t, idx) => {
+        const _sb = document.createElement('button');
+        _sb.type = 'button';
+        _sb.className = 'color-tab' + (regionFillSubTab === idx + 1 ? ' active' : '');
+        _sb.textContent = t;
+        _sb.style.cssText = 'flex:1;padding:3px 4px;font-size:0.65rem;';
+        _sb.disabled = (idx === 1 && !_hasColor2);
+        _sb.addEventListener('click', e => { e.stopPropagation(); regionFillSubTab = idx + 1; renderAnimList(); });
+        _subBar.appendChild(_sb);
+      });
+      _fillWrap.appendChild(_subBar);
+
+      const _applyReg = updates => {
+        const _targets = anim._treatRegionsAsOne ? _regions : [_activeReg];
+        _targets.forEach(r => Object.assign(r, updates));
+      };
+
+      if (regionFillSubTab === 1) {
+        // Color 1
+        if (!_activeReg.fillColor) {
+          const _dc = normalizeColorString(globalSettings.defaultColor);
+          const _dh = _dc ? colorToHsl(_dc).h : 0;
+          _activeReg.fillColor = hslToHex(_dh, 100, 50);
+          if (!isFinite(_activeReg.fillOpacity) || _activeReg.fillOpacity <= 0) _activeReg.fillOpacity = 1;
+          saveProject();
+        }
+        let _c1Prev = normalizeColorString(_activeReg.fillColor) || _activeReg.fillColor;
+        let _c1Op = null;
+        appendHslColorPicker(_fillWrap, _activeReg.fillColor, (color, meta = {}) => {
+          _applyReg({ fillColor: color });
+          saveProject(); if (meta.fromHueClick) renderAnimList(); draw();
+        }, { withUndo: true, fallbackHue: colorToHsl(_activeReg.fillColor).h,
+          onPreviewChange(hex) { _c1Prev = hex; _c1Op?.setTrack(opacitySliderTrack(hex)); } });
+        _c1Op = appendSliderRow(_fillWrap, 'Opacity', 0, 100, 1, Math.round((_activeReg.fillOpacity ?? 1) * 100),
+          v => `${Math.round(v)}%`, v => { _applyReg({ fillOpacity: clamp(parseFloat(v) / 100, 0, 1) }); saveProject(); draw(); },
+          false, { colorTrack: opacitySliderTrack(_c1Prev) });
+
+      } else if (regionFillSubTab === 2) {
+        // Color 2
+        if (!_hasColor2) {
+          const _no2 = document.createElement('div');
+          _no2.style.cssText = 'padding:12px 4px;font-size:0.7rem;color:#6c7086;text-align:center;';
+          _no2.textContent = 'Switch to Gradient or Pattern in Style tab.';
+          _fillWrap.appendChild(_no2);
+        } else {
+          const _c2Init = _activeReg.gradientToColor || _activeReg.fillColor || anim.color;
+          let _c2Prev = normalizeColorString(_c2Init) || _c2Init;
+          let _c2Op = null;
+          appendHslColorPicker(_fillWrap, _c2Init, (color, meta = {}) => {
+            _applyReg({ gradientToColor: color });
+            saveProject(); if (meta.fromHueClick) renderAnimList(); draw();
+          }, { withUndo: true, fallbackHue: colorToHsl(_activeReg.fillColor || anim.color).h,
+            onPreviewChange(hex) { _c2Prev = hex; _c2Op?.setTrack(opacitySliderTrack(hex)); } });
+          _c2Op = appendSliderRow(_fillWrap, 'Opacity', 0, 100, 1, Math.round((_activeReg.gradientToOpacity ?? 0) * 100),
+            v => `${Math.round(v)}%`, v => { _applyReg({ gradientToOpacity: clamp(parseFloat(v) / 100, 0, 1) }); saveProject(); draw(); },
+            false, { colorTrack: opacitySliderTrack(_c2Prev) });
+        }
+
+      } else {
+        // Style
+        const _styleRow = document.createElement('div');
+        _styleRow.className = 'fill-style-row';
+        [{ key: 'solid', title: 'Solid' }, { key: 'gradient', title: 'Gradient' }, { key: 'pattern', title: 'Pattern' }].forEach(({ key, title }) => {
+          const _fsb = document.createElement('button');
+          _fsb.className = 'fill-style-btn' + (_fillStyle === key ? ' active' : '');
+          _fsb.title = title;
+          _fsb.appendChild(makeFillStyleIcon(key));
+          _fsb.addEventListener('click', e => {
+            e.stopPropagation();
+            if (_fillStyle !== key) {
+              pushUndo(); _applyReg({ fillStyle: key });
+              if (key !== 'solid' && !_activeReg.gradientToColor) _applyReg({ gradientToColor: _activeReg.fillColor || anim.color, gradientToOpacity: 0 });
+              saveProject(); renderAnimList(); draw();
+            }
+          });
+          _styleRow.appendChild(_fsb);
+        });
+        _fillWrap.appendChild(_styleRow);
+
+        if (_fillStyle === 'gradient' || _fillStyle === 'contour-gradient') {
+          const _wRow = document.createElement('div');
+          _wRow.className = 'direction-wheel-row';
+          const _wLbl = document.createElement('span'); _wLbl.className = 'direction-wheel-label'; _wLbl.textContent = 'Direction';
+          _wRow.appendChild(_wLbl);
+          appendDirectionWheel(_wRow, () => _activeReg.gradientAngle ?? Math.PI / 4, a => { _applyReg({ gradientAngle: a }); saveProject(); draw(); });
+          _fillWrap.appendChild(_wRow);
+        }
+
+        if (_fillStyle === 'pattern') {
+          const _patType = _activeReg.patternType || 'lines';
+          const _patRow = document.createElement('div');
+          _patRow.className = 'fill-style-row';
+          _patRow.style.marginTop = '4px';
+          [{ key: 'lines', title: 'Lines' }, { key: 'dots', title: 'Dots' }, { key: 'crosshatch', title: 'Crosshatch' }].forEach(({ key, title }) => {
+            const _pb = document.createElement('button');
+            _pb.className = 'fill-style-btn' + (_patType === key ? ' active' : '');
+            _pb.title = title;
+            _pb.appendChild(makeFillStyleIcon(key));
+            _pb.addEventListener('click', e => {
+              e.stopPropagation();
+              if (_patType !== key) { pushUndo(); _applyReg({ patternType: key }); saveProject(); renderAnimList(); draw(); }
+            });
+            _patRow.appendChild(_pb);
+          });
+          _fillWrap.appendChild(_patRow);
+
+          // Pattern direction and spacing (reuse existing controls via appendRegionColorExpansion helpers)
+          const _patAngle = _activeReg.patternAngle ?? 0;
+          const _patSpacing = _activeReg.patternSpacing ?? 20;
+          const _pWRow = document.createElement('div');
+          _pWRow.className = 'direction-wheel-row';
+          _pWRow.style.marginTop = '4px';
+          const _pWLbl = document.createElement('span'); _pWLbl.className = 'direction-wheel-label'; _pWLbl.textContent = 'Direction';
+          _pWRow.appendChild(_pWLbl);
+          appendDirectionWheel(_pWRow, () => _activeReg.patternAngle ?? 0, a => { _applyReg({ patternAngle: a }); saveProject(); draw(); });
+          _fillWrap.appendChild(_pWRow);
+          appendSliderRow(_fillWrap, 'Spacing', 5, 80, 1, _patSpacing,
+            v => `${Math.round(v)}`, v => { _applyReg({ patternSpacing: parseInt(v, 10) }); saveProject(); draw(); },
+            false, { valAlign: 'center' });
+        }
+      }
+
+      _dtContent.appendChild(_fillWrap);
+    }
   }
-
-
 
   // Legacy list loop for compatibility — no output
   for (const _a of animations) {
