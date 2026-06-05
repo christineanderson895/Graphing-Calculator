@@ -4190,6 +4190,9 @@ let objectDetailTab = 'arcs';      // 'anchors' | 'arcs' | 'regions' — active 
 let selectedArcKeys = new Set();   // arc labels selected in Arcs tab
 let regionFillSubTab = 1;          // 1=Color1, 2=Color2, 3=Style — sub-tab in Regions tab
 let _lastDetailAnimId = null;      // detect object change to reset tab
+let _cvtBezierShowUI = false;      // convert-to-bezier slider UI expanded in panel
+let _cvtBezierN = 12;             // slider value for convert-to-bezier
+let _cvtBezierPreviewId = null;   // animId whose circle/ellipse is being previewed
 let hoveredObjectNodeNum = null;   // number | null — hovered node badge in schematic
 let hoveredObjectArcLabel = null;  // string | null — hovered arc label in schematic
 let hoveredObjectRegionId = null;  // regionId | null — hovered region centroid in schematic
@@ -6014,15 +6017,29 @@ function finalizePrimitivePlacement(anim) {
     cancelPlacement(anim);
     return;
   }
+  const _primKind = animKind(anim);
   anim.inPlacementMode = false;
   anim.expanded = false;
   anim.activeSegments = new Set();
   placementPreviewPos = null;
   resetFreeformPlacementPathTracking();
-  detectObjectTopology(anim);
+  if (_primKind === 'rectangle' || _primKind === 'triangle') {
+    convertPrimitiveToPath(anim);
+  } else {
+    detectObjectTopology(anim);
+  }
   enterEditMode(anim, new Set());
   exitEditMode();
-  selectedShapeKind = SHAPE_TOOL_KINDS.includes(animKind(anim)) ? animKind(anim) : selectedShapeKind;
+  if (_primKind === 'rectangle' || _primKind === 'triangle') {
+    const { topoArcs } = computeObjectTopologyData(anim);
+    if (topoArcs.length > 0) {
+      const _fa = topoArcs[0];
+      drillObjectArc = { animId: anim.id, label: _fa.label, curveId: _fa.curveId, fromIdx: _fa.fromIdx, toIdx: _fa.toIdx };
+      selectedArcKeys = new Set([_fa.label]);
+      objectDetailTab = 'arcs';
+    }
+  }
+  selectedShapeKind = SHAPE_TOOL_KINDS.includes(_primKind) ? _primKind : selectedShapeKind;
   currentTool = 'select';
   updateToolPanel();
   renderAnimList(); draw(); updateCursor();
@@ -6092,6 +6109,16 @@ function finalizePlacement(anim) {
   detectObjectTopology(anim);
   enterEditMode(anim, new Set());
   exitEditMode();
+  // Auto-select the first arc so handles are visible immediately after placement
+  {
+    const { topoArcs } = computeObjectTopologyData(anim);
+    if (topoArcs.length > 0) {
+      const _fa = topoArcs[0];
+      drillObjectArc = { animId: anim.id, label: _fa.label, curveId: _fa.curveId, fromIdx: _fa.fromIdx, toIdx: _fa.toIdx };
+      selectedArcKeys = new Set([_fa.label]);
+      objectDetailTab = 'arcs';
+    }
+  }
   currentTool = 'select';
   updateToolPanel();
   renderAnimList(); draw(); updateCursor();
@@ -13093,6 +13120,66 @@ function primitiveEllipsePathForDrag(drag) {
   return { kind: 'freeform', closed: true, anchors, segments, locked: true };
 }
 
+// Convert a rectangle or triangle primitive to a freeform Bézier path in-place.
+function convertPrimitiveToPath(anim) {
+  const kind = animKind(anim);
+  if (kind !== 'rectangle' && kind !== 'triangle') return false;
+  const fakeDrag = { origKind: kind, origAnchors: anim.anchors.map(cloneCx), origRotation: anim.rotation ?? 0 };
+  const path = primitivePathForDrag(fakeDrag);
+  if (!path) return false;
+  const nCorners = kind === 'rectangle' ? 4 : 3;
+  anim.kind = 'freeform';
+  anim.closed = true;
+  anim.rotation = 0;
+  anim.anchors = path.anchors;
+  anim.segments = path.anchors.slice(0, -1).map((p, i) => makeStraightSegment(p, path.anchors[i + 1]));
+  anim.anchorLocked = path.anchors.map(() => false);
+  anim.promotedAnchors = path.anchors.map((_, i) => i < nCorners);
+  recompileAnim(anim);
+  detectObjectTopology(anim);
+  return true;
+}
+
+// Convert a circle or ellipse primitive to a freeform Bézier path with n evenly-spaced anchors.
+// First anchor is placed at the top (12 o'clock). Handles use the exact cubic tangent factor.
+function convertCircleEllipseToPath(anim, n) {
+  const kind = animKind(anim);
+  if (kind !== 'circle' && kind !== 'ellipse') return false;
+  const center = anim.anchors[0], p1 = anim.anchors[1];
+  if (!center || !p1) return false;
+  const rot = kind === 'ellipse' ? (anim.rotation ?? 0) : 0;
+  const rx = kind === 'circle' ? Math.hypot(p1.re - center.re, p1.im - center.im) : Math.abs(p1.re - center.re);
+  const ry = kind === 'circle' ? rx : Math.abs(p1.im - center.im);
+  if (rx < 1e-9 || ry < 1e-9) return false;
+  const h = (4 / 3) * Math.tan(Math.PI / (2 * n));
+  const step = 2 * Math.PI / n;
+  const pointAt = angle => {
+    const local = new Cx(center.re + rx * Math.cos(angle), center.im + ry * Math.sin(angle));
+    return rot ? rotateMathPoint(local, center, rot) : local;
+  };
+  const tangentAt = angle => rotateMathVector(new Cx(-rx * Math.sin(angle), ry * Math.cos(angle)), rot);
+  const anchors = [];
+  for (let k = 0; k <= n; k++) anchors.push(pointAt(Math.PI / 2 + k * step));
+  anchors[n] = cloneCx(anchors[0]);
+  const segments = [];
+  for (let k = 0; k < n; k++) {
+    const a0 = Math.PI / 2 + k * step, a1 = a0 + step;
+    const t0 = tangentAt(a0), t1 = tangentAt(a1);
+    const s = anchors[k], e = anchors[k + 1];
+    segments.push(makeSeg(new Cx(s.re + t0.re * h, s.im + t0.im * h), new Cx(e.re - t1.re * h, e.im - t1.im * h)));
+  }
+  anim.kind = 'freeform';
+  anim.closed = true;
+  anim.rotation = 0;
+  anim.anchors = anchors;
+  anim.segments = segments;
+  anim.anchorLocked = anchors.map(() => false);
+  anim.promotedAnchors = anchors.map(() => false);
+  recompileAnim(anim);
+  detectObjectTopology(anim);
+  return true;
+}
+
 function primitivePathForDrag(drag) {
   if (drag.origKind === 'rectangle') return primitiveRectanglePathForDrag(drag);
   if (drag.origKind === 'triangle') return primitiveTrianglePathForDrag(drag);
@@ -14528,6 +14615,26 @@ function drawAnimations() {
         const _da = drillObjectArc;
         const _daCurve = animCurves(mainSel).find(c => c.id === _da.curveId) ?? mainSel;
         drawTopoArcHandles(_daCurve, _da.fromIdx, _da.toIdx);
+      }
+      // Convert-to-Bézier preview: N dots on circle/ellipse
+      if (_cvtBezierPreviewId === mainSel.id && isPrimitiveAnim(mainSel)) {
+        const _ck = animKind(mainSel);
+        if (_ck === 'circle' || _ck === 'ellipse') {
+          const _cc = mainSel.anchors[0], _cp1 = mainSel.anchors[1];
+          if (_cc && _cp1) {
+            const _crot = _ck === 'ellipse' ? (mainSel.rotation ?? 0) : 0;
+            const _crx = _ck === 'circle' ? Math.hypot(_cp1.re - _cc.re, _cp1.im - _cc.im) : Math.abs(_cp1.re - _cc.re);
+            const _cry = _ck === 'circle' ? _crx : Math.abs(_cp1.im - _cc.im);
+            const _dpr = devicePixelRatio;
+            const _step = 2 * Math.PI / _cvtBezierN;
+            for (let k = 0; k < _cvtBezierN; k++) {
+              const _ang = Math.PI / 2 + k * _step;
+              const _local = new Cx(_cc.re + _crx * Math.cos(_ang), _cc.im + _cry * Math.sin(_ang));
+              const _pt = _crot ? rotateMathPoint(_local, _cc, _crot) : _local;
+              drawAnchorDot(toCanvas(_pt.re, _pt.im), mainSel.color, (k === 0 ? 6 : 4) * _dpr);
+            }
+          }
+        }
       }
     }
   }
@@ -20839,19 +20946,93 @@ function renderAnimListLegacy() {
   // ── Reset tab state when selected object changes ──
   if (_lastDetailAnimId !== anim.id) {
     _lastDetailAnimId = anim.id;
-    // Preserve tab + selection if a canvas click just set them for this object
     const _hasArcSel = drillObjectArc?.animId === anim.id;
     const _hasRegSel = selectedObjectRegionId?.animId === anim.id;
     if (!_hasArcSel && !_hasRegSel) { objectDetailTab = 'arcs'; selectedArcKeys = new Set(); }
     else if (_hasRegSel && !_hasArcSel) { objectDetailTab = 'regions'; }
     regionFillSubTab = 1;
+    _cvtBezierShowUI = false;
+    _cvtBezierPreviewId = null;
+    _cvtBezierN = 12;
   }
 
-  // ── 3-tab bar: Anchors | Arcs | Regions ──
+  // ── Convert to Bézier section (circle/ellipse primitives only) ──
+  const _isCvtPrimitive = isPrimitiveAnim(anim) && (animKind(anim) === 'circle' || animKind(anim) === 'ellipse');
+  if (_isCvtPrimitive) {
+    const _cvtWrap = document.createElement('div');
+    _cvtWrap.style.cssText = 'padding:8px;border-bottom:1px solid #1e1e2e;';
+    if (!_cvtBezierShowUI) {
+      const _cvtBtn = document.createElement('button');
+      _cvtBtn.style.cssText = 'width:100%;height:26px;border:1px solid #45475a;border-radius:5px;background:#1e1e2e;cursor:pointer;font-size:0.7rem;color:#cdd6f4;';
+      _cvtBtn.textContent = 'Convert to Bézier curve';
+      _cvtBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        _cvtBezierShowUI = true;
+        _cvtBezierPreviewId = anim.id;
+        renderAnimList(); draw();
+      });
+      _cvtWrap.appendChild(_cvtBtn);
+    } else {
+      const _lbl = document.createElement('div');
+      _lbl.style.cssText = 'font-size:0.68rem;color:#cdd6f4;margin-bottom:6px;';
+      _lbl.textContent = 'Select number of anchor points:';
+      _cvtWrap.appendChild(_lbl);
+      const _sliderRow = document.createElement('div');
+      _sliderRow.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:8px;';
+      const _slider = document.createElement('input');
+      _slider.type = 'range'; _slider.min = '4'; _slider.max = '24'; _slider.value = String(_cvtBezierN);
+      _slider.style.cssText = 'flex:1;accent-color:#89b4fa;';
+      const _valLbl = document.createElement('span');
+      _valLbl.style.cssText = 'font-size:0.7rem;color:#89b4fa;min-width:18px;text-align:right;';
+      _valLbl.textContent = String(_cvtBezierN);
+      _slider.addEventListener('input', e => {
+        e.stopPropagation();
+        _cvtBezierN = parseInt(_slider.value);
+        _valLbl.textContent = String(_cvtBezierN);
+        draw();
+      });
+      _sliderRow.appendChild(_slider); _sliderRow.appendChild(_valLbl);
+      _cvtWrap.appendChild(_sliderRow);
+      const _btnRow = document.createElement('div');
+      _btnRow.style.cssText = 'display:flex;gap:6px;';
+      const _backBtn = document.createElement('button');
+      _backBtn.style.cssText = 'flex:1;height:24px;border:1px solid #45475a;border-radius:5px;background:#1e1e2e;cursor:pointer;font-size:0.7rem;color:#cdd6f4;';
+      _backBtn.textContent = 'Back';
+      _backBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        _cvtBezierShowUI = false;
+        _cvtBezierPreviewId = null;
+        renderAnimList(); draw();
+      });
+      const _doBtn = document.createElement('button');
+      _doBtn.style.cssText = 'flex:2;height:24px;border:none;border-radius:5px;background:#89b4fa;cursor:pointer;font-size:0.7rem;color:#1e1e2e;font-weight:600;';
+      _doBtn.textContent = 'Convert';
+      _doBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        pushUndo();
+        convertCircleEllipseToPath(anim, _cvtBezierN);
+        _cvtBezierShowUI = false;
+        _cvtBezierPreviewId = null;
+        const { topoArcs } = computeObjectTopologyData(anim);
+        if (topoArcs.length > 0) {
+          const _fa = topoArcs[0];
+          drillObjectArc = { animId: anim.id, label: _fa.label, curveId: _fa.curveId, fromIdx: _fa.fromIdx, toIdx: _fa.toIdx };
+          selectedArcKeys = new Set([_fa.label]); objectDetailTab = 'arcs';
+        }
+        saveProject(); renderAnimList(); draw();
+      });
+      _btnRow.appendChild(_backBtn); _btnRow.appendChild(_doBtn);
+      _cvtWrap.appendChild(_btnRow);
+    }
+    detailEl.appendChild(_cvtWrap);
+  }
+
+  // ── 3-tab bar: Anchors | Arcs | Regions (primitives get only Arcs | Regions) ──
+  if (_isCvtPrimitive && objectDetailTab === 'anchors') objectDetailTab = 'arcs';
   const _dtTabBar = document.createElement('div');
   _dtTabBar.className = 'color-tab-bar';
   _dtTabBar.style.cssText = 'margin-top:4px;padding:0 8px;';
-  ['Anchors', 'Arcs', 'Regions'].forEach(t => {
+  (_isCvtPrimitive ? ['Arcs', 'Regions'] : ['Anchors', 'Arcs', 'Regions']).forEach(t => {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'color-tab' + (objectDetailTab === t.toLowerCase() ? ' active' : '');
@@ -20945,6 +21126,27 @@ function renderAnimListLegacy() {
 
   } else if (objectDetailTab === 'arcs') {
     // ── Arcs tab ──
+
+    if (_isCvtPrimitive) {
+      // Primitive circle/ellipse: show stroke controls directly
+      const _ctrlDiv = document.createElement('div');
+      _ctrlDiv.style.cssText = 'padding-top:4px;';
+      let _arcColorPreview = normalizeColorString(anim.color) || anim.color;
+      let _arcOpacityCtrl = null;
+      appendHslColorPicker(_ctrlDiv, anim.color, (color, meta = {}) => {
+        anim.color = color; saveProject(); draw();
+        if (meta.fromHueClick) renderAnimList();
+      }, { withUndo: true, fallbackHue: colorToHsl(anim.color).h,
+        onPreviewChange(hex) { _arcColorPreview = hex; _arcOpacityCtrl?.setTrack(opacitySliderTrack(hex)); } });
+      _arcOpacityCtrl = appendSliderRow(_ctrlDiv, 'Opacity', 0, 100, 1,
+        Math.round(clamp(anim.outlineOpacity ?? 1, 0, 1) * 100),
+        v => `${Math.round(v)}%`, v => { anim.outlineOpacity = clamp(parseFloat(v) / 100, 0, 1); saveProject(); draw(); },
+        false, { colorTrack: opacitySliderTrack(_arcColorPreview) });
+      appendSliderRow(_ctrlDiv, 'Thickness', 1, 10, 1, anim.thickness ?? 2,
+        v => `${Math.round(v)}`, v => { anim.thickness = parseInt(v, 10); saveProject(); draw(); },
+        false, { valAlign: 'center' });
+      _dtContent.appendChild(_ctrlDiv);
+    } else {
 
     // Select All button
     const _arcTopRow = document.createElement('div');
@@ -21075,8 +21277,28 @@ function renderAnimListLegacy() {
       _dtContent.appendChild(_ctrlDiv);
     }
 
+    } // end else (!_isCvtPrimitive) for arcs tab
+
   } else {
     // ── Regions tab ──
+
+    if (_isCvtPrimitive) {
+      // Primitive circle/ellipse: show fill controls directly
+      const _fillWrap = document.createElement('div');
+      _fillWrap.style.cssText = 'padding-top:4px;';
+      const _initFillColor = anim.fillColor || anim.color;
+      let _fillOpCtrl = null;
+      appendHslColorPicker(_fillWrap, _initFillColor, (color, meta = {}) => {
+        anim.fillColor = color; saveProject(); draw();
+        if (meta.fromHueClick) renderAnimList();
+      }, { withUndo: true, fallbackHue: colorToHsl(_initFillColor).h,
+        onPreviewChange(hex) { _fillOpCtrl?.setTrack(opacitySliderTrack(hex)); } });
+      _fillOpCtrl = appendSliderRow(_fillWrap, 'Opacity', 0, 100, 1,
+        Math.round(clamp(anim.fillOpacity ?? 0.5, 0, 1) * 100),
+        v => `${Math.round(v)}%`, v => { anim.fillOpacity = clamp(parseFloat(v) / 100, 0, 1); saveProject(); draw(); },
+        false, { colorTrack: opacitySliderTrack(_initFillColor) });
+      _dtContent.appendChild(_fillWrap);
+    } else {
 
     // Top buttons
     const _regTopRow = document.createElement('div');
@@ -21281,6 +21503,8 @@ function renderAnimListLegacy() {
 
       _dtContent.appendChild(_fillWrap);
     }
+
+    } // end else (!_isCvtPrimitive) for regions tab
   }
 
   // Legacy list loop for compatibility — no output
