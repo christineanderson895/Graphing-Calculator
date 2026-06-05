@@ -13834,45 +13834,7 @@ function drawNodeDots(anim) {
   if (!essentialPoints.length) return;
   const dpr = devicePixelRatio;
   const curves = animCurves(anim);
-
-  // When a region is selected, collect the node positions that sit on its boundary
-  let boundaryPositions = null;
-  if (selectedObjectRegionId?.animId === anim.id) {
-    const selReg = anim.regions?.find(r => r.id === selectedObjectRegionId.id);
-    if (selReg) {
-      const curvesMap = buildTopologyCurvesMap(anim);
-      boundaryPositions = [];
-      for (const edge of selReg.boundary) {
-        const c = curvesMap.get(edge.animId);
-        if (!c) continue;
-        for (const idx of [edge.startIdx, edge.endIdx]) {
-          const a = c.anchors[idx];
-          if (a) boundaryPositions.push(a);
-        }
-      }
-    }
-  }
-
-  // When an arc is selected, collect the anchor positions that belong to that arc
-  let arcAnchorPositions = null;
-  if (drillObjectArc?.animId === anim.id) {
-    const _da = drillObjectArc;
-    const _daCurve = animCurves(anim).find(c => c.id === _da.curveId);
-    if (_daCurve) {
-      arcAnchorPositions = [];
-      for (let i = _da.fromIdx; i <= _da.toIdx; i++) {
-        const a = _daCurve.anchors[i];
-        if (a) arcAnchorPositions.push(a);
-      }
-    }
-  }
-
-  ctx.save();
   for (const ep of essentialPoints) {
-    const onBoundary = boundaryPositions === null ||
-      boundaryPositions.some(a => Math.hypot(a.re - ep.pos.re, a.im - ep.pos.im) < 1e-4);
-    const onArcAnchor = arcAnchorPositions === null ||
-      arcAnchorPositions.some(a => Math.hypot(a.re - ep.pos.re, a.im - ep.pos.im) < 1e-4);
     let dotColor = null;
     outer: for (const c of curves) {
       if (isPrimitiveAnim(c) || isTextAnim(c) || !c.anchors?.length) continue;
@@ -13883,11 +13845,9 @@ function drawNodeDots(anim) {
         }
       }
     }
-    ctx.globalAlpha = (onBoundary && onArcAnchor) ? 1 : 0.45;
     const [ncx, ncy] = toCanvas(ep.pos.re, ep.pos.im);
     drawAnchorDot([ncx, ncy], dotColor || anim.color, 6 * dpr);
   }
-  ctx.restore();
 }
 
 function drawTopoFeatureSelectionBounds(anim) {
@@ -14207,58 +14167,32 @@ function drawCommittedAnimation(anim, { deferOverlay = false } = {}) {
 
   if (anim.curves) {
     const _fadingArc = drillObjectArc?.animId === anim.id ? drillObjectArc : null;
-    const _fadingReg = !_fadingArc && selectedObjectRegionId?.animId === anim.id;
-    // Build a set of boundary segments for the selected region so they stay full-strength
-    let _boundarySegs = null;
-    if (_fadingReg) {
-      const _selReg = anim.regions?.find(r => r.id === selectedObjectRegionId.id);
-      if (_selReg) {
-        _boundarySegs = new Set();
-        for (const edge of _selReg.boundary) {
-          const sMin = Math.min(edge.startIdx, edge.endIdx);
-          const sMax = Math.max(edge.startIdx, edge.endIdx);
-          for (let s = sMin; s < sMax; s++) _boundarySegs.add(`${edge.animId}:${s}`);
-        }
-      }
-    }
     const _arcEditColor = _fadingArc ? colorWithLightness(anim.color, 0.5) : null;
     for (const c of anim.curves) {
       const proxy = makeCurveProxy(anim, c);
       const _isDimmed = !!(_fadingArc && c.id !== _fadingArc.curveId);
       if (isPrimitiveAnim(proxy)) {
-        if (_isDimmed) ctx.save(), ctx.globalAlpha *= 0.45;
         drawPrimitive(proxy);
-        if (_isDimmed) ctx.restore();
       } else if (isTextAnim(proxy)) {
-        if (_isDimmed) ctx.save(), ctx.globalAlpha *= 0.45;
         drawTextAnim(proxy);
-        if (_isDimmed) ctx.restore();
       } else {
         if (proxy.anchors.length === 1 && proxy.segments.length === 0) drawDot(proxy);
-        const _fillOp = _isDimmed ? 0.45 : (_fadingReg ? 0.45 : 1);
         if (!anim.regions?.length && canFillAnim(proxy) && (animFillColor(proxy) || animFillColor(anim))) {
           const _fillProxy = animFillColor(proxy) ? proxy : { ...proxy, fillColor: anim.fillColor, fillStyle: anim.fillStyle, fillOpacity: anim.fillOpacity };
-          drawCurveFill(_fillProxy, null, _fillOp, []);
+          drawCurveFill(_fillProxy, null, 1, []);
         }
         for (let i = 0; i < proxy.segments.length; i++) {
           if (_fadingArc && !_isDimmed) {
             const _inArc = i >= _fadingArc.fromIdx && i < _fadingArc.toIdx;
             if (_inArc) drawSegment(proxy, i, _arcEditColor, 1, 5, 1);
-            else drawSegment(proxy, i, null, 1, null, 0.45);
-          } else if (_isDimmed) {
-            drawSegment(proxy, i, null, 1, null, 0.45);
+            else drawSegment(proxy, i);
           } else {
-            if (_boundarySegs !== null) {
-              const segOp = _boundarySegs.has(`${c.id}:${i}`) ? 1 : 0.45;
-              drawSegment(proxy, i, null, segOp);
+            const _as = getArcStyleForSegment(anim, c.id, i);
+            if (_as && (_as.color || _as.thickness !== undefined || _as.opacity !== undefined)) {
+              drawSegment(proxy, i, _as.color ?? null, 1, _as.thickness ?? null,
+                _as.opacity !== undefined ? _as.opacity * _globalCanvasDimFactor : null);
             } else {
-              const _as = getArcStyleForSegment(anim, c.id, i);
-              if (_as && (_as.color || _as.thickness !== undefined || _as.opacity !== undefined)) {
-                drawSegment(proxy, i, _as.color ?? null, 1, _as.thickness ?? null,
-                  _as.opacity !== undefined ? _as.opacity * _globalCanvasDimFactor : null);
-              } else {
-                drawSegment(proxy, i);
-              }
+              drawSegment(proxy, i);
             }
           }
         }
@@ -14292,7 +14226,7 @@ function drawCommittedAnimation(anim, { deferOverlay = false } = {}) {
       drawCurvePattern(anim);
     } else if (animFillColor(anim)) {
       const isClosedFill = !!(anim.closed && findLoopRange(anim));
-      drawCurveFill(anim, null, activeArc !== null ? 0.45 : 1, isClosedFill ? [] : higherLayerBlockersFor(anim));
+      drawCurveFill(anim, null, 1, isClosedFill ? [] : higherLayerBlockersFor(anim));
     }
   }
   if (activeArc !== null) {
@@ -14300,10 +14234,7 @@ function drawCommittedAnimation(anim, { deferOverlay = false } = {}) {
     const _activeArcIsTopo = drillObjectArc?.animId === anim.id;
     const _topoArcColor = _activeArcIsTopo ? colorWithLightness(anim.color, 0.5) : null;
     for (let i = 0; i < anim.segments.length; i++) {
-      if (i !== activeArc) {
-        if (_activeArcIsTopo) drawSegment(anim, i, null, 1, null, 0.45);
-        else drawSegment(anim, i, null, 0.45);
-      }
+      if (i !== activeArc) drawSegment(anim, i);
     }
     if (_activeArcIsTopo) drawSegment(anim, activeArc, _topoArcColor, 1, 5, 1);
     else drawSegment(anim, activeArc, null, 1, thickBoost);
@@ -14313,7 +14244,7 @@ function drawCommittedAnimation(anim, { deferOverlay = false } = {}) {
       if (i >= _topoFade.fromIdx && i < _topoFade.toIdx) {
         drawSegment(anim, i, _arcEditColor, 1, 5, 1);
       } else {
-        drawSegment(anim, i, null, 1, null, 0.45);
+        drawSegment(anim, i);
       }
     }
   } else {
@@ -18351,8 +18282,6 @@ function drawGroupRegionFills() {
 
 function drawObjectRegionFillsForAnim(anim) {
   if (!anim?.regions?.length || !isAnimEffectivelyVisible(anim) || anim.inPlacementMode) return;
-  const _fadeTopo = drillObjectArc?.animId === anim.id;
-  const _selRegionId = selectedObjectRegionId?.animId === anim.id ? selectedObjectRegionId.id : null;
   const curvesMap = buildTopologyCurvesMap(anim);
   for (const region of anim.regions) {
     const _rFill = region.fillColor || anim.fillColor;
@@ -18362,7 +18291,7 @@ function drawObjectRegionFillsForAnim(anim) {
     const _rOpBase = _useRegion ? (region.fillOpacity ?? 0.3) : animFillOpacity(anim);
     const _rGradTo = _useRegion ? region.gradientToColor : anim.gradientToColor;
     const _rGradToOp = _useRegion ? (region.gradientToOpacity ?? 0) : (anim.gradientToOpacity ?? 0);
-    const opacity = _rOpBase * _globalCanvasDimFactor * (_fadeTopo ? 0.45 : (_selRegionId !== null && region.id !== _selRegionId ? 0.35 : 1));
+    const opacity = _rOpBase * _globalCanvasDimFactor;
     ctx.save();
     if (_rStyle === 'contour-gradient') {
       const { b1, b2 } = resolveContourBoundaries(region);
@@ -18390,20 +18319,6 @@ function drawObjectRegionFillsForAnim(anim) {
         } else { ctx.fillStyle = _rFill; ctx.globalAlpha = opacity; }
       } else { ctx.fillStyle = _rFill; ctx.globalAlpha = opacity; }
       ctx.fill();
-    }
-    // Selected-region canvas highlight: blue stroke + faint fill over the region boundary
-    if (region.id === _selRegionId) {
-      ctx.save();
-      ctx.beginPath();
-      addRegionBoundaryToPathLike(ctx, region.boundary, curvesMap);
-      ctx.fillStyle = '#89b4fa';
-      ctx.globalAlpha = 0.12;
-      ctx.fill();
-      ctx.strokeStyle = '#89b4fa';
-      ctx.lineWidth = 1.5 * devicePixelRatio;
-      ctx.globalAlpha = 0.75;
-      ctx.stroke();
-      ctx.restore();
     }
     ctx.restore();
   }
