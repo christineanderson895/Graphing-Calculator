@@ -4746,6 +4746,39 @@ function selectFromScene(anim) {
   else drillSelectObject(anim);
 }
 
+function ctrlClickSelectId(id) {
+  if (!id) return;
+  finishCanvasTextEdit(false);
+  const _prev = selectedId ?? editModeAnimId ?? selectedGroupId ?? null;
+  console.warn('[ctrlClickSelectId] id:', id, '_prev:', _prev, 'multiSelectedIds before:', [...multiSelectedIds]);
+  clearObjectSelectionState();
+  clearGroupMode();
+  clearSelectionHovers();
+  selectedGroupId = null;
+  tilesDrillPath = [];
+  drillObjectArc = null;
+  selectedObjectNode = null;
+  selectedObjectRegionId = null;
+  multiSelectionGuideShear = null;
+  if (_prev !== null) multiSelectedIds.add(_prev);
+  if (multiSelectedIds.has(id)) {
+    multiSelectedIds.delete(id);
+  } else {
+    multiSelectedIds.add(id);
+  }
+  if (multiSelectedIds.size === 1) {
+    const [_sid] = multiSelectedIds;
+    multiSelectedIds = new Set();
+    const _a = animations.find(a => a.id === _sid);
+    if (_a) {
+      selectedId = _a.id;
+    } else {
+      const _g = groups.find(g => g.id === _sid);
+      if (_g) { selectedGroupId = _g.id; tilesDrillPath = groupPathFromRoot(_g.id); }
+    }
+  }
+}
+
 function groupName(groupId) {
   return groups.find(g => g.id === groupId)?.name ?? '';
 }
@@ -4905,6 +4938,7 @@ function isGroupSelectionActive() {
 }
 
 function clearMultiSelection() {
+  if (multiSelectedIds.size) console.warn('[clearMultiSelection] clearing', multiSelectedIds.size, 'items', new Error().stack);
   multiSelectedIds = new Set();
   multiSelectionGuideShear = null;
 }
@@ -5419,6 +5453,10 @@ function alignAnchorHandlesOnLock(anim, anchorIdx) {
   if (!anim || isPrimitiveAnim(anim) || isPolylineAnim(anim)) return;
   if (anchorIdx <= 0 || anchorIdx >= anim.anchors.length - 1) return;
   if (!anim.segments[anchorIdx - 1] || !anim.segments[anchorIdx]) return;
+  // Never swing at a corner anchor — this would make the two handles collinear and
+  // erase the topology junction node. Corner anchors must stay corners even when
+  // their lock state is toggled.
+  if (isCornerAnchor(anim, anchorIdx)) return;
   swingOppositeHandle(anim, anchorIdx, true);
 }
 
@@ -7082,6 +7120,96 @@ function hitTestObjectRegion(anim, cx, cy) {
   return null;
 }
 
+function topologyArcMatchesSelection(arc, selectedArc) {
+  return !!arc && !!selectedArc &&
+    arc.curveId === selectedArc.curveId &&
+    arc.fromIdx === selectedArc.fromIdx &&
+    arc.toIdx === selectedArc.toIdx;
+}
+
+function findTopologyArcHits(anim, cx, cy, excludeArc = null, arcFilter = null) {
+  const { topoArcs } = computeObjectTopologyData(anim);
+  const curvesById = buildTopologyCurvesMap(anim);
+  let bestArc = null, bestDist = Infinity;
+  let bestOtherArc = null, bestOtherDist = Infinity;
+  for (const arc of topoArcs) {
+    if (arcFilter && !arcFilter(arc)) continue;
+    const curve = curvesById.get(arc.curveId);
+    if (!curve) continue;
+    let arcDist = Infinity;
+    for (let si = arc.fromIdx; si < arc.toIdx; si++) {
+      const seg = curve.segments[si];
+      if (!seg?.compiled) continue;
+      const dist = polylineHitInfo(sampleCompiledAdaptive(seg.compiled), cx, cy).dist;
+      if (dist < arcDist) arcDist = dist;
+    }
+    if (arcDist < bestDist) { bestDist = arcDist; bestArc = arc; }
+    if (!topologyArcMatchesSelection(arc, excludeArc) && arcDist < bestOtherDist) {
+      bestOtherDist = arcDist;
+      bestOtherArc = arc;
+    }
+  }
+  return { bestArc, bestDist, bestOtherArc, bestOtherDist };
+}
+
+function nearestTopologyNodeHit(anim, cx, cy, thresholdPx) {
+  const { essentialPoints } = computeObjectTopologyData(anim);
+  let best = null, bestDist = Infinity;
+  for (const ep of essentialPoints) {
+    const [ncx, ncy] = toCanvas(ep.pos.re, ep.pos.im);
+    const dist = Math.hypot(cx - ncx, cy - ncy);
+    if (dist <= thresholdPx && dist < bestDist) { best = ep; bestDist = dist; }
+  }
+  return best ? { node: best, dist: bestDist } : null;
+}
+
+function selectTopologyArc(parentAnim, arc) {
+  selectedObjectNode = null;
+  selectedObjectRegionId = null;
+  promoteNodeMode = null;
+  for (const c of animCurves(parentAnim)) c.activeSegments = new Set();
+  drillObjectArc = {
+    animId: parentAnim.id,
+    label: arc.label,
+    curveId: arc.curveId,
+    fromIdx: arc.fromIdx,
+    toIdx: arc.toIdx,
+  };
+  activeTopoTab = 'arc';
+  if (!parentAnim.curves) {
+    if (editModeAnimId !== parentAnim.id) enterEditMode(parentAnim, new Set());
+    parentAnim.activeSegments = new Set();
+    for (let si = arc.fromIdx; si < arc.toIdx; si++) parentAnim.activeSegments.add(si);
+  } else {
+    const hitCurve = animCurves(parentAnim).find(c => c.id === arc.curveId);
+    if (hitCurve) {
+      hitCurve.activeSegments = new Set();
+      for (let si = arc.fromIdx; si < arc.toIdx; si++) hitCurve.activeSegments.add(si);
+    }
+  }
+}
+
+function trySelectAdjacentTopologyArcAtJunction(cx, cy) {
+  if (!drillObjectArc || selectedId === null || drillObjectArc.animId !== selectedId) return false;
+  const parentAnim = animations.find(a => a.id === selectedId);
+  if (!parentAnim || isTextAnim(parentAnim) || !isAnimEffectivelyVisible(parentAnim) || parentAnim.inPlacementMode) return false;
+  const hitNode = nearestTopologyNodeHit(parentAnim, cx, cy, 14 * devicePixelRatio);
+  if (!hitNode) return false;
+  const arcHits = findTopologyArcHits(
+    parentAnim,
+    cx,
+    cy,
+    drillObjectArc,
+    arc => arc.fromNum === hitNode.node.num || arc.toNum === hitNode.node.num
+  );
+  if (!arcHits.bestOtherArc || arcHits.bestOtherDist > 14 * devicePixelRatio) return false;
+  selectTopologyArc(parentAnim, arcHits.bestOtherArc);
+  renderAnimList();
+  draw();
+  updateCursor();
+  return true;
+}
+
 function fillHitCandidate(anim, cx, cy) {
   if (hitTestObjectRegion(anim, cx, cy) !== null) return true;
   if (anim.curves?.length) {
@@ -7655,6 +7783,11 @@ function queryLockHover(cx, cy) {
   for (let i = 1; i < anim.anchors.length - 1; i++) {
     if (!anchorSet.has(i)) continue;
     if (activeArc !== null && i !== activeArc && i !== activeArc + 1) continue;
+    // Skip topology junction nodes — they are corner anchors shared between arcs.
+    // Clicking near them is usually intended to select an adjacent arc, not to toggle
+    // the lock state. Also, locking a junction would swing its handles collinear and
+    // erase the node from the topology.
+    if (isCornerAnchor(anim, i)) continue;
     const [lx, ly] = lockTogglePosition(anim, i, activeArc);
     if (Math.hypot(cx - lx, cy - ly) < threshold) return { anim, anchorIdx: i };
   }
@@ -7708,23 +7841,10 @@ function hitTestCurve(cx, cy) {
   const threshold = 10 * devicePixelRatio;
   let bestHit = null, bestDist = Infinity;
   for (const anim of animations) {
-    if (!isAnimEffectivelyVisible(anim) || anim.inPlacementMode) continue;
-    if (isPrimitiveAnim(anim)) {
-      const dist = primitiveHitDistance(anim, cx, cy);
-      if (dist < bestDist) { bestDist = dist; bestHit = { anim, segIdx: 0, primitive: true }; }
-      continue;
-    }
-    if (isTextAnim(anim)) {
-      const dist = textHitDistance(anim, cx, cy);
-      if (dist < bestDist) { bestDist = dist; bestHit = { anim, segIdx: 0, text: true }; }
-      continue;
-    }
-    for (let segIdx = 0; segIdx < anim.segments.length; segIdx++) {
-      const seg = anim.segments[segIdx];
-      if (!seg || !seg.compiled) continue;
-      const samples = sampleCompiledAdaptive(seg.compiled);
-      const hit = polylineHitInfo(samples, cx, cy);
-      if (hit.dist < bestDist) { bestDist = hit.dist; bestHit = { anim, segIdx }; }
+    const candidate = segmentHitCandidate(anim, cx, cy);
+    if (candidate && candidate.dist < bestDist) {
+      bestDist = candidate.dist;
+      bestHit = candidate.hit;
     }
   }
   return bestDist <= threshold ? bestHit : null;
@@ -8148,6 +8268,44 @@ canvas.addEventListener('mousedown', e => {
     if (startActiveDrawingToolAt(snapped, mathX, mathY)) return;
   }
 
+  // ── Ctrl+click multi-selection ──
+  if ((e.ctrlKey || e.metaKey) && !groupSelectionMode) {
+    console.warn('[ctrl-click] block entered; ctrlKey:', e.ctrlKey, 'metaKey:', e.metaKey);
+    const _ctrlFill = queryFillHit(cx, cy);
+    let _ctrlId = null;
+    if (_ctrlFill) {
+      _ctrlId = outermostGroupId(_ctrlFill) ?? _ctrlFill.id;
+      console.warn('[ctrl-click] fill hit id:', _ctrlId);
+    } else {
+      const _ctrlCurve = hitTestCurve(cx, cy);
+      if (_ctrlCurve) {
+        _ctrlId = outermostGroupId(_ctrlCurve.anim) ?? _ctrlCurve.anim.id;
+        console.warn('[ctrl-click] curve hit id:', _ctrlId);
+      } else {
+        const _ctrlRegionGid = queryGroupByRegionHit(cx, cy);
+        if (_ctrlRegionGid !== null) {
+          let _gid = _ctrlRegionGid;
+          while (true) {
+            const _g = groups.find(grp => grp.id === _gid);
+            if (!_g || (_g.parentGroupId ?? null) === null) break;
+            _gid = _g.parentGroupId;
+          }
+          _ctrlId = _gid;
+          console.warn('[ctrl-click] region hit id:', _ctrlId);
+        } else {
+          console.warn('[ctrl-click] no hit at', cx, cy);
+        }
+      }
+    }
+    if (_ctrlId !== null) {
+      e.preventDefault();
+      ctrlClickSelectId(_ctrlId);
+      console.warn('[ctrl-click] after ctrlClickSelectId: multiSelectedIds.size=', multiSelectedIds.size, 'selectedId=', selectedId);
+      renderAnimList(); draw(); updateCursor();
+    }
+    return;
+  }
+
   // Canvas side buttons: duplicate / reflect / rotate
   const sideAction = querySideActionButtonHover(cx, cy);
   if (sideAction) {
@@ -8378,6 +8536,19 @@ canvas.addEventListener('mousedown', e => {
           const _emSeg = segmentHover ?? querySegmentHover(cx, cy);
           if (_emSeg?.anim?.id === editModeAnimId) _rbSkip = true;
         }
+        // For non-primitive Bézier curves with an arc selected (editModeAnimId set),
+        // also skip rubber-band when clicking near a topology junction node.
+        // Without this, clicks in the 8–14px gap (inside the 14px node hit zone but
+        // outside the 8px segment-hover zone) trigger rubber-band and return before the
+        // topology section ever runs, so arc-adjacent node clicks always misfire.
+        if (!_rbSkip && _emAnim && !isPrimitiveAnim(_emAnim) && !isTextAnim(_emAnim)) {
+          const { essentialPoints: _emEps2 } = computeObjectTopologyData(_emAnim);
+          const _emHIT2 = 14 * devicePixelRatio;
+          for (const _emEp2 of _emEps2) {
+            const [_emCx2, _emCy2] = toCanvas(_emEp2.pos.re, _emEp2.pos.im);
+            if (Math.hypot(cx - _emCx2, cy - _emCy2) <= _emHIT2) { _rbSkip = true; break; }
+          }
+        }
       }
     } else if (selectedId !== null) {
       // In selection-frame mode: allow dragging topology nodes without deselecting
@@ -8415,17 +8586,90 @@ canvas.addEventListener('mousedown', e => {
   if (selectedId) {
     const _topoAnim = animations.find(a => a.id === selectedId);
     if (_topoAnim && !isTextAnim(_topoAnim)) {
-      // If an arc is already selected and the cursor is over an anchor or handle, skip topo
-      // detection so the click falls through to the drag handlers below.
-      const _overInteractive =
-        drillObjectArc?.animId === selectedId &&
-        !!(queryAnchorHover(mathX, mathY) || queryHandleHover(mathX, mathY));
+      // If an arc is already selected and the cursor is over an anchor or handle that belongs
+      // to the arc itself, skip topo detection so the click falls through to the drag handlers.
+      // Extra adjacent handles (from getActiveHandleInfo for locked boundary anchors) live
+      // outside [fromIdx, toIdx) and must not block arc-body clicks on a neighbouring arc.
+      const _overInteractive = (() => {
+        if (drillObjectArc?.animId !== selectedId) return false;
+        const _anch = queryAnchorHover(mathX, mathY);
+        if (_anch) {
+          // Junction anchors (fromIdx and toIdx) are shared with adjacent arcs.
+          // Let the topology section handle clicks near them so it can correctly
+          // prefer arc-body clicks over accidental node drags.
+          const { fromIdx, toIdx } = drillObjectArc;
+          if (_anch.anchorIdx === fromIdx || _anch.anchorIdx === toIdx) return false;
+          return true;
+        }
+        const _qh = queryHandleHover(mathX, mathY);
+        if (!_qh) return false;
+        const { fromIdx, toIdx } = drillObjectArc;
+        // Handles that sit exactly on a junction boundary node (h0 at fromIdx anchor,
+        // h1 at toIdx anchor) share their position with the node. Returning false here
+        // lets the topology section run so it can switch to the adjacent arc instead of
+        // accidentally starting a handle drag that can erase the junction node.
+        const _qhAnchorIdx = _qh.side === 'h0' ? _qh.segIdx : _qh.segIdx + 1;
+        if (_qhAnchorIdx === fromIdx || _qhAnchorIdx === toIdx) return false;
+        // Extra adjacent handles (outside [fromIdx, toIdx)) must not block arc-body clicks.
+        return _qh.segIdx >= fromIdx && _qh.segIdx < toIdx;
+      })();
       if (!_overInteractive) {
-      const { essentialPoints: _eps, topoArcs: _tas } = computeObjectTopologyData(_topoAnim);
+      const { essentialPoints: _eps } = computeObjectTopologyData(_topoAnim);
       const _HIT = 14 * devicePixelRatio;
+      // Pre-compute best arc hit so the node drag loop can yield to a closer arc click.
+      // This prevents a node at the start of an arc from swallowing clicks meant for that arc.
+      const _arcHitThreshold = 10 * devicePixelRatio;
+      const _arcHits = findTopologyArcHits(
+        _topoAnim,
+        cx,
+        cy,
+        drillObjectArc?.animId === selectedId ? drillObjectArc : null
+      );
+      let _bestArcHit = _arcHits.bestArc, _bestArcDist = _arcHits.bestDist;
+      // Track whether the node loop exits early to favour arc selection.
+      // When it does, _bestArcDist is guaranteed <= _HIT (14px), so we can use the
+      // wider threshold instead of _arcHitThreshold (10px) for the post-loop arc check.
+      let _tookArcBreak = false;
       for (const ep of _eps) {
         const [_ncx, _ncy] = toCanvas(ep.pos.re, ep.pos.im);
-        if (Math.hypot(cx - _ncx, cy - _ncy) <= _HIT) {
+        const _nodeDist = Math.hypot(cx - _ncx, cy - _ncy);
+        if (_nodeDist <= _HIT) {
+          // Decide whether to prefer arc selection over starting a node drag.
+          // In arc-selection mode (drillObjectArc is set) the user is navigating between
+          // arcs at shared junctions, so prefer a neighbouring non-selected arc that
+          // actually touches this node.  In the general topology view (no arc selected),
+          // keep the original distance rule so intentional node drags still work.
+          if (_bestArcHit) {
+            let _nodeArcHit = _bestArcHit, _nodeArcDist = _bestArcDist;
+            if (drillObjectArc?.animId === selectedId) {
+              const _nodeArcHits = findTopologyArcHits(
+                _topoAnim,
+                cx,
+                cy,
+                drillObjectArc,
+                arc => arc.fromNum === ep.num || arc.toNum === ep.num
+              );
+              if (_nodeArcHits.bestOtherArc && _nodeArcHits.bestOtherDist <= _HIT) {
+                _nodeArcHit = _nodeArcHits.bestOtherArc;
+                _nodeArcDist = _nodeArcHits.bestOtherDist;
+              } else {
+                _nodeArcHit = null;
+                _nodeArcDist = Infinity;
+              }
+            }
+            // Give the node a priority zone equal to the anchor hover radius (7 dpr).
+            // Within that zone the user is clearly clicking the node, not the arc body,
+            // so node drag always wins. Beyond the zone, arc selection wins when the arc
+            // body is strictly closer to the cursor than the node itself — the strict <
+            // breaks ties in favour of node drag when arc and node are equidistant.
+            const _nodeZone = 7 * devicePixelRatio;
+            const _preferArc = _nodeDist > _nodeZone && _nodeArcDist < _nodeDist && (
+              drillObjectArc?.animId === selectedId
+                ? _nodeArcDist <= _HIT
+                : _nodeArcDist <= _arcHitThreshold);
+            if (_nodeArcHit) { _bestArcHit = _nodeArcHit; _bestArcDist = _nodeArcDist; }
+            if (_preferArc) { _tookArcBreak = true; break; }
+          }
           e.preventDefault();
           pushUndo();
           // Find all anchors at this node position and drag them together
@@ -8510,40 +8754,10 @@ canvas.addEventListener('mousedown', e => {
           updateCursor(); draw(); return;
         }
       }
-      if (_tas.length) {
-        const _arcHitThreshold = 10 * devicePixelRatio;
-        const _curvesById = buildTopologyCurvesMap(_topoAnim);
-        let _bestArcHit = null, _bestArcDist = Infinity;
-        for (const _a of _tas) {
-          const _c = _curvesById.get(_a.curveId);
-          if (!_c) continue;
-          for (let _si = _a.fromIdx; _si < _a.toIdx; _si++) {
-            const _seg = _c.segments[_si];
-            if (!_seg?.compiled) continue;
-            const _dist = polylineHitInfo(sampleCompiledAdaptive(_seg.compiled), cx, cy).dist;
-            if (_dist < _bestArcDist) { _bestArcDist = _dist; _bestArcHit = _a; }
-          }
-        }
-        if (_bestArcHit && _bestArcDist <= _arcHitThreshold) {
-          e.preventDefault();
-          selectedObjectNode = null; selectedObjectRegionId = null; promoteNodeMode = null;
-          drillObjectArc = { animId: selectedId, label: _bestArcHit.label, curveId: _bestArcHit.curveId, fromIdx: _bestArcHit.fromIdx, toIdx: _bestArcHit.toIdx };
-          activeTopoTab = 'arc';
-          if (!_topoAnim.curves) {
-            // Single-curve: enter edit mode so the standard handle system takes over
-            if (editModeAnimId !== _topoAnim.id) enterEditMode(_topoAnim, new Set());
-            _topoAnim.activeSegments = new Set();
-            for (let _si2 = _bestArcHit.fromIdx; _si2 < _bestArcHit.toIdx; _si2++) _topoAnim.activeSegments.add(_si2);
-          } else {
-            // Merged: set activeSegments on the child curve so drawHandles shows the right handles
-            const _hitCurve = animCurves(_topoAnim).find(c => c.id === _bestArcHit.curveId);
-            if (_hitCurve) {
-              _hitCurve.activeSegments = new Set();
-              for (let _si2 = _bestArcHit.fromIdx; _si2 < _bestArcHit.toIdx; _si2++) _hitCurve.activeSegments.add(_si2);
-            }
-          }
-          renderAnimList(); draw(); return;
-        }
+      if (_bestArcHit && (_tookArcBreak || _bestArcDist <= _arcHitThreshold)) {
+        e.preventDefault();
+        selectTopologyArc(_topoAnim, _bestArcHit);
+        renderAnimList(); draw(); updateCursor(); return;
       }
       // Arc check found nothing within threshold; fall back to region.
       const _hitReg = hitTestObjectRegion(_topoAnim, cx, cy);
@@ -8588,8 +8802,24 @@ canvas.addEventListener('mousedown', e => {
   }
 
   // ── Anchor drag ──
+  if (trySelectAdjacentTopologyArcAtJunction(cx, cy)) {
+    e.preventDefault();
+    return;
+  }
   const anchorHit = anchorHover ?? queryAnchorHover(mathX, mathY);
-  if (anchorHit) {
+  // Block anchorDrag on arc boundary junction nodes when a handle is also nearby.
+  // Without this, clicking near a handle/node overlap starts anchorDrag (anchor check
+  // runs first), which slightly moves the junction node, making handles collinear and
+  // erasing the topology node.
+  let _anchorDragOk = true;
+  if (anchorHit && drillObjectArc) {
+    const { fromIdx, toIdx } = drillObjectArc;
+    if (anchorHit.anchorIdx === fromIdx || anchorHit.anchorIdx === toIdx) {
+      const _nearHandle = handleHover ?? queryHandleHover(mathX, mathY);
+      if (_nearHandle) _anchorDragOk = false;
+    }
+  }
+  if (anchorHit && _anchorDragOk) {
     e.preventDefault();
     pushUndo();
     const { anim: aHitAnim, anchorIdx } = anchorHit;
@@ -8668,7 +8898,15 @@ canvas.addEventListener('mousedown', e => {
     e.preventDefault();
     pushUndo();
     const { anim: hAnim, segIdx: hSegIdx, side: hSide } = handleHit;
-    handleDrag = { anim: hAnim, segIdx: hSegIdx, side: hSide, anchorIdx: hSide === 'h0' ? hSegIdx : hSegIdx + 1 };
+    const _hAnchorIdx = hSide === 'h0' ? hSegIdx : hSegIdx + 1;
+    const _hWasCorner = isCornerAnchor(hAnim, _hAnchorIdx);
+    handleDrag = {
+      anim: hAnim, segIdx: hSegIdx, side: hSide, anchorIdx: _hAnchorIdx,
+      // Record corner state at drag-start so the swing guard is stable throughout the drag.
+      // A corner anchor must never be swung — that would make handles collinear and erase
+      // the topology junction node.
+      wasCorner: _hWasCorner,
+    };
     updateCursor(); draw(); return;
   }
 
@@ -8782,6 +9020,60 @@ canvas.addEventListener('mousedown', e => {
       return;
     }
     if (_fillUnsel && !objectGroupId(fillHit) && !isGroupSelectionActive() && !isMultiSelectionActive()) {
+      // Check if any higher-z-order animation has geometry inside fillHit's fill area.
+      // If so, fillHit is visually behind something → use rubber-band instead of quick-drag,
+      // allowing the user to rubber-band select the front object from this area.
+      // A tiny click (no drag) still selects fillHit via the pendingRubberBand mouseup path.
+      const _fhIdx = animations.indexOf(fillHit);
+      let _hasFrontObject = false;
+      if (_fhIdx < animations.length - 1) {
+        ctx.save();
+        ctx.beginPath();
+        let _fhPathDrew = false;
+        if (isPrimitiveAnim(fillHit)) {
+          _fhPathDrew = addPrimitiveFillPath(ctx, fillHit);
+        } else if (fillHit.curves?.length) {
+          for (const _fc of fillHit.curves) {
+            if (isTextAnim(_fc)) continue;
+            if (isPrimitiveAnim(_fc) && animHasVisibleFill(_fc)) {
+              if (addPrimitiveFillPath(ctx, _fc)) _fhPathDrew = true;
+            } else if (!isPrimitiveAnim(_fc) && animFillColor(_fc) && animFillOpacity(_fc) > 0) {
+              if (addCurveFillPath(ctx, _fc)) _fhPathDrew = true;
+            }
+          }
+        } else if (!isTextAnim(fillHit)) {
+          _fhPathDrew = addCurveFillPath(ctx, fillHit, !!(fillHit.closed && findLoopRange(fillHit)));
+        }
+        if (_fhPathDrew) {
+          outerFront:
+          for (let _qi = _fhIdx + 1; _qi < animations.length; _qi++) {
+            const _q = animations[_qi];
+            if (!isAnimEffectivelyVisible(_q) || _q.inPlacementMode) continue;
+            const _qCurves = _q.curves ? _q.curves : [_q];
+            for (const _c of _qCurves) {
+              for (const _a of (_c.anchors || [])) {
+                if (!_a?.ok()) continue;
+                const [_ax, _ay] = toCanvas(_a.re, _a.im);
+                if (ctx.isPointInPath(_ax, _ay, 'evenodd')) { _hasFrontObject = true; break outerFront; }
+              }
+              for (const _seg of (_c.segments || [])) {
+                if (!_seg?.compiled) continue;
+                const _samps = sampleCompiledAdaptive(_seg.compiled);
+                if (!_samps.length) continue;
+                const _mid = _samps[Math.floor(_samps.length / 2)];
+                if (_mid && ctx.isPointInPath(_mid[0], _mid[1], 'evenodd')) { _hasFrontObject = true; break outerFront; }
+              }
+            }
+          }
+        }
+        ctx.restore();
+        ctx.beginPath();
+      }
+      if (_hasFrontObject) {
+        pendingRubberBand = { startX: cx, startY: cy, startClientX: e.clientX, startClientY: e.clientY, clickCx: cx, clickCy: cy, clickMathX: mathX, clickMathY: mathY, savedEditModeAnimId: editModeAnimId };
+        e.preventDefault();
+        return;
+      }
       const _fh = fillHit;
       pendingBodyDrag = {
         anim: _fh, startMathX: mathX, startMathY: mathY,
@@ -8984,10 +9276,14 @@ window.addEventListener('mousemove', e => {
   }
 
   if (handleDrag) {
-    const { anim, segIdx, side, anchorIdx } = handleDrag;
+    const { anim, segIdx, side, anchorIdx, wasCorner } = handleDrag;
     const snapped = snapPointToLattice(new Cx(mathX, mathY));
     anim.segments[segIdx][side] = snapped;
-    swingOppositeHandle(anim, anchorIdx, side === 'h0');
+    // Never swing at a corner anchor — swinging forces the handles collinear (smooth),
+    // which destroys any topology junction node at that anchor. wasCorner is captured
+    // at drag-start so the guard stays consistent even if the dot product drifts past
+    // 0.99 mid-drag. Smooth anchors (wasCorner=false) swing normally.
+    if (!wasCorner) swingOppositeHandle(anim, anchorIdx, side === 'h0');
     recompileAnim(anim);
     updateSidebarInputs(anim);
     draw(); return;
@@ -9270,7 +9566,7 @@ window.addEventListener('mousemove', e => {
       newSideActionHover = querySideActionButtonHover(cx, cy);
       newRotationHover = newSideActionHover ? null : queryRotationWheelHover(cx, cy);
       newResizeHover  = (newSideActionHover || newRotationHover) ? null : queryResizeHandleHover(cx, cy);
-      newFrameHover   = (newSideActionHover || newRotationHover || newResizeHover) ? null : queryFrameBorderHover(cx, cy);
+      newFrameHover   = (newSideActionHover || newRotationHover || newResizeHover) ? null : queryFrameBorderHover(cx, cy, 0);
       newLockHover    = (newSideActionHover || newRotationHover || newResizeHover || newFrameHover) ? null : queryLockHover(cx, cy);
       newAnchorHover  = (newSideActionHover || newRotationHover || newResizeHover || newFrameHover || newLockHover) ? null : queryAnchorHover(mathX, mathY);
       newHandleHover  = (newSideActionHover || newRotationHover || newResizeHover || newAnchorHover || newLockHover) ? null : queryHandleHover(mathX, mathY);
@@ -9280,7 +9576,7 @@ window.addEventListener('mousemove', e => {
     // Fill hover: show grab cursor over unselected objects whose body is draggable
     let newFillHover = null;
     if (!groupSelectionMode && !newSideActionHover && !newResizeHover && !newFrameHover &&
-        !newRotationHover && !newPlusHover && !newLockHover && !newAnchorHover && !newHandleHover && !newSegmentHover) {
+        !newRotationHover && !newLockHover && !newAnchorHover && !newHandleHover && !newSegmentHover) {
       const _fh = queryFillHit(cx, cy);
       if (_fh && _fh.id !== selectedId && _fh.id !== editModeAnimId) {
         const _canBodyDrag =
@@ -9403,7 +9699,7 @@ window.addEventListener('mouseup', e => {
                 for (let _si2 = _bestArcHit.fromIdx; _si2 < _bestArcHit.toIdx; _si2++) _hitCurve.activeSegments.add(_si2);
               }
             }
-            renderAnimList(); draw(); return;
+            renderAnimList(); draw(); updateCursor(); return;
           }
         }
         // Arc check found nothing within threshold; fall back to region.
@@ -9459,10 +9755,72 @@ window.addEventListener('mouseup', e => {
     renderAnimList(); draw(); updateCursor(); return;
   }
   if (handleDrag) {
+    const _hdTiny = Math.hypot(e.clientX - mouseDownClientX, e.clientY - mouseDownClientY) < 5;
+    if (_hdTiny && undoStack.length) {
+      // Tiny click on a handle: restore the pre-drag state so an accidental grab
+      // near an arc body cannot permanently alter a control point or erase a topology node.
+      const _hdSnap = undoStack.pop();
+      restoreSnapshot(_hdSnap);
+      updateUndoRedoButtons();
+      saveProject();
+      handleDrag = null;
+      updateCursor(); return;
+    }
     handleDrag = null;
     renderAnimList(); draw(); updateCursor(); return;
   }
   if (anchorDrag) {
+    const _adTiny = Math.hypot(e.clientX - mouseDownClientX, e.clientY - mouseDownClientY) < 5;
+    if (_adTiny && undoStack.length) {
+      // Tiny click on an anchor: restore the pre-drag state to prevent accidental grabs
+      // of boundary junction anchors from corrupting the shape or erasing topology nodes.
+      const _adMx = anchorDrag.startMathX, _adMy = anchorDrag.startMathY;
+      const _adSnap = undoStack.pop();
+      restoreSnapshot(_adSnap);
+      updateUndoRedoButtons();
+      saveProject();
+      anchorDrag = null;
+      // If we were in arc-selection mode, find the arc body at the click position so the
+      // user gets the arc-selection they intended rather than a silent no-op.
+      if (drillObjectArc?.animId === selectedId) {
+        const _adParent = animations.find(a => a.id === selectedId);
+        if (_adParent && !isTextAnim(_adParent)) {
+          const [_adCx, _adCy] = toCanvas(_adMx, _adMy);
+          const { topoArcs: _adTas } = computeObjectTopologyData(_adParent);
+          const _adCurvesMap = buildTopologyCurvesMap(_adParent);
+          const _adThresh = 14 * devicePixelRatio;
+          let _adBestDist = Infinity, _adBestArc = null;
+          for (const _a of _adTas) {
+            const _c = _adCurvesMap.get(_a.curveId);
+            if (!_c) continue;
+            for (let _si = _a.fromIdx; _si < _a.toIdx; _si++) {
+              const _seg = _c.segments[_si];
+              if (!_seg?.compiled) continue;
+              const _dist = polylineHitInfo(sampleCompiledAdaptive(_seg.compiled), _adCx, _adCy).dist;
+              if (_dist < _adBestDist) { _adBestDist = _dist; _adBestArc = _a; }
+            }
+          }
+          if (_adBestArc && _adBestDist <= _adThresh) {
+            selectedObjectNode = null; selectedObjectRegionId = null; promoteNodeMode = null;
+            drillObjectArc = { animId: selectedId, label: _adBestArc.label, curveId: _adBestArc.curveId, fromIdx: _adBestArc.fromIdx, toIdx: _adBestArc.toIdx };
+            activeTopoTab = 'arc';
+            if (!_adParent.curves) {
+              if (editModeAnimId !== _adParent.id) enterEditMode(_adParent, new Set());
+              _adParent.activeSegments = new Set();
+              for (let _si2 = _adBestArc.fromIdx; _si2 < _adBestArc.toIdx; _si2++) _adParent.activeSegments.add(_si2);
+            } else {
+              const _adCurve = animCurves(_adParent).find(c => c.id === _adBestArc.curveId);
+              if (_adCurve) {
+                _adCurve.activeSegments = new Set();
+                for (let _si2 = _adBestArc.fromIdx; _si2 < _adBestArc.toIdx; _si2++) _adCurve.activeSegments.add(_si2);
+              }
+            }
+            renderAnimList(); draw();
+          }
+        }
+      }
+      updateCursor(); return;
+    }
     anchorDrag = null;
     renderAnimList(); draw(); updateCursor(); return;
   }
@@ -11612,6 +11970,7 @@ function frameMetricsFromCanvasBounds(bounds, lineWidth = devicePixelRatio) {
   const outerPad = 4 * dpr;
   return {
     x, y, w, h,
+    pad,
     outerX: x - outerPad,
     outerY: y - outerPad,
     outerW: w + outerPad * 2,
@@ -12235,20 +12594,20 @@ function drawPlacementMatchButton() {
   placementMatchCandidate._btnH = bh;
 }
 
-function queryFrameBorderHover(cx, cy) {
+function queryFrameBorderHover(cx, cy, innerTol = null) {
   const anim = selectedObjectAnim();
-  if (anim) return queryFrameBorderHoverForAnim(anim, cx, cy);
+  if (anim) return queryFrameBorderHoverForAnim(anim, cx, cy, innerTol);
   if (isGroupSelectionActive()) {
     if (queryResizeHandleHover(cx, cy)) return null;
     const f = groupSelectionFrameMetrics(selectedGroupId);
     if (!f) return null;
-    const { x, y, w, h, outerX, outerY, outerW, outerH, extend } = f;
+    const { x, y, w, h, pad, outerX, outerY, outerW, outerH, extend } = f;
     const ol = outerX - extend, or_ = outerX + outerW + extend;
     const ot = outerY - extend, ob = outerY + outerH + extend;
     const dpr = devicePixelRatio;
-    const tol = 4 * dpr;
-    const il = x + tol, ir = x + w - tol;
-    const it = y + tol, ib = y + h - tol;
+    const innerInset = innerTol !== null ? pad : 4 * dpr;
+    const il = x + innerInset, ir = x + w - innerInset;
+    const it = y + innerInset, ib = y + h - innerInset;
     const inOuter = cx >= ol && cx <= or_ && cy >= ot && cy <= ob;
     const inInner = cx >= il && cx <= ir && cy >= it && cy <= ib;
     return (inOuter && !inInner) ? { groupId: selectedGroupId } : null;
@@ -12257,13 +12616,13 @@ function queryFrameBorderHover(cx, cy) {
     if (queryResizeHandleHover(cx, cy)) return null;
     const f = multiSelectionFrameMetrics();
     if (!f) return null;
-    const { x, y, w, h, outerX, outerY, outerW, outerH, extend } = f;
+    const { x, y, w, h, pad, outerX, outerY, outerW, outerH, extend } = f;
     const ol = outerX - extend, or_ = outerX + outerW + extend;
     const ot = outerY - extend, ob = outerY + outerH + extend;
     const dpr = devicePixelRatio;
-    const tol = 4 * dpr;
-    const il = x + tol, ir = x + w - tol;
-    const it = y + tol, ib = y + h - tol;
+    const innerInset = innerTol !== null ? pad : 4 * dpr;
+    const il = x + innerInset, ir = x + w - innerInset;
+    const it = y + innerInset, ib = y + h - innerInset;
     const inOuter = cx >= ol && cx <= or_ && cy >= ot && cy <= ob;
     const inInner = cx >= il && cx <= ir && cy >= it && cy <= ib;
     return (inOuter && !inInner) ? { multi: true } : null;
@@ -12271,21 +12630,23 @@ function queryFrameBorderHover(cx, cy) {
   return null;
 }
 
-function queryFrameBorderHoverForAnim(anim, cx, cy) {
+function queryFrameBorderHoverForAnim(anim, cx, cy, innerTol = null) {
   if (!anim || !isAnimEffectivelyVisible(anim) || anim.inPlacementMode || isDotAnim(anim)) return null;
   if (hasActiveArcSelection(anim)) return null;
+  if (drillObjectArc?.animId === anim.id) return null;
   if (queryResizeHandleHoverForAnim(anim, cx, cy)) return null;
   const f = selectionFrameMetrics(anim);
   if (!f) return null;
-  const { x, y, w, h, outerX, outerY, outerW, outerH, extend } = f;
+  const { x, y, w, h, pad, outerX, outerY, outerW, outerH, extend } = f;
   // Outer boundary (the extent of the drawn frame including handle stubs)
   const ol = outerX - extend, or_ = outerX + outerW + extend;
   const ot = outerY - extend, ob = outerY + outerH + extend;
-  // Inner boundary (slightly inset so clicking inside the object doesn't trigger drag)
-  const dpr = devicePixelRatio;
-  const tol = 4 * dpr;
-  const il = x + tol, ir = x + w - tol;
-  const it = y + tol, ib = y + h - tol;
+  // Cursor detection (innerTol=0): inner boundary = bounding box, so hovering anywhere
+  // inside the drawn shape shows content cursors rather than 'move'.
+  // Click/drag detection (innerTol=null): 4dp inset preserves the original drag hit area.
+  const innerInset = innerTol !== null ? pad : 4 * devicePixelRatio;
+  const il = x + innerInset, ir = x + w - innerInset;
+  const it = y + innerInset, ib = y + h - innerInset;
   const inOuter = cx >= ol && cx <= or_ && cy >= ot && cy <= ob;
   const inInner = cx >= il && cx <= ir && cy >= it && cy <= ib;
   return (inOuter && !inInner) ? anim : null;
@@ -13512,18 +13873,18 @@ function drawSelectedObjectBounds(anim) {
     ctx.save();
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 1.25 * dpr;
-    ctx.globalAlpha = 0.28;
+    ctx.globalAlpha = 0.45;
     ctx.shadowBlur = 6 * dpr;
     ctx.shadowColor = '#ffffff';
     ctx.strokeRect(x, y, w, h);
     ctx.strokeStyle = 'black';
     ctx.lineWidth = 0.9 * dpr;
-    ctx.globalAlpha = 0.7;
+    ctx.globalAlpha = 0.85;
     ctx.shadowBlur = 0;
     ctx.strokeRect(outerX, outerY, outerW, outerH);
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 1.8 * dpr;
-    ctx.globalAlpha = 0.14;
+    ctx.globalAlpha = 0.25;
     ctx.strokeRect(outerX - extend, outerY - extend, outerW + extend * 2, outerH + extend * 2);
     ctx.restore();
     return;
@@ -18988,9 +19349,10 @@ function appendGroupTrayTile(tilesEl, group, { label = '', path = false, child =
   icon.className = 'obj-group-mosaic-icon';
   icon.textContent = 'G';
   tile.appendChild(icon);
-  tile.addEventListener('click', () => {
+  tile.addEventListener('click', (e) => {
     if (Date.now() < suppressTileClickUntil) return;
     openColorMenuAnimId = null;
+    if (e.ctrlKey || e.metaKey) { ctrlClickSelectId(group.id); renderAnimList(); draw(); updateCursor(); return; }
     const placing = animations.find(a => a.inPlacementMode);
     if (placing) { cancelPlacement(placing); }
     if (groupSelectionMode && child) {
@@ -19030,10 +19392,11 @@ function appendAnimTrayTile(tilesEl, anim, { label = '', child = true, singleOnl
   thumbCanvas.draggable = false;
   tile.appendChild(thumbCanvas);
   renderAnimThumbnail(anim, thumbCanvas);
-  tile.addEventListener('click', () => {
+  tile.addEventListener('click', (e) => {
     if (Date.now() < suppressTileClickUntil) return;
     openColorMenuAnimId = null;
     if (anim.inPlacementMode) { selectedId = anim.id; renderAnimList(); return; }
+    if (e.ctrlKey || e.metaKey) { ctrlClickSelectId(anim.id); renderAnimList(); draw(); updateCursor(); return; }
     const placing = animations.find(a => a.inPlacementMode);
     if (placing) { cancelPlacement(placing); }
     if (groupSelectionMode) {
@@ -19889,9 +20252,10 @@ function renderAnimListLegacy() {
       icon.className = 'obj-group-mosaic-icon';
       icon.textContent = '⊞';
       tile.appendChild(icon);
-      tile.addEventListener('click', () => {
+      tile.addEventListener('click', (e) => {
         if (Date.now() < suppressTileClickUntil) return;
         openColorMenuAnimId = null;
+        if (e.ctrlKey || e.metaKey) { ctrlClickSelectId(g.id); renderAnimList(); draw(); updateCursor(); return; }
         const placing = animations.find(a => a.inPlacementMode);
         if (placing) { cancelPlacement(placing); }
         if (groupSelectionMode) {
@@ -19984,10 +20348,11 @@ function renderAnimListLegacy() {
           clearObjectTileDropCues();
         });
       }
-      tile.addEventListener('click', () => {
+      tile.addEventListener('click', (e) => {
         if (Date.now() < suppressTileClickUntil) return;
         openColorMenuAnimId = null;
         if (anim.inPlacementMode) { selectedId = anim.id; renderAnimList(); return; }
+        if (e.ctrlKey || e.metaKey) { ctrlClickSelectId(anim.id); renderAnimList(); draw(); updateCursor(); return; }
         const placing = animations.find(a => a.inPlacementMode);
         if (placing) { cancelPlacement(placing); }
         if (groupSelectionMode) {
