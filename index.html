@@ -870,10 +870,10 @@
       padding: 4px 14px;
       font-size: 0.72rem;
       font-weight: 600;
-      color: #a6adc8;
-      background: #13131e;
+      color: #585b70;
+      background: #11111b;
       border: 1px solid #45475a;
-      border-bottom: none;
+      border-bottom: 1px solid #45475a;
       border-radius: 6px 6px 0 0;
       cursor: pointer;
       position: relative;
@@ -3298,7 +3298,7 @@ function strokePath(pts, color, lineWidth) {
   ctx.stroke();
 }
 
-function drawCompiledCurve(compiled, color, lineWidth, alpha) {
+function drawCompiledCurve(compiled, color, lineWidth, alpha, softness0 = 0, softness1 = 0) {
   if (!compiled) return;
   const STEPS = 240;
   const samples = [];
@@ -3306,9 +3306,58 @@ function drawCompiledCurve(compiled, color, lineWidth, alpha) {
     const v = compiled(0, i / STEPS, {});
     samples.push((v && v.ok()) ? toCanvas(v.re, v.im) : null);
   }
+  if (softness0 <= 0 && softness1 <= 0) {
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    strokePath(samples, color, lineWidth);
+    ctx.restore();
+    return;
+  }
+  // Per-side edge feathering: fill gradient trapezoids along the path.
+  // softness0 controls one side (left of path direction), softness1 the other.
+  const c = parseHexColor(color);
+  const rgb = c ? `${c.r},${c.g},${c.b}` : '128,128,128';
+  const halfW = lineWidth / 2;
+  // s0/s1 are the fraction of the half-width occupied by the fade zone (0–0.5).
+  const s0 = Math.min(Math.max(softness0, 0), 1) * 0.5;
+  const s1 = Math.min(Math.max(softness1, 0), 1) * 0.5;
   ctx.save();
-  ctx.globalAlpha = alpha;
-  strokePath(samples, color, lineWidth);
+  for (let i = 0; i < samples.length - 1; i++) {
+    const p0 = samples[i], p1 = samples[i + 1];
+    if (!p0 || !p1) continue;
+    const dx = p1[0] - p0[0], dy = p1[1] - p0[1];
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (len < 0.01) continue;
+    const nx = -dy / len, ny = dx / len; // normal pointing "left" of travel direction
+    const lx0 = p0[0] + nx * halfW, ly0 = p0[1] + ny * halfW;
+    const rx0 = p0[0] - nx * halfW, ry0 = p0[1] - ny * halfW;
+    const lx1 = p1[0] + nx * halfW, ly1 = p1[1] + ny * halfW;
+    const rx1 = p1[0] - nx * halfW, ry1 = p1[1] - ny * halfW;
+    // Gradient from left edge (position 0) to right edge (position 1).
+    const grad = ctx.createLinearGradient(lx0, ly0, rx0, ry0);
+    if (s0 > 0 && s1 > 0) {
+      grad.addColorStop(0, `rgba(${rgb},0)`);
+      grad.addColorStop(Math.min(s0 * 2, 0.5), `rgba(${rgb},${alpha})`);
+      grad.addColorStop(Math.max(1 - s1 * 2, 0.5), `rgba(${rgb},${alpha})`);
+      grad.addColorStop(1, `rgba(${rgb},0)`);
+    } else if (s0 > 0) {
+      grad.addColorStop(0, `rgba(${rgb},0)`);
+      grad.addColorStop(s0 * 2, `rgba(${rgb},${alpha})`);
+      grad.addColorStop(1, `rgba(${rgb},${alpha})`);
+    } else {
+      grad.addColorStop(0, `rgba(${rgb},${alpha})`);
+      grad.addColorStop(1 - s1 * 2, `rgba(${rgb},${alpha})`);
+      grad.addColorStop(1, `rgba(${rgb},0)`);
+    }
+    ctx.beginPath();
+    ctx.moveTo(lx0, ly0);
+    ctx.lineTo(rx0, ry0);
+    ctx.lineTo(rx1, ry1);
+    ctx.lineTo(lx1, ly1);
+    ctx.closePath();
+    ctx.fillStyle = grad;
+    ctx.fill();
+  }
   ctx.restore();
 }
 
@@ -4185,10 +4234,11 @@ let selectedGroupAnchor = null;  // { groupId, animId, anchorIdx }
 let selectedGroupArc = null;     // { groupId, animId, segIdx }
 let selectedObjectNode = null;     // { animId, num } — selected node in Nodes tab
 let drillObjectArc = null;         // { animId, label } — topo arc being drilled into
-let selectedObjectRegionId = null; // { animId, id: regionId } — selected region in Regions tab
-let objectDetailTab = 'arcs';      // 'anchors' | 'arcs' | 'regions' — active tab in detail panel
+let selectedRegionIds = new Set(); // Set of region IDs selected in Regions tab (belongs to selectedId)
+let objectDetailTab = 'outline';    // 'anchors' | 'outline' | 'fill' — active tab in detail panel
 let selectedArcKeys = new Set();   // arc labels selected in Arcs tab
 let regionFillSubTab = 1;          // 1=Color1, 2=Color2, 3=Style — sub-tab in Regions tab
+let outlineSubTab = 1;             // 1=Color, 2=Style — sub-tab in Outline tab
 let _lastDetailAnimId = null;      // detect object change to reset tab
 let _cvtBezierShowUI = false;      // convert-to-bezier slider UI expanded in panel
 let _cvtBezierN = 12;             // slider value for convert-to-bezier
@@ -4240,7 +4290,9 @@ let sideActionMenuOpen = false;
 let freeformPenActive  = false;
 let freeformPenCapture = null; // null | {points:[{x,y},...]} in device pixels
 let freeformPenTolerance = 2; // CSS pixels, used by RDP simplification
-let lockHover    = null; // {anim, anchorIdx} | null — interior anchor lock toggle
+let lockHover    = null; // {anim, anchorIdx} | null — interior anchor lock toggle (legacy arc-drill context)
+let anchorIconHover = null; // 'lock' | 'promote' | 'demote' | null — hovered icon in the anchor icon cluster
+let _anchorIconPositions = null; // { lock, promote, demote } — canvas hit zones, set during draw()
 let rubberBand   = null; // {startX,startY,curX,curY,ctrl} | null — drag-region selection
 let splitArcMode = null; // {anim, segIdx} | null — pending arc split waiting for canvas click
 let promoteNodeMode = null; // { animId, curveId, fromIdx, toIdx } | null — click an interior anchor to split child curve and create a topology node
@@ -4368,7 +4420,7 @@ function restoreSnapshot(snap) {
   openColorMenuGroupId = null;
   openColorMenuRegionId = null;
   openColorMenuRegionGroupId = null;
-  selectedObjectRegionId = null;
+  selectedRegionIds = new Set();
   colorEditTarget = 'outline';
   finishCanvasTextEdit(false);
   activeTextEditUndoAnimId = null;
@@ -4775,7 +4827,7 @@ function ctrlClickSelectId(id) {
   tilesDrillPath = [];
   drillObjectArc = null;
   selectedObjectNode = null;
-  selectedObjectRegionId = null;
+  selectedRegionIds = new Set();
   multiSelectionGuideShear = null;
   if (_prev !== null) multiSelectedIds.add(_prev);
   if (multiSelectedIds.has(id)) {
@@ -5373,8 +5425,7 @@ function clearTopoFeatureSelection() {
     drillObjectArc = null;
     selectedArcKeys = new Set();
   }
-  selectedObjectRegionId = null;
-  if (hadArc && editModeAnimId !== null) exitEditMode();
+  selectedRegionIds = new Set();
 }
 
 function clearSelectionShearGuides(exceptAnim = null) {
@@ -5772,7 +5823,7 @@ document.addEventListener('keydown', e => {
       return;
     }
     // Step 1: clear arc/region selection, keep object selected
-    if (drillObjectArc !== null || selectedObjectRegionId !== null) {
+    if (drillObjectArc !== null || selectedRegionIds.size > 0) {
       clearTopoFeatureSelection();
       renderAnimList(); draw();
       return;
@@ -5913,7 +5964,7 @@ function enterEditMode(anim, activeSegs) {
   clearGroupMode();
   const keepGuide = selectedId === anim.id || editModeAnimId === anim.id;
   clearSelectionShearGuides(keepGuide ? anim : null);
-  if (!keepGuide) { selectedObjectNode = null; drillObjectArc = null; selectedObjectRegionId = null; }
+  if (!keepGuide) { selectedObjectNode = null; drillObjectArc = null; selectedRegionIds = new Set(); }
   editModeAnimId = anim.id;
   selectedId = anim.id;
   tilesDrillPath = objectGroupId(anim) != null ? groupPathFromRoot(objectGroupId(anim)) : [];
@@ -5938,7 +5989,7 @@ function exitEditMode() {
   openColorMenuGroupId = null;
   drillObjectArc = null;
   selectedObjectNode = null;
-  selectedObjectRegionId = null;
+  selectedRegionIds = new Set();
   finishCanvasTextEdit(false);
   eccentricitySliderActiveKey = null;
   eccDrag = null;
@@ -6036,7 +6087,7 @@ function finalizePrimitivePlacement(anim) {
       const _fa = topoArcs[0];
       drillObjectArc = { animId: anim.id, label: _fa.label, curveId: _fa.curveId, fromIdx: _fa.fromIdx, toIdx: _fa.toIdx };
       selectedArcKeys = new Set([_fa.label]);
-      objectDetailTab = 'arcs';
+      objectDetailTab = 'outline';
     }
   }
   selectedShapeKind = SHAPE_TOOL_KINDS.includes(_primKind) ? _primKind : selectedShapeKind;
@@ -6116,7 +6167,7 @@ function finalizePlacement(anim) {
       const _fa = topoArcs[0];
       drillObjectArc = { animId: anim.id, label: _fa.label, curveId: _fa.curveId, fromIdx: _fa.fromIdx, toIdx: _fa.toIdx };
       selectedArcKeys = new Set([_fa.label]);
-      objectDetailTab = 'arcs';
+      objectDetailTab = 'outline';
     }
   }
   currentTool = 'select';
@@ -6639,7 +6690,7 @@ function createSideActionCopy(src, kind) {
   editModeAnimId = null;
   drillObjectArc = null;
   selectedObjectNode = null;
-  selectedObjectRegionId = null;
+  selectedRegionIds = new Set();
   selectedGroupId = null;
   selectedId = anim.id;
   animations.forEach(a => { a.expanded = false; });
@@ -6929,6 +6980,8 @@ function updateCursor() {
     canvas.style.cursor = 'grab';
   } else if (sideActionHover) {
     canvas.style.cursor = 'grab';
+  } else if (anchorIconHover !== null) {
+    canvas.style.cursor = 'pointer';
   } else if (anchorHover || handleHover || lockHover) {
     canvas.style.cursor = 'grab';
   } else if (frameHover) {
@@ -6983,6 +7036,22 @@ function queryAnchorHover(mathX, mathY, thresholdPx = 7 * devicePixelRatio) {
           const [ax, ay] = toCanvas(a.re, a.im);
           const d = Math.hypot(ax - cx, ay - cy);
           if (d <= thresholdPx && d < bestDist) { bestDist = d; best = { anim: curve, anchorIdx: i }; }
+        }
+      }
+    }
+  } else if (editModeAnimId || selectedId) {
+    // Merged object in edit mode (no drilled arc), OR object selected from panel (no edit mode).
+    // Check all anchors so the anchor icon cluster (lock / promote / demote) can appear on hover.
+    const _selAnim = animations.find(a => a.id === (editModeAnimId ?? selectedId));
+    if (_selAnim && isAnimEffectivelyVisible(_selAnim) && !_selAnim.inPlacementMode) {
+      for (const _c of animCurves(_selAnim)) {
+        if (isPrimitiveAnim(_c) || isTextAnim(_c)) continue;
+        for (let i = 0; i < _c.anchors.length; i++) {
+          const a = _c.anchors[i];
+          if (!a) continue;
+          const [ax, ay] = toCanvas(a.re, a.im);
+          const d = Math.hypot(ax - cx, ay - cy);
+          if (d <= thresholdPx && d < bestDist) { bestDist = d; best = { anim: _c, anchorIdx: i }; }
         }
       }
     }
@@ -7221,27 +7290,33 @@ function nearestTopologyNodeHit(anim, cx, cy, thresholdPx) {
 
 function selectTopologyArc(parentAnim, arc) {
   selectedObjectNode = null;
-  selectedObjectRegionId = null;
+  selectedRegionIds = new Set();
   promoteNodeMode = null;
-  for (const c of animCurves(parentAnim)) c.activeSegments = new Set();
-  drillObjectArc = {
-    animId: parentAnim.id,
-    label: arc.label,
-    curveId: arc.curveId,
-    fromIdx: arc.fromIdx,
-    toIdx: arc.toIdx,
-  };
-  objectDetailTab = 'arcs';
-  selectedArcKeys = new Set([arc.label]);
-  if (!parentAnim.curves) {
-    if (editModeAnimId !== parentAnim.id) enterEditMode(parentAnim, new Set());
-    parentAnim.activeSegments = new Set();
-    for (let si = arc.fromIdx; si < arc.toIdx; si++) parentAnim.activeSegments.add(si);
+  objectDetailTab = 'outline';
+  if (selectedArcKeys.has(arc.label)) {
+    selectedArcKeys.delete(arc.label);
+    if (selectedArcKeys.size === 0) {
+      drillObjectArc = null;
+    } else if (drillObjectArc?.label === arc.label) {
+      const _remain = [...selectedArcKeys][selectedArcKeys.size - 1];
+      const { topoArcs: _ta } = computeObjectTopologyData(parentAnim);
+      const _ra = _ta.find(a => a.label === _remain);
+      drillObjectArc = _ra ? { animId: parentAnim.id, label: _ra.label, curveId: _ra.curveId, fromIdx: _ra.fromIdx, toIdx: _ra.toIdx } : null;
+    }
   } else {
-    const hitCurve = animCurves(parentAnim).find(c => c.id === arc.curveId);
-    if (hitCurve) {
-      hitCurve.activeSegments = new Set();
-      for (let si = arc.fromIdx; si < arc.toIdx; si++) hitCurve.activeSegments.add(si);
+    selectedArcKeys.add(arc.label);
+    drillObjectArc = { animId: parentAnim.id, label: arc.label, curveId: arc.curveId, fromIdx: arc.fromIdx, toIdx: arc.toIdx };
+  }
+  // Sync activeSegments for all selected arcs so canvas handles are accurate
+  const { topoArcs: _allArcs } = computeObjectTopologyData(parentAnim);
+  for (const c of animCurves(parentAnim)) c.activeSegments = new Set();
+  for (const _sa of _allArcs.filter(a => selectedArcKeys.has(a.label))) {
+    if (!parentAnim.curves) {
+      if (editModeAnimId !== parentAnim.id) enterEditMode(parentAnim, new Set());
+      for (let si = _sa.fromIdx; si < _sa.toIdx; si++) parentAnim.activeSegments.add(si);
+    } else {
+      const _c = animCurves(parentAnim).find(c => c.id === _sa.curveId);
+      if (_c) for (let si = _sa.fromIdx; si < _sa.toIdx; si++) _c.activeSegments.add(si);
     }
   }
 }
@@ -7265,6 +7340,33 @@ function trySelectAdjacentTopologyArcAtJunction(cx, cy) {
   draw();
   updateCursor();
   return true;
+}
+
+function autoSelectFillRegions(anim) {
+  const _regions = anim.regions ?? [];
+  if (_regions.length === 0) return;
+  // Treat as One with gradient: leave it alone — it is already showing controls
+  if (anim._treatRegionsAsOne) {
+    const _tStyle = _regions[0]?.fillStyle || 'solid';
+    if (_tStyle !== 'solid') return;
+    // Treat as One with solid is equivalent to Select All — convert for clarity
+    selectedRegionIds = new Set(_regions.map(r => r.id));
+    anim._treatRegionsAsOne = false;
+    return;
+  }
+  // Already have a selection: keep it
+  if (selectedRegionIds.size > 0) return;
+  // Check if all regions share the same fillColor and fillStyle
+  const _f0 = _regions[0];
+  const _col0 = _f0?.fillColor;
+  const _sty0 = _f0?.fillStyle || 'solid';
+  const _allMatch = !!_col0 && _regions.every(r => r.fillColor === _col0 && (r.fillStyle || 'solid') === _sty0);
+  if (_allMatch) {
+    selectedRegionIds = new Set(_regions.map(r => r.id));
+  } else {
+    const _first = _regions.find(r => r.fillColor) ?? _regions[0];
+    selectedRegionIds = new Set([_first.id]);
+  }
 }
 
 function fillHitCandidate(anim, cx, cy) {
@@ -8680,6 +8782,15 @@ canvas.addEventListener('mousedown', e => {
         return _qh.segIdx >= fromIdx && _qh.segIdx < toIdx;
       })();
       if (!_overInteractive) {
+      // Skip arc/region/node-drag when cursor is on an anchor icon — let the icon handler fire.
+      let _overIcon = anchorIconHover !== null;
+      if (!_overIcon && _anchorIconPositions) {
+        for (const _ik of ['lock', 'promote', 'demote']) {
+          const _ip = _anchorIconPositions[_ik];
+          if (_ip && Math.hypot(cx - _ip.cx, cy - _ip.cy) <= _ip.r) { _overIcon = true; break; }
+        }
+      }
+      if (!_overIcon) {
       const { essentialPoints: _eps } = computeObjectTopologyData(_topoAnim);
       const _HIT = 14 * devicePixelRatio;
       // Pre-compute best arc hit so the node drag loop can yield to a closer arc click.
@@ -8820,31 +8931,81 @@ canvas.addEventListener('mousedown', e => {
           updateCursor(); draw(); return;
         }
       }
-      if (_bestArcHit && (_tookArcBreak || _bestArcDist <= _arcHitThreshold)) {
+      // Context-aware arc/region priority: use current selection mode to resolve ambiguous clicks.
+      const _hasArcHit = _bestArcHit && (_tookArcBreak || _bestArcDist <= _arcHitThreshold);
+      const _hitReg = hitTestObjectRegion(_topoAnim, cx, cy);
+      const _rAHit = _hitReg !== null ? (anchorHover ?? queryAnchorHover(mathX, mathY)) : null;
+      const _rHHit = _hitReg !== null && !_rAHit ? (handleHover ?? queryHandleHover(mathX, mathY)) : null;
+      const _hasRegCandidate = _hitReg !== null && !_rAHit && !_rHHit;
+      // "Near arc" but outside the strict threshold — used to suppress accidental mode-switches.
+      const _nearArc = !_hasArcHit && _bestArcHit && _bestArcDist <= _arcHitThreshold * 1.5;
+
+      let _doArc = false, _doReg = false;
+      if (_hasArcHit && _hasRegCandidate) {
+        // Ambiguous click (on arc boundary of a region): honour current selection mode.
+        if (selectedRegionIds.size > 0) _doReg = true; else _doArc = true;
+      } else if (_hasArcHit) {
+        _doArc = true;
+      } else if (_hasRegCandidate) {
+        // In arc-selection mode, a near-arc region click is treated as a misclick — do nothing.
+        if (!(selectedArcKeys.size > 0 && _nearArc)) _doReg = true;
+      }
+
+      if (_doArc) {
         e.preventDefault();
         selectTopologyArc(_topoAnim, _bestArcHit);
         renderAnimList(); draw(); updateCursor(); return;
       }
-      // Arc check found nothing within threshold; fall back to region.
-      const _hitReg = hitTestObjectRegion(_topoAnim, cx, cy);
-      if (_hitReg !== null) {
-        const _rAHit = anchorHover ?? queryAnchorHover(mathX, mathY);
-        const _rHHit = !_rAHit ? (handleHover ?? queryHandleHover(mathX, mathY)) : null;
-        if (!_rAHit && !_rHHit) {
-          e.preventDefault();
-          selectedObjectNode = null; drillObjectArc = null;
-          for (const _c of animCurves(_topoAnim)) _c.activeSegments = new Set();
-          selectedObjectRegionId = { animId: selectedId, id: _hitReg };
-          objectDetailTab = 'regions';
-          renderAnimList(); draw(); return;
+      if (_doReg) {
+        e.preventDefault();
+        selectedObjectNode = null; drillObjectArc = null; selectedArcKeys = new Set();
+        for (const _c of animCurves(_topoAnim)) _c.activeSegments = new Set();
+        if (selectedRegionIds.has(_hitReg)) selectedRegionIds.delete(_hitReg);
+        else selectedRegionIds.add(_hitReg);
+        objectDetailTab = 'fill';
+        renderAnimList(); draw(); return;
+      }
+      // No arc or region hit — if within the selection frame, clear arc/region selection (keep object
+      // selected) or simply prevent the click from falling through to the background deselect.
+      {
+        const _cbBounds = selectedObjectCanvasBounds(_topoAnim);
+        if (_cbBounds) {
+          const _lw = isPrimitiveAnim(_topoAnim) ? primitiveStrokeWidth(_topoAnim)
+            : (1 + 5 * ((_topoAnim.thickness ?? 1) / 10)) * devicePixelRatio;
+          const _fbFrame = frameMetricsFromCanvasBounds(_cbBounds, _lw);
+          const _tol = 12 * devicePixelRatio;
+          let _inFrame = false;
+          if (_fbFrame) {
+            const { outerX: _fx, outerY: _fy, outerW: _fw, outerH: _fh, extend: _fext } = _fbFrame;
+            const _ox = _fx - _fext, _oy = _fy - _fext;
+            const _ow = _fw + _fext * 2, _oh = _fh + _fext * 2;
+            _inFrame = cx >= _ox - _tol && cx <= _ox + _ow + _tol &&
+                       cy >= _oy - _tol && cy <= _oy + _oh + _tol;
+          } else {
+            _inFrame = cx >= _cbBounds.left - _tol && cx <= _cbBounds.right + _tol &&
+                       cy >= _cbBounds.top - _tol && cy <= _cbBounds.bottom + _tol;
+          }
+          if (_inFrame) {
+            const _wbAHit = anchorHover ?? queryAnchorHover(mathX, mathY);
+            const _wbHHit = !_wbAHit ? (handleHover ?? queryHandleHover(mathX, mathY)) : null;
+            if (!_wbAHit && !_wbHHit) {
+              e.preventDefault();
+              if (drillObjectArc !== null || selectedRegionIds.size > 0 || selectedArcKeys.size > 0) {
+                clearTopoFeatureSelection();
+                renderAnimList(); draw();
+              }
+              return;
+            }
+          }
         }
       }
+      } // end if (!_overIcon)
       } // end if (!_overInteractive)
     }
   }
 
   // ── Frame border click: return to object from arc/region selection ──
-  if ((drillObjectArc !== null || selectedObjectRegionId !== null) && selectedId !== null) {
+  if ((drillObjectArc !== null || selectedRegionIds.size > 0) && selectedId !== null) {
     const _fbAnim = animations.find(a => a.id === selectedId);
     if (_fbAnim) {
       const _fbBounds = selectedObjectCanvasBounds(_fbAnim);
@@ -8880,6 +9041,38 @@ canvas.addEventListener('mousedown', e => {
     e.preventDefault();
     return;
   }
+  // ── Anchor icon click (lock / promote / demote) ──
+  if (anchorIconHover !== null && anchorHover && !anchorDrag) {
+    const _icAnim = anchorHover.anim, _icIdx = anchorHover.anchorIdx;
+    const _icParent = animations.find(a => a.id === (editModeAnimId ?? selectedId));
+    e.preventDefault();
+    pushUndo();
+    if (anchorIconHover === 'lock') {
+      if (!_icAnim.anchorLocked) _icAnim.anchorLocked = Array(_icAnim.anchors.length).fill(false);
+      while (_icAnim.anchorLocked.length <= _icIdx) _icAnim.anchorLocked.push(false);
+      _icAnim.anchorLocked[_icIdx] = !isAnchorLocked(_icAnim, _icIdx);
+    } else {
+      if (!_icAnim.promotedAnchors) _icAnim.promotedAnchors = Array(_icAnim.anchors.length).fill(false);
+      while (_icAnim.promotedAnchors.length <= _icIdx) _icAnim.promotedAnchors.push(false);
+      _icAnim.promotedAnchors[_icIdx] = (anchorIconHover === 'promote');
+      if (_icParent) detectObjectTopology(_icParent);
+    }
+    saveProject(); renderAnimList(); draw(); updateCursor();
+    // Re-evaluate anchorIconHover from freshly-drawn positions so the next click
+    // sees the updated icon set (e.g. promote → demote) without needing a mousemove.
+    if (_anchorIconPositions) {
+      let _newIH = null;
+      for (const _k of ['lock', 'promote', 'demote']) {
+        const _ip = _anchorIconPositions[_k];
+        if (_ip && Math.hypot(cx - _ip.cx, cy - _ip.cy) <= _ip.r) { _newIH = _k; break; }
+      }
+      anchorIconHover = _newIH;
+    } else {
+      anchorIconHover = null;
+    }
+    return;
+  }
+
   const anchorHit = anchorHover ?? queryAnchorHover(mathX, mathY);
   // Block anchorDrag on arc boundary junction nodes when a handle is also nearby.
   // Without this, clicking near a handle/node overlap starts anchorDrag (anchor check
@@ -9643,6 +9836,25 @@ window.addEventListener('mousemove', e => {
       newFrameHover   = (newSideActionHover || newRotationHover || newResizeHover) ? null : queryFrameBorderHover(cx, cy, 0);
       newLockHover    = (newSideActionHover || newRotationHover || newResizeHover || newFrameHover) ? null : queryLockHover(cx, cy);
       newAnchorHover  = (newSideActionHover || newRotationHover || newResizeHover || newFrameHover || newLockHover) ? null : queryAnchorHover(mathX, mathY);
+      // Keep anchorHover alive when cursor slides from anchor toward/onto icon cluster.
+      if (!newAnchorHover && anchorHover && !anchorDrag) {
+        // Check icon hit zones from last draw (valid between draw frames).
+        if (_anchorIconPositions) {
+          for (const _k of ['lock', 'promote', 'demote']) {
+            const _ip = _anchorIconPositions[_k];
+            if (_ip && Math.hypot(cx - _ip.cx, cy - _ip.cy) <= _ip.r) { newAnchorHover = anchorHover; break; }
+          }
+        }
+        // Extend proximity to cover the gap between anchor (7px threshold) and icons (≤36px away).
+        // This keeps anchorHover alive even after _anchorIconPositions is cleared by draw().
+        if (!newAnchorHover) {
+          const _pA = anchorHover.anim.anchors[anchorHover.anchorIdx];
+          if (_pA) {
+            const [_pax, _pay] = toCanvas(_pA.re, _pA.im);
+            if (Math.hypot(cx - _pax, cy - _pay) <= 40 * devicePixelRatio) newAnchorHover = anchorHover;
+          }
+        }
+      }
       newHandleHover  = (newSideActionHover || newRotationHover || newResizeHover || newAnchorHover || newLockHover) ? null : queryHandleHover(mathX, mathY);
       newSegmentHover = (newSideActionHover || newResizeHover || newFrameHover || newRotationHover || newAnchorHover || newHandleHover || newLockHover) ? null : querySegmentHover(cx, cy);
     }
@@ -9666,10 +9878,24 @@ window.addEventListener('mousemove', e => {
     const frameChanged = (newFrameHover?.id !== frameHover?.id) || (newFrameHover?.groupId !== frameHover?.groupId) || (newFrameHover?.multi !== frameHover?.multi);
     const rotationChanged = (newRotationHover?.anim !== rotateHover?.anim) || (newRotationHover?.groupId !== rotateHover?.groupId) || (newRotationHover?.multi !== rotateHover?.multi);
     const lockChanged = (newLockHover?.anim !== lockHover?.anim) || (newLockHover?.anchorIdx !== lockHover?.anchorIdx);
+    // Compute new anchorIconHover from stored icon positions
+    const _prevIconHover = anchorIconHover;
+    if (!newAnchorHover || anchorDrag) {
+      anchorIconHover = null;
+    } else if (newAnchorHover !== anchorHover) {
+      anchorIconHover = null; // anchor changed — positions stale until next draw
+    } else if (_anchorIconPositions) {
+      let _nih = null;
+      for (const k of ['lock', 'promote', 'demote']) {
+        const p = _anchorIconPositions[k];
+        if (p && Math.hypot(cx - p.cx, cy - p.cy) <= p.r) { _nih = k; break; }
+      }
+      anchorIconHover = _nih;
+    }
     const changed = sideActionChanged || resizeChanged || frameChanged || rotationChanged || lockChanged || (newAnchorHover !== anchorHover) || (newHandleHover !== handleHover) ||
       (newSegmentHover !== segmentHover &&
         !(newSegmentHover && segmentHover && newSegmentHover.anim === segmentHover.anim && newSegmentHover.segIdx === segmentHover.segIdx)) ||
-      (newFillHover !== fillHover);
+      (newFillHover !== fillHover) || (anchorIconHover !== _prevIconHover);
     sideActionHover = newSideActionHover;
     resizeHover  = newResizeHover;
     frameHover   = newFrameHover;
@@ -9712,8 +9938,33 @@ window.addEventListener('mouseup', e => {
   if (pendingRubberBand) {
     const _prb = pendingRubberBand;
     pendingRubberBand = null;
+    // In-frame guard: if the click is inside the selected object's frame, skip background selection.
+    // The topo replay below still runs so arc/region hits work normally.
+    let _rbInSelectedFrame = false;
+    {
+      const _sfA = selectedId != null ? animations.find(a => a.id === selectedId) : null;
+      if (_sfA && !isTextAnim(_sfA) && !isGroupSelectionActive() && !isMultiSelectionActive()) {
+        const _sfCbB = selectedObjectCanvasBounds(_sfA);
+        if (_sfCbB) {
+          const _sfLw = isPrimitiveAnim(_sfA) ? primitiveStrokeWidth(_sfA)
+            : (1 + 5 * ((_sfA.thickness ?? 1) / 10)) * devicePixelRatio;
+          const _sfFr = frameMetricsFromCanvasBounds(_sfCbB, _sfLw);
+          const _sfTol = 12 * devicePixelRatio;
+          if (_sfFr) {
+            const { outerX: _fx, outerY: _fy, outerW: _fw, outerH: _fh, extend: _fext } = _sfFr;
+            const _ox = _fx - _fext, _oy = _fy - _fext;
+            const _ow = _fw + _fext * 2, _oh = _fh + _fext * 2;
+            _rbInSelectedFrame = _prb.clickCx >= _ox - _sfTol && _prb.clickCx <= _ox + _ow + _sfTol &&
+                                 _prb.clickCy >= _oy - _sfTol && _prb.clickCy <= _oy + _oh + _sfTol;
+          } else {
+            _rbInSelectedFrame = _prb.clickCx >= _sfCbB.left - _sfTol && _prb.clickCx <= _sfCbB.right + _sfTol &&
+                                 _prb.clickCy >= _sfCbB.top - _sfTol && _prb.clickCy <= _sfCbB.bottom + _sfTol;
+          }
+        }
+      }
+    }
     // If a topmost object (by z-order) other than the selected one covers this point, prefer it.
-    if (selectedId != null && !isGroupSelectionActive() && !isMultiSelectionActive()) {
+    if (!_rbInSelectedFrame && selectedId != null && !isGroupSelectionActive() && !isMultiSelectionActive()) {
       const _topFill = queryFillHit(_prb.clickCx, _prb.clickCy);
       if (_topFill && _topFill.id !== selectedId && !objectGroupId(_topFill)) {
         selectFromScene(_topFill);
@@ -9737,17 +9988,44 @@ window.addEventListener('mouseup', e => {
         break; // topmost hit is already selected or grouped; fall through
       }
     }
+    // Before topology hit tests: if a higher-z-order object covers this click, prefer it.
+    // Without this, a click on an object layered on top of the selected background would be
+    // swallowed by the selected object's region hit test and never select the front object.
+    if (selectedId && !isGroupSelectionActive() && !isMultiSelectionActive()) {
+      const _preSelZIdx = animations.findIndex(a => a.id === selectedId);
+      const _preFill = queryFillHit(_prb.clickCx, _prb.clickCy);
+      if (_preFill && _preFill.id !== selectedId && !objectGroupId(_preFill) &&
+          animations.indexOf(_preFill) > _preSelZIdx) {
+        selectFromScene(_preFill);
+        renderAnimList(); draw(); updateCursor();
+        return;
+      }
+      const _preSegThresh = 10 * devicePixelRatio;
+      for (let _psi = animations.length - 1; _psi > _preSelZIdx; _psi--) {
+        const _psc = segmentHitCandidate(animations[_psi], _prb.clickCx, _prb.clickCy);
+        if (!_psc || _psc.dist > _preSegThresh) continue;
+        if (!objectGroupId(_psc.hit.anim)) {
+          const _psA = _psc.hit.anim;
+          enterEditMode(_psA, new Set());
+          _psA.expanded = true;
+          animations.forEach(a => { if (a.id !== _psA.id) { a.expanded = false; a.expandedArcs = new Set(); a.expandedAnchors = new Set(); } });
+          _psA.expandedArcs = new Set(); _psA.expandedAnchors = new Set();
+          renderAnimList(); draw(); updateCursor();
+          scrollToShowExpanded(_psA.id);
+          return;
+        }
+        break;
+      }
+    }
     // Tiny click: replay topology arc/region hit tests first (when a topo object is selected).
     if (selectedId && !isGroupSelectionActive() && !isMultiSelectionActive()) {
       const _topoAnim = animations.find(a => a.id === selectedId);
       if (_topoAnim && !isTextAnim(_topoAnim)) {
         const { topoArcs: _tas } = computeObjectTopologyData(_topoAnim);
-        // Arc check first: a click within threshold of a visible segment selects the arc,
-        // even if the point is geometrically inside a region.
+        const _arcHitThreshold2 = 10 * devicePixelRatio;
+        let _bestArcHit2 = null, _bestArcDist2 = Infinity;
         if (_tas.length) {
-          const _arcHitThreshold = 10 * devicePixelRatio;
           const _curvesById = buildTopologyCurvesMap(_topoAnim);
-          let _bestArcHit = null, _bestArcDist = Infinity;
           for (const _a of _tas) {
             const _c = _curvesById.get(_a.curveId);
             if (!_c) continue;
@@ -9755,41 +10033,70 @@ window.addEventListener('mouseup', e => {
               const _seg = _c.segments[_si];
               if (!_seg?.compiled) continue;
               const _dist = polylineHitInfo(sampleCompiledAdaptive(_seg.compiled), _prb.clickCx, _prb.clickCy).dist;
-              if (_dist < _bestArcDist) { _bestArcDist = _dist; _bestArcHit = _a; }
+              if (_dist < _bestArcDist2) { _bestArcDist2 = _dist; _bestArcHit2 = _a; }
             }
           }
-          if (_bestArcHit && _bestArcDist <= _arcHitThreshold) {
-            selectedObjectNode = null; selectedObjectRegionId = null;
-            drillObjectArc = { animId: selectedId, label: _bestArcHit.label, curveId: _bestArcHit.curveId, fromIdx: _bestArcHit.fromIdx, toIdx: _bestArcHit.toIdx };
-            objectDetailTab = 'arcs';
-            selectedArcKeys = new Set([_bestArcHit.label]);
-            if (!_topoAnim.curves) {
-              if (editModeAnimId !== _topoAnim.id) enterEditMode(_topoAnim, new Set());
-              _topoAnim.activeSegments = new Set();
-              for (let _si2 = _bestArcHit.fromIdx; _si2 < _bestArcHit.toIdx; _si2++) _topoAnim.activeSegments.add(_si2);
-            } else {
-              const _hitCurve = animCurves(_topoAnim).find(c => c.id === _bestArcHit.curveId);
-              if (_hitCurve) {
-                _hitCurve.activeSegments = new Set();
-                for (let _si2 = _bestArcHit.fromIdx; _si2 < _bestArcHit.toIdx; _si2++) _hitCurve.activeSegments.add(_si2);
-              }
-            }
-            renderAnimList(); draw(); updateCursor(); return;
-          }
         }
-        // Arc check found nothing within threshold; fall back to region.
-        const _hitReg = hitTestObjectRegion(_topoAnim, _prb.clickCx, _prb.clickCy);
-        if (_hitReg !== null) {
-          const _rbAHit = queryAnchorHover(_prb.clickMathX, _prb.clickMathY);
-          const _rbHHit = !_rbAHit ? queryHandleHover(_prb.clickMathX, _prb.clickMathY) : null;
-          if (!_rbAHit && !_rbHHit) {
-            selectedObjectNode = null; drillObjectArc = null;
-            for (const _c of animCurves(_topoAnim)) _c.activeSegments = new Set();
-            selectedObjectRegionId = { animId: selectedId, id: _hitReg };
-            objectDetailTab = 'regions';
-            renderAnimList(); draw(); return;
-          }
+        const _hasArcHit2 = _bestArcHit2 && _bestArcDist2 <= _arcHitThreshold2;
+        const _hitReg2 = hitTestObjectRegion(_topoAnim, _prb.clickCx, _prb.clickCy);
+        const _rbAHit = _hitReg2 !== null ? queryAnchorHover(_prb.clickMathX, _prb.clickMathY) : null;
+        const _rbHHit = _hitReg2 !== null && !_rbAHit ? queryHandleHover(_prb.clickMathX, _prb.clickMathY) : null;
+        const _hasRegCandidate2 = _hitReg2 !== null && !_rbAHit && !_rbHHit;
+        const _nearArc2 = !_hasArcHit2 && _bestArcHit2 && _bestArcDist2 <= _arcHitThreshold2 * 1.5;
+
+        let _doArc2 = false, _doReg2 = false;
+        if (_hasArcHit2 && _hasRegCandidate2) {
+          if (selectedRegionIds.size > 0) _doReg2 = true; else _doArc2 = true;
+        } else if (_hasArcHit2) {
+          _doArc2 = true;
+        } else if (_hasRegCandidate2) {
+          if (!(selectedArcKeys.size > 0 && _nearArc2)) _doReg2 = true;
         }
+        if (_doArc2) {
+          selectTopologyArc(_topoAnim, _bestArcHit2);
+          renderAnimList(); draw(); updateCursor(); return;
+        }
+        if (_doReg2) {
+          selectedObjectNode = null; drillObjectArc = null; selectedArcKeys = new Set();
+          for (const _c of animCurves(_topoAnim)) _c.activeSegments = new Set();
+          if (selectedRegionIds.has(_hitReg2)) selectedRegionIds.delete(_hitReg2);
+          else selectedRegionIds.add(_hitReg2);
+          objectDetailTab = 'fill';
+          renderAnimList(); draw(); return;
+        }
+      }
+      // In-frame click with no arc/region hit: prefer a topmost object above the current one
+      // in z-order; otherwise clear topo selection and stay on the current object.
+      if (_rbInSelectedFrame) {
+        const _selZIdx = animations.findIndex(a => a.id === selectedId);
+        const _ibFill = queryFillHit(_prb.clickCx, _prb.clickCy);
+        if (_ibFill && _ibFill.id !== selectedId && !objectGroupId(_ibFill) &&
+            animations.indexOf(_ibFill) > _selZIdx) {
+          selectFromScene(_ibFill);
+          renderAnimList(); draw(); updateCursor();
+          return;
+        }
+        const _ibSegThresh = 10 * devicePixelRatio;
+        for (let _ibi = animations.length - 1; _ibi > _selZIdx; _ibi--) {
+          const _ibSc = segmentHitCandidate(animations[_ibi], _prb.clickCx, _prb.clickCy);
+          if (!_ibSc || _ibSc.dist > _ibSegThresh) continue;
+          if (!objectGroupId(_ibSc.hit.anim)) {
+            const _ibA = _ibSc.hit.anim;
+            enterEditMode(_ibA, new Set());
+            _ibA.expanded = true;
+            animations.forEach(a => { if (a.id !== _ibA.id) { a.expanded = false; a.expandedArcs = new Set(); a.expandedAnchors = new Set(); } });
+            _ibA.expandedArcs = new Set(); _ibA.expandedAnchors = new Set();
+            renderAnimList(); draw(); updateCursor();
+            scrollToShowExpanded(_ibA.id);
+            return;
+          }
+          break;
+        }
+        if (drillObjectArc !== null || selectedRegionIds.size > 0 || selectedArcKeys.size > 0) {
+          clearTopoFeatureSelection();
+          renderAnimList(); draw();
+        }
+        return;
       }
     }
     // Replay non-control hit tests to select object or clear selection.
@@ -9814,7 +10121,7 @@ window.addEventListener('mouseup', e => {
     if (editModeAnimId !== null) exitEditMode();
     tilesDrillPath = [];
     selectedId = null; selectedGroupId = null; sceneIndicatorAnimId = null;
-    drillObjectArc = null; selectedObjectNode = null; selectedObjectRegionId = null;
+    drillObjectArc = null; selectedObjectNode = null; selectedRegionIds = new Set();
     clearMultiSelection(); clearGroupMode(); clearSelectionShearGuides();
     sideActionHover = null;
     animations.forEach(a => { a.expanded = false; a.expandedArcs = new Set(); a.expandedAnchors = new Set(); });
@@ -9880,9 +10187,9 @@ window.addEventListener('mouseup', e => {
             }
           }
           if (_adBestArc && _adBestDist <= _adThresh) {
-            selectedObjectNode = null; selectedObjectRegionId = null; promoteNodeMode = null;
+            selectedObjectNode = null; selectedRegionIds = new Set(); promoteNodeMode = null;
             drillObjectArc = { animId: selectedId, label: _adBestArc.label, curveId: _adBestArc.curveId, fromIdx: _adBestArc.fromIdx, toIdx: _adBestArc.toIdx };
-            objectDetailTab = 'arcs';
+            objectDetailTab = 'outline';
             selectedArcKeys = new Set([_adBestArc.label]);
             if (!_adParent.curves) {
               if (editModeAnimId !== _adParent.id) enterEditMode(_adParent, new Set());
@@ -9917,7 +10224,7 @@ window.addEventListener('mouseup', e => {
       sceneIndicatorAnimId = null;
       drillObjectArc = null;
       selectedObjectNode = null;
-      selectedObjectRegionId = null;
+      selectedRegionIds = new Set();
       clearMultiSelection();
       clearGroupMode();
       clearSelectionShearGuides();
@@ -10079,9 +10386,12 @@ canvas.addEventListener('mouseleave', () => {
   // rubberBand is intentionally NOT cleared here — window-level mousemove keeps tracking it,
   // so dragging past the canvas edge continues to work correctly.
   pendingBodyDrag = null;
-  pendingRubberBand = null;
-  if (anchorHover || handleHover || segmentHover || resizeHover || rotateHover || sideActionHover || frameHover || lockHover || fillHover) {
+  // pendingRubberBand intentionally not cleared here — window-level mouseup processes it even
+  // when the mouse briefly leaves the canvas between mousedown and mouseup (e.g. during a DOM
+  // reflow). Clearing it here caused selection to silently fail.
+  if (anchorHover || handleHover || segmentHover || resizeHover || rotateHover || sideActionHover || frameHover || lockHover || fillHover || anchorIconHover !== null) {
     anchorHover = null; handleHover = null; segmentHover = null; resizeHover = null; rotateHover = null; sideActionHover = null; frameHover = null; lockHover = null; fillHover = null;
+    anchorIconHover = null; _anchorIconPositions = null;
     updateCursor(); draw();
   }
 });
@@ -10814,6 +11124,9 @@ function drawHandleDot(canvasPt, color, r) {
   ctx.arc(canvasPt[0], canvasPt[1], r, 0, Math.PI * 2);
   ctx.fillStyle = '#f0f4ff';
   ctx.fill();
+  ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+  ctx.lineWidth = 1 * devicePixelRatio;
+  ctx.stroke();
 }
 
 function drawHandles(anim) {
@@ -11411,7 +11724,7 @@ function drawClosedSegmentFill(anim, fillColorOverride = null, opacityScale = 1)
   drawCurveFill(anim, fillColorOverride, opacityScale, []);
 }
 
-function drawSegment(anim, segIdx, colorOverride = null, opacityScale = 1, thicknessOverride = null, absOpacity = null) {
+function drawSegment(anim, segIdx, colorOverride = null, opacityScale = 1, thicknessOverride = null, absOpacity = null, outerSoftness = 0, innerSoftness = 0) {
   const seg = anim.segments[segIdx];
   if (!seg || !seg.compiled) return;
   const dpr = devicePixelRatio;
@@ -11438,7 +11751,7 @@ function drawSegment(anim, segIdx, colorOverride = null, opacityScale = 1, thick
       drawCompiledCurve(seg.compiled, color, cw * 0.55, opacity);
       ctx.restore();
     } else {
-      drawCompiledCurve(seg.compiled, color, cw, opacity);
+      drawCompiledCurve(seg.compiled, color, cw, opacity, outerSoftness, innerSoftness);
     }
   } else if (arcSelectGhost && seg.compiledRef) {
     seg.compiledRef.forEach((entry, i) => {
@@ -11446,9 +11759,9 @@ function drawSegment(anim, segIdx, colorOverride = null, opacityScale = 1, thick
       if (Math.abs(entry.eccentricity - seg.eccentricity) >= 1e-9)
         drawCompiledCurve(entry.fn, '#888888', cw * 0.2, 0.4 * opacity);
     });
-    drawCompiledCurve(seg.compiled, color, cw, opacity);
+    drawCompiledCurve(seg.compiled, color, cw, opacity, outerSoftness, innerSoftness);
   } else {
-    drawCompiledCurve(seg.compiled, color, cw, opacity);
+    drawCompiledCurve(seg.compiled, color, cw, opacity, outerSoftness, innerSoftness);
   }
 }
 
@@ -13937,6 +14250,152 @@ function drawNodeDots(anim) {
   }
 }
 
+// Draw non-topology anchor dots as small gray dots (visible when object is selected).
+function drawNonNodeAnchorDots(mainSel) {
+  if (!mainSel || isPrimitiveAnim(mainSel) || isTextAnim(mainSel)) return;
+  const dpr = devicePixelRatio;
+  const { essentialPoints } = computeObjectTopologyData(mainSel);
+  for (const _c of animCurves(mainSel)) {
+    if (isPrimitiveAnim(_c) || isTextAnim(_c)) continue;
+    for (let _ai = 0; _ai < _c.anchors.length; _ai++) {
+      const _a = _c.anchors[_ai];
+      if (!_a) continue;
+      const _isNode = essentialPoints.some(ep => Math.hypot(ep.pos.re - _a.re, ep.pos.im - _a.im) < 1e-4);
+      if (_isNode) continue;
+      drawAnchorDot(toCanvas(_a.re, _a.im), '#45475a', 3 * dpr);
+    }
+  }
+}
+
+// Find the best angle (radians) to place the anchor icon cluster — away from other anchors and arc strokes.
+function findAnchorIconAngle(mainSel, anchorCx, anchorCy) {
+  const dpr = devicePixelRatio;
+  const D = 28 * dpr;
+  const ANCHOR_R = 50 * dpr, STROKE_R = 38 * dpr, MARGIN = 16 * dpr;
+  const W = canvas.width, H = canvas.height;
+
+  const otherAnchors = [];
+  for (const _c of animCurves(mainSel)) {
+    if (isPrimitiveAnim(_c) || isTextAnim(_c)) continue;
+    for (const _a of _c.anchors) {
+      if (!_a) continue;
+      const [ax, ay] = toCanvas(_a.re, _a.im);
+      if (Math.hypot(ax - anchorCx, ay - anchorCy) > 1) otherAnchors.push(ax, ay);
+    }
+  }
+  const strokePts = [];
+  for (const _c of animCurves(mainSel)) {
+    if (isPrimitiveAnim(_c) || isTextAnim(_c)) continue;
+    for (const seg of _c.segments) {
+      if (!seg?.compiled) continue;
+      const pts = sampleCompiledAdaptive(seg.compiled);
+      for (let i = 0; i < pts.length; i += 4) strokePts.push(pts[i][0], pts[i][1]);
+    }
+  }
+
+  let bestAngle = -Math.PI / 2, bestScore = Infinity;
+  for (let ki = 0; ki < 8; ki++) {
+    const angle = (ki / 8) * 2 * Math.PI - Math.PI / 2;
+    const px = anchorCx + Math.cos(angle) * D, py = anchorCy + Math.sin(angle) * D;
+    let score = 0;
+    if (px < MARGIN || px > W - MARGIN || py < MARGIN || py > H - MARGIN) score += 1e5;
+    for (let j = 0; j < otherAnchors.length; j += 2) {
+      const d = Math.hypot(otherAnchors[j] - px, otherAnchors[j+1] - py);
+      if (d < ANCHOR_R) score += (ANCHOR_R - d) * 2;
+    }
+    for (let j = 0; j < strokePts.length; j += 2) {
+      const d = Math.hypot(strokePts[j] - px, strokePts[j+1] - py);
+      if (d < STROKE_R) score += (STROKE_R - d);
+    }
+    if (score < bestScore) { bestScore = score; bestAngle = angle; }
+  }
+  return bestAngle;
+}
+
+// Draw the lock / promote / demote icon cluster near the hovered anchor.
+// Also updates _anchorIconPositions for mousemove hit-testing.
+function drawAnchorIconCluster(anchorCx, anchorCy, isLocked, canPromote, canDemote, mainSel) {
+  const dpr = devicePixelRatio;
+  const angle = findAnchorIconAngle(mainSel, anchorCx, anchorCy);
+  const D = 28 * dpr;
+  const clCx = anchorCx + Math.cos(angle) * D, clCy = anchorCy + Math.sin(angle) * D;
+  const ICON_R = 8 * dpr, GAP = 4 * dpr;
+
+  const icons = ['lock'];
+  if (canPromote) icons.push('promote');
+  if (canDemote) icons.push('demote');
+
+  const perpAngle = angle + Math.PI / 2;
+  const step = ICON_R * 2 + GAP;
+  const positions = {};
+  icons.forEach((ic, i) => {
+    const off = (i - (icons.length - 1) / 2) * step;
+    positions[ic] = { cx: clCx + Math.cos(perpAngle) * off, cy: clCy + Math.sin(perpAngle) * off };
+  });
+
+  ctx.save();
+  for (const ic of icons) {
+    const { cx: icx, cy: icy } = positions[ic];
+    const isHov = anchorIconHover === ic;
+    ctx.beginPath();
+    ctx.arc(icx, icy, ICON_R, 0, Math.PI * 2);
+    ctx.fillStyle = isHov ? '#45475a' : '#313244';
+    ctx.fill();
+    ctx.strokeStyle = isHov ? '#cdd6f4' : '#7f849c';
+    ctx.lineWidth = 1.5 * dpr;
+    ctx.stroke();
+
+    if (ic === 'lock') {
+      const col = isLocked ? '#ff8faa' : '#a6e3a1';
+      const sz = ICON_R;
+      const bw = sz * 1.1, bh = sz * 0.65;
+      const bodyTop = icy + sz * 0.05;
+      const shR = sz * 0.36, shCy = icy - sz * 0.42;
+      ctx.strokeStyle = col; ctx.fillStyle = col;
+      ctx.lineWidth = Math.max(1.5 * dpr, sz * 0.22); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      // Shackle: left leg always connects to body; right leg connects (locked) or rises (unlocked).
+      ctx.beginPath();
+      ctx.moveTo(icx - shR, bodyTop);
+      ctx.lineTo(icx - shR, shCy);
+      ctx.arc(icx, shCy, shR, Math.PI, 0, false);
+      if (isLocked) {
+        ctx.lineTo(icx + shR, bodyTop);   // right leg down into body — clearly closed
+      } else {
+        ctx.lineTo(icx + shR, shCy - sz * 0.35);  // right leg rises up — clearly open
+      }
+      ctx.stroke();
+      // Body drawn over leg bottoms so legs appear to enter the body cleanly.
+      ctx.beginPath();
+      ctx.rect(icx - bw/2, bodyTop, bw, bh);
+      ctx.fill();
+    } else {
+      const col = '#89b4fa';
+      const sz = ICON_R * 0.72, hw = sz * 0.85, h = sz * 0.9;
+      ctx.fillStyle = col;
+      ctx.beginPath();
+      if (ic === 'promote') {
+        ctx.moveTo(icx, icy - h/2);
+        ctx.lineTo(icx + hw, icy + h/2);
+        ctx.lineTo(icx - hw, icy + h/2);
+      } else {
+        ctx.moveTo(icx, icy + h/2);
+        ctx.lineTo(icx + hw, icy - h/2);
+        ctx.lineTo(icx - hw, icy - h/2);
+      }
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+
+  ctx.restore();
+
+  _anchorIconPositions = { lock: null, promote: null, demote: null };
+  for (const ic of icons) {
+    const { cx, cy } = positions[ic];
+    _anchorIconPositions[ic] = { cx, cy, r: ICON_R + 2 * dpr };
+  }
+}
+
 function drawTopoFeatureSelectionBounds(anim) {
   const dpr = devicePixelRatio;
   let bounds = null;
@@ -13961,11 +14420,12 @@ function drawTopoFeatureSelectionBounds(anim) {
       if (seg.h1) bounds = includeCanvasPoint(bounds, toCanvas(seg.h1.re, seg.h1.im));
     }
     // Include plus-sign positions when arc endpoint coincides with curve endpoint
-  } else if (selectedObjectRegionId?.animId === anim.id) {
-    const region = (anim.regions ?? []).find(r => r.id === selectedObjectRegionId.id);
-    if (!region) return;
+  } else if (selectedRegionIds.size > 0 && selectedId === anim.id) {
     const curvesMap = new Map(animCurves(anim).map(c => [c.id, c]));
-    bounds = computeRegionCanvasBounds(region, curvesMap);
+    for (const _rid of selectedRegionIds) {
+      const region = (anim.regions ?? []).find(r => r.id === _rid);
+      if (region) bounds = unionCanvasBounds(bounds, computeRegionCanvasBounds(region, curvesMap));
+    }
   }
   if (!bounds) return;
   const frame = frameMetricsFromCanvasBounds(bounds, devicePixelRatio);
@@ -13991,7 +14451,7 @@ function drawSelectedObjectBounds(anim) {
   if (!isActive && !groupCandidate) return;
 
   const topoFeatureActive = !groupCandidate &&
-    (drillObjectArc?.animId === anim.id || selectedObjectRegionId?.animId === anim.id);
+    (drillObjectArc?.animId === anim.id || (selectedRegionIds.size > 0 && selectedId === anim.id));
 
   // When arc/region is selected: draw a simplified white object frame (no interactive handles)
   if (topoFeatureActive) {
@@ -14254,7 +14714,8 @@ function drawCommittedAnimation(anim, { deferOverlay = false } = {}) {
 
   if (anim.curves) {
     const _fadingArc = drillObjectArc?.animId === anim.id ? drillObjectArc : null;
-    const _arcEditColor = _fadingArc ? colorWithLightness(anim.color, 0.5) : null;
+    const _fadingArcStyle = _fadingArc ? getArcStyle(anim, _fadingArc.curveId, _fadingArc.fromIdx, _fadingArc.toIdx) : null;
+    const _arcEditColor = _fadingArc ? colorWithLightness(_fadingArcStyle?.color ?? anim.color, 0.5) : null;
     for (const c of anim.curves) {
       const proxy = makeCurveProxy(anim, c);
       const _isDimmed = !!(_fadingArc && c.id !== _fadingArc.curveId);
@@ -14268,18 +14729,22 @@ function drawCommittedAnimation(anim, { deferOverlay = false } = {}) {
           const _fillProxy = animFillColor(proxy) ? proxy : { ...proxy, fillColor: anim.fillColor, fillStyle: anim.fillStyle, fillOpacity: anim.fillOpacity };
           drawCurveFill(_fillProxy, null, 1, []);
         }
+        const _fadingOuter = _fadingArcStyle?.outerSoftness ?? anim.outerSoftness ?? 0;
+        const _fadingInner = _fadingArcStyle?.innerSoftness ?? anim.innerSoftness ?? 0;
         for (let i = 0; i < proxy.segments.length; i++) {
           if (_fadingArc && !_isDimmed) {
             const _inArc = i >= _fadingArc.fromIdx && i < _fadingArc.toIdx;
-            if (_inArc) drawSegment(proxy, i, _arcEditColor, 1, 5, 1);
+            if (_inArc) drawSegment(proxy, i, _arcEditColor, 1, 5, 1, _fadingOuter, _fadingInner);
             else drawSegment(proxy, i);
           } else {
             const _as = getArcStyleForSegment(anim, c.id, i);
+            const _outerSoft = _as?.outerSoftness ?? anim.outerSoftness ?? 0;
+            const _innerSoft = _as?.innerSoftness ?? anim.innerSoftness ?? 0;
             if (_as && (_as.color || _as.thickness !== undefined || _as.opacity !== undefined)) {
               drawSegment(proxy, i, _as.color ?? null, 1, _as.thickness ?? null,
-                _as.opacity !== undefined ? _as.opacity * _globalCanvasDimFactor : null);
+                _as.opacity !== undefined ? _as.opacity * _globalCanvasDimFactor : null, _outerSoft, _innerSoft);
             } else {
-              drawSegment(proxy, i);
+              drawSegment(proxy, i, null, 1, null, null, _outerSoft, _innerSoft);
             }
           }
         }
@@ -14326,10 +14791,13 @@ function drawCommittedAnimation(anim, { deferOverlay = false } = {}) {
     if (_activeArcIsTopo) drawSegment(anim, activeArc, _topoArcColor, 1, 5, 1);
     else drawSegment(anim, activeArc, null, 1, thickBoost);
   } else if (_topoFade) {
-    const _arcEditColor = colorWithLightness(anim.color, 0.5);
+    const _topoArcStyle = getArcStyle(anim, _topoFade.curveId, _topoFade.fromIdx, _topoFade.toIdx);
+    const _arcEditColor = colorWithLightness(_topoArcStyle?.color ?? anim.color, 0.5);
+    const _topoOuter = _topoArcStyle?.outerSoftness ?? anim.outerSoftness ?? 0;
+    const _topoInner = _topoArcStyle?.innerSoftness ?? anim.innerSoftness ?? 0;
     for (let i = 0; i < anim.segments.length; i++) {
       if (i >= _topoFade.fromIdx && i < _topoFade.toIdx) {
-        drawSegment(anim, i, _arcEditColor, 1, 5, 1);
+        drawSegment(anim, i, _arcEditColor, 1, 5, 1, _topoOuter, _topoInner);
       } else {
         drawSegment(anim, i);
       }
@@ -14337,11 +14805,13 @@ function drawCommittedAnimation(anim, { deferOverlay = false } = {}) {
   } else {
     for (let i = 0; i < anim.segments.length; i++) {
       const _as = getArcStyleForSegment(anim, anim.id, i);
+      const _outerSoft = _as?.outerSoftness ?? anim.outerSoftness ?? 0;
+      const _innerSoft = _as?.innerSoftness ?? anim.innerSoftness ?? 0;
       if (_as && (_as.color || _as.thickness !== undefined || _as.opacity !== undefined)) {
         drawSegment(anim, i, _as.color ?? null, 1, _as.thickness ?? null,
-          _as.opacity !== undefined ? _as.opacity * _globalCanvasDimFactor : null);
+          _as.opacity !== undefined ? _as.opacity * _globalCanvasDimFactor : null, _outerSoft, _innerSoft);
       } else {
-        drawSegment(anim, i);
+        drawSegment(anim, i, null, 1, null, null, _outerSoft, _innerSoft);
       }
     }
   }
@@ -14610,11 +15080,30 @@ function drawAnimations() {
     const mainSel = mainSelId != null ? animations.find(a => a.id === mainSelId) : null;
     if (mainSel && isAnimEffectivelyVisible(mainSel) && !mainSel.inPlacementMode) {
       drawSelectedObjectBounds(mainSel);
+      drawNonNodeAnchorDots(mainSel);
       drawNodeDots(mainSel);
-      if (drillObjectArc?.animId === mainSel.id) {
-        const _da = drillObjectArc;
-        const _daCurve = animCurves(mainSel).find(c => c.id === _da.curveId) ?? mainSel;
-        drawTopoArcHandles(_daCurve, _da.fromIdx, _da.toIdx);
+      if (selectedArcKeys.size > 0 && drillObjectArc?.animId === mainSel.id) {
+        const { topoArcs: _drawArcs } = computeObjectTopologyData(mainSel);
+        for (const _da of _drawArcs.filter(a => selectedArcKeys.has(a.label))) {
+          const _daCurve = animCurves(mainSel).find(c => c.id === _da.curveId) ?? mainSel;
+          drawTopoArcHandles(_daCurve, _da.fromIdx, _da.toIdx);
+        }
+      }
+      // Anchor icon cluster (lock / promote / demote)
+      _anchorIconPositions = null;
+      if (anchorHover && !anchorDrag) {
+        const _selCurveIds = new Set(animCurves(mainSel).map(c => c.id));
+        if (_selCurveIds.has(anchorHover.anim.id)) {
+          const _ahA = anchorHover.anim.anchors[anchorHover.anchorIdx];
+          if (_ahA) {
+            const [_ahCx, _ahCy] = toCanvas(_ahA.re, _ahA.im);
+            const { essentialPoints: _ahEps } = computeObjectTopologyData(mainSel);
+            const _isNode = _ahEps.some(ep => Math.hypot(ep.pos.re - _ahA.re, ep.pos.im - _ahA.im) < 1e-4);
+            const _isLocked = isAnchorLocked(anchorHover.anim, anchorHover.anchorIdx);
+            const _isPromoted = !!(anchorHover.anim.promotedAnchors?.[anchorHover.anchorIdx]);
+            drawAnchorIconCluster(_ahCx, _ahCy, _isLocked, !_isNode, _isNode && _isPromoted, mainSel);
+          }
+        }
       }
       // Convert-to-Bézier preview: N dots on circle/ellipse
       if (_cvtBezierPreviewId === mainSel.id && isPrimitiveAnim(mainSel)) {
@@ -15513,7 +16002,7 @@ function appendSliderRow(parent, labelText, min, max, step, value, formatValue, 
   const valSpan = document.createElement('span');
   valSpan.className = 'tree-slider-val';
   if (options.valAlign) valSpan.style.textAlign = options.valAlign;
-  valSpan.textContent = formatValue(value);
+  valSpan.textContent = options.mixed ? '—' : formatValue(value);
   slider.addEventListener('mousedown', () => { if (!slider.disabled) pushUndo(); });
   slider.addEventListener('touchstart', () => { if (!slider.disabled) pushUndo(); }, { passive: true });
   slider.addEventListener('input', () => {
@@ -19980,15 +20469,12 @@ function drawObjectSchematic(canvasEl, anim, opts = {}) {
   const { essentialPoints, topoArcs } = computeObjectTopologyData(anim);
   const curvesMap = new Map(curves.map(c => [c.id, c]));
 
-  const selArcLabel = opts.selectedArcLabel ?? null;
-  const hovArcLabel = opts.hoveredArcLabel ?? null;
-  const selNodeNum  = opts.selectedNodeNum ?? -1;
-  const hovNodeNum  = opts.hoveredNodeNum ?? -1;
-  const selRegionId = opts.selectedRegionId ?? -1;
-  const hovRegionId = opts.hoveredRegionId ?? -1;
-  const hasArcHighlight = selArcLabel !== null || hovArcLabel !== null;
-
-  const _regionLbls = []; // collected here, drawn last (on top of node badges)
+  const selArcLabels = opts.selectedArcLabels ?? new Set();
+  const hovArcLabel  = opts.hoveredArcLabel ?? null;
+  const hovNodeNum   = opts.hoveredNodeNum ?? -1;
+  const selRegionIds = opts.selectedRegionIds ?? new Set();
+  const hovRegionId  = opts.hoveredRegionId ?? -1;
+  const hasHighlight = selArcLabels.size > 0 || selRegionIds.size > 0 || hovArcLabel !== null;
 
   // 1. Region fills
   for (const region of (anim.regions ?? [])) {
@@ -20020,91 +20506,25 @@ function drawObjectSchematic(canvasEl, anim, opts = {}) {
       }
     }
     path.closePath();
-    const isSel = region.id === selRegionId;
+    const isSel = selRegionIds.has(region.id);
     const isHov = !isSel && region.id === hovRegionId;
     if (isSel) {
       ctx.save();
-      ctx.fillStyle = '#89b4fa22';
+      ctx.fillStyle = '#cba6f766';
       ctx.fill(path);
-      ctx.strokeStyle = '#89b4facc';
-      ctx.lineWidth = 1.5 * dpr;
-      ctx.stroke(path);
       ctx.restore();
     } else if (isHov) {
       ctx.save();
-      ctx.strokeStyle = '#89b4fa55';
-      ctx.lineWidth = 1 * dpr;
-      ctx.stroke(path);
+      ctx.fillStyle = '#89b4fa28';
+      ctx.fill(path);
       ctx.restore();
-    }
-
-    // Region number: pole of inaccessibility (center of largest inscribed circle)
-    const _ring = [];
-    for (const _e of region.boundary) {
-      const _ec = curvesMap.get(_e.animId); if (!_ec) continue;
-      const _fwd = _e.endIdx > _e.startIdx;
-      const _sMin = Math.min(_e.startIdx, _e.endIdx), _sMax = Math.max(_e.startIdx, _e.endIdx);
-      const _addS = (_s, _rev) => {
-        const _pa = _ec.anchors[_s], _pb = _ec.anchors[_s + 1], _sg = _ec.segments[_s];
-        if (!_pa || !_pb) return;
-        const { x: _ax, y: _ay } = toC(_pa), { x: _bx, y: _by } = toC(_pb);
-        const _N = 6;
-        for (let _k = _rev ? _N : 0; _rev ? _k >= 0 : _k <= _N; _k += _rev ? -1 : 1) {
-          const _t = _k / _N, _mt = 1 - _t;
-          if (_sg?.h0 && _sg?.h1) {
-            const { x: _hx0, y: _hy0 } = toC(_sg.h0), { x: _hx1, y: _hy1 } = toC(_sg.h1);
-            _ring.push([_mt*_mt*_mt*_ax + 3*_mt*_mt*_t*_hx0 + 3*_mt*_t*_t*_hx1 + _t*_t*_t*_bx,
-                        _mt*_mt*_mt*_ay + 3*_mt*_mt*_t*_hy0 + 3*_mt*_t*_t*_hy1 + _t*_t*_t*_by]);
-          } else { _ring.push([_mt*_ax + _t*_bx, _mt*_ay + _t*_by]); }
-        }
-      };
-      if (_fwd) { for (let _s = _sMin; _s < _sMax; _s++) _addS(_s, false); }
-      else { for (let _s = _sMax - 1; _s >= _sMin; _s--) _addS(_s, true); }
-    }
-    if (_ring.length >= 3) {
-      // Polylabel: signed distance from point to polygon ring
-      const _pSegD2 = (_px, _py, _ax, _ay, _bx, _by) => {
-        let _dx = _bx - _ax, _dy = _by - _ay;
-        if (_dx || _dy) { const _t2 = Math.max(0, Math.min(1, ((_px-_ax)*_dx+(_py-_ay)*_dy)/(_dx*_dx+_dy*_dy))); _dx = _px-_ax-_t2*_dx; _dy = _py-_ay-_t2*_dy; }
-        else { _dx = _px-_ax; _dy = _py-_ay; }
-        return _dx*_dx + _dy*_dy;
-      };
-      const _ptD = (_px, _py) => {
-        let _in = false, _m2 = Infinity, _n = _ring.length;
-        for (let _i = 0, _j = _n - 1; _i < _n; _j = _i++) {
-          const [_xi, _yi] = _ring[_i], [_xj, _yj] = _ring[_j];
-          if ((_yi > _py) !== (_yj > _py) && _px < (_xj-_xi)*(_py-_yi)/(_yj-_yi)+_xi) _in = !_in;
-          _m2 = Math.min(_m2, _pSegD2(_px, _py, _xi, _yi, _xj, _yj));
-        }
-        return (_in ? 1 : -1) * Math.sqrt(_m2);
-      };
-      let _mnX = Infinity, _mnY = Infinity, _mxX = -Infinity, _mxY = -Infinity;
-      for (const [_x, _y] of _ring) { if (_x < _mnX) _mnX = _x; if (_y < _mnY) _mnY = _y; if (_x > _mxX) _mxX = _x; if (_y > _mxY) _mxY = _y; }
-      const _prec = 0.5, _pq = [];
-      const _mkC = (_x, _y, _h) => { const _d = _ptD(_x, _y); return { x: _x, y: _y, h: _h, d: _d, pot: _d + _h * 1.4143 }; };
-      const _enqC = _c => { let _lo = 0, _hi = _pq.length; while (_lo < _hi) { const _m = (_lo+_hi)>>1; if (_pq[_m].pot > _c.pot) _hi = _m; else _lo = _m+1; } _pq.splice(_lo, 0, _c); };
-      const _cs = Math.max(_mxX - _mnX, _mxY - _mnY);
-      for (let _x = _mnX; _x < _mxX; _x += _cs) for (let _y = _mnY; _y < _mxY; _y += _cs) _enqC(_mkC(_x+_cs/2, _y+_cs/2, _cs/2));
-      let _bst = _mkC((_mnX+_mxX)/2, (_mnY+_mxY)/2, 0);
-      while (_pq.length) {
-        const _c = _pq.pop();
-        if (_c.d > _bst.d) _bst = _c;
-        if (_c.pot - _bst.d <= _prec) continue;
-        const _h2 = _c.h / 2;
-        _enqC(_mkC(_c.x-_h2, _c.y-_h2, _h2)); _enqC(_mkC(_c.x+_h2, _c.y-_h2, _h2));
-        _enqC(_mkC(_c.x-_h2, _c.y+_h2, _h2)); _enqC(_mkC(_c.x+_h2, _c.y+_h2, _h2));
-      }
-      const _rx = Math.max(6, Math.min(W - 6, _bst.x));
-      const _ry = Math.max(6, Math.min(H - 6, _bst.y));
-      const _numStr = String((anim.regions ?? []).indexOf(region) + 1);
-      _regionLbls.push({ x: _rx, y: _ry, str: _numStr, isSel });
     }
   }
 
-  // 2. Curve strokes (dimmed when an arc is highlighted)
+  // 2. Curve strokes (dimmed when any arc or region is highlighted)
   for (const c of curves) {
     const isPolyline = isPolylineAnim(c);
-    ctx.strokeStyle = (c.color || anim.color || '#89b4fa') + (hasArcHighlight ? '44' : 'bb');
+    ctx.strokeStyle = (c.color || anim.color || '#89b4fa') + (hasHighlight ? '44' : 'bb');
     ctx.lineWidth = 1.5 * dpr;
     ctx.lineJoin = 'round'; ctx.lineCap = 'round';
     for (let i = 0; i < c.segments.length; i++) {
@@ -20123,7 +20543,7 @@ function drawObjectSchematic(canvasEl, anim, opts = {}) {
   for (const c of visualPrimitives) {
     const p0 = c.anchors[0], p1 = c.anchors[1];
     if (!p0 || !p1) continue;
-    ctx.strokeStyle = (c.color || anim.color || '#89b4fa') + (hasArcHighlight ? '44' : 'bb');
+    ctx.strokeStyle = (c.color || anim.color || '#89b4fa') + (hasHighlight ? '44' : 'bb');
     ctx.lineWidth = 1.5 * dpr;
     ctx.lineJoin = 'round'; ctx.lineCap = 'round';
     ctx.beginPath();
@@ -20140,7 +20560,7 @@ function drawObjectSchematic(canvasEl, anim, opts = {}) {
 
   // 3. Arc highlight overlay
   for (const arc of topoArcs) {
-    const isSel = arc.label === selArcLabel;
+    const isSel = selArcLabels.has(arc.label);
     const isHov = !isSel && arc.label === hovArcLabel;
     if (!isSel && !isHov) continue;
     const c = curvesMap.get(arc.curveId);
@@ -20165,80 +20585,21 @@ function drawObjectSchematic(canvasEl, anim, opts = {}) {
     ctx.restore();
   }
 
-  // 4. Node letter badges with spring relaxation (repels from other badges and region labels)
-  const nodeR = 9 * dpr;
-  const disp = essentialPoints.map(ep => { const { x, y } = toC(ep.pos); return { num: ep.num, x, y, ox: x, oy: y }; });
-  const minDist = nodeR * 2.4;
-  const lblClear = nodeR + 7 * dpr;
-  for (let iter = 0; iter < 30; iter++) {
-    for (let i = 0; i < disp.length; i++) {
-      for (let j = i + 1; j < disp.length; j++) {
-        const dx = disp[j].x - disp[i].x, dy = disp[j].y - disp[i].y;
-        const d = Math.hypot(dx, dy) || 0.01;
-        if (d < minDist) {
-          const push = (minDist - d) / 2, nx = dx / d, ny = dy / d;
-          disp[i].x -= nx * push; disp[i].y -= ny * push;
-          disp[j].x += nx * push; disp[j].y += ny * push;
-        }
-      }
+  // 4. Node dots (small, no labels)
+  {
+    const _dotR = 3 * dpr;
+    ctx.save();
+    for (const ep of essentialPoints) {
+      const { x, y } = toC(ep.pos);
+      const isHov = ep.num === hovNodeNum;
+      ctx.beginPath();
+      ctx.arc(x, y, isHov ? _dotR + 1.5 * dpr : _dotR, 0, Math.PI * 2);
+      ctx.fillStyle = isHov ? '#89b4fa' : '#6c7086';
+      ctx.fill();
     }
-    // Repel from region label positions
-    for (const p of disp) {
-      for (const lbl of _regionLbls) {
-        const dx = p.x - lbl.x, dy = p.y - lbl.y;
-        const d = Math.hypot(dx, dy) || 0.01;
-        if (d < lblClear) { const f = (lblClear - d) / d * 0.4; p.x += dx * f; p.y += dy * f; }
-      }
-    }
-    for (const p of disp) { p.x += (p.ox - p.x) * 0.12; p.y += (p.oy - p.y) * 0.12; }
-  }
-  for (const p of disp) {
-    p.x = Math.max(nodeR + 1, Math.min(W - nodeR - 1, p.x));
-    p.y = Math.max(nodeR + 1, Math.min(H - nodeR - 1, p.y));
+    ctx.restore();
   }
 
-  // Callout lines for badges displaced from their actual node position
-  ctx.save();
-  for (const p of disp) {
-    const moved = Math.hypot(p.x - p.ox, p.y - p.oy);
-    if (moved > nodeR * 0.5) {
-      ctx.strokeStyle = '#89b4fa44'; ctx.lineWidth = 1 * dpr;
-      ctx.beginPath(); ctx.moveTo(p.ox, p.oy); ctx.lineTo(p.x, p.y); ctx.stroke();
-      ctx.fillStyle = '#1e1e2e';
-      ctx.beginPath(); ctx.arc(p.ox, p.oy, 3.5 * dpr, 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = '#89b4fa'; ctx.lineWidth = 1 * dpr; ctx.stroke();
-    }
-  }
-  ctx.restore();
-
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  for (const { num, x, y } of disp) {
-    const isSel = num === selNodeNum;
-    const isHov = num === hovNodeNum && !isSel;
-    const letter = nodeNumToLetter(num);
-    if (isHov) {
-      ctx.beginPath(); ctx.arc(x, y, nodeR + 3 * dpr, 0, Math.PI * 2);
-      ctx.strokeStyle = '#89b4fa55'; ctx.lineWidth = 1.5 * dpr; ctx.stroke();
-    }
-    ctx.beginPath(); ctx.arc(x, y, nodeR, 0, Math.PI * 2);
-    ctx.fillStyle = isSel ? '#89b4fa' : '#1e1e2e'; ctx.fill();
-    ctx.strokeStyle = '#89b4fa'; ctx.lineWidth = 1.5 * dpr; ctx.stroke();
-    ctx.font = `bold ${Math.round((letter.length > 1 ? 8 : 10) * dpr)}px monospace`;
-    ctx.fillStyle = isSel ? '#1e1e2e' : '#cdd6f4';
-    ctx.fillText(letter, x, y);
-  }
-
-  // 5. Region numbers — drawn last so they're always on top of node badges
-  ctx.save();
-  ctx.font = `bold ${Math.round(12 * dpr)}px monospace`;
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.lineJoin = 'round'; ctx.lineWidth = 3.5 * dpr; ctx.strokeStyle = '#11111b';
-  for (const { x, y, str, isSel } of _regionLbls) {
-    ctx.strokeText(str, x, y);
-    ctx.fillStyle = isSel ? '#ffffff' : '#cdd6f4';
-    ctx.fillText(str, x, y);
-  }
-  ctx.restore();
 }
 
 function hitTestRegionCentroid(canvasEl, anim, cx, cy) {
@@ -20305,25 +20666,99 @@ function _schemBB(canvasEl, anim) {
 function hitTestNodeBadge(canvasEl, anim, cx, cy) {
   const bb = _schemBB(canvasEl, anim);
   if (!bb) return null;
-  const { toC, W, H, dpr } = bb;
+  const { toC, dpr } = bb;
   const { essentialPoints } = computeObjectTopologyData(anim);
   if (!essentialPoints.length) return null;
-  const nodeR = 9 * dpr;
-  const disp = essentialPoints.map(ep => { const { x, y } = toC(ep.pos); return { num: ep.num, x, y, ox: x, oy: y }; });
-  const minDist = nodeR * 2.4;
-  for (let iter = 0; iter < 20; iter++) {
-    for (let i = 0; i < disp.length; i++) {
-      for (let j = i + 1; j < disp.length; j++) {
-        const dx = disp[j].x - disp[i].x, dy = disp[j].y - disp[i].y;
-        const d = Math.hypot(dx, dy) || 0.01;
-        if (d < minDist) { const push = (minDist - d) / 2, nx = dx / d, ny = dy / d; disp[i].x -= nx * push; disp[i].y -= ny * push; disp[j].x += nx * push; disp[j].y += ny * push; }
+  const hitR = 8 * dpr;
+  const disp = essentialPoints.map(ep => { const { x, y } = toC(ep.pos); return { num: ep.num, x, y }; });
+  for (const { num, x, y } of disp) { if (Math.hypot(cx - x, cy - y) <= hitR) return num; }
+  return null;
+}
+
+function hitTestSchematicArc(canvasEl, anim, cx, cy) {
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvasEl.width, H = canvasEl.height;
+  const curves = animCurves(anim).filter(c => !isTextAnim(c))
+    .map(c => isPrimitiveAnim(c) ? primitiveToTopologyPath(c) : c).filter(Boolean);
+  if (!curves.length) return null;
+  let minRe = Infinity, maxRe = -Infinity, minIm = Infinity, maxIm = -Infinity;
+  for (const c of curves) for (const a of c.anchors) { minRe = Math.min(minRe, a.re); maxRe = Math.max(maxRe, a.re); minIm = Math.min(minIm, a.im); maxIm = Math.max(maxIm, a.im); }
+  if (!isFinite(minRe)) return null;
+  const PAD = 9 * dpr;
+  const sc = Math.min((W - PAD * 2) / Math.max(maxRe - minRe, 1e-6), (H - PAD * 2) / Math.max(maxIm - minIm, 1e-6));
+  const offX = (W - (maxRe - minRe) * sc) / 2, offY = (H - (maxIm - minIm) * sc) / 2;
+  const toC = pt => ({ x: offX + (pt.re - minRe) * sc, y: H - (offY + (pt.im - minIm) * sc) });
+  const { topoArcs } = computeObjectTopologyData(anim);
+  const curvesMap = new Map(curves.map(c => [c.id, c]));
+  const ctx = canvasEl.getContext('2d');
+  ctx.save();
+  ctx.lineWidth = 12 * dpr;
+  for (const arc of topoArcs) {
+    const c = curvesMap.get(arc.curveId);
+    if (!c) continue;
+    const isPolyline = isPolylineAnim(c);
+    const path = new Path2D();
+    let started = false;
+    for (let i = arc.fromIdx; i < arc.toIdx; i++) {
+      const p0 = c.anchors[i], p1 = c.anchors[i + 1], seg = c.segments[i];
+      if (!p0 || !p1) continue;
+      const { x: ax, y: ay } = toC(p0), { x: bx, y: by } = toC(p1);
+      if (!started) { path.moveTo(ax, ay); started = true; } else path.lineTo(ax, ay);
+      if (!isPolyline && seg?.h0 && seg?.h1) { const { x: cx0, y: cy0 } = toC(seg.h0), { x: cx1, y: cy1 } = toC(seg.h1); path.bezierCurveTo(cx0, cy0, cx1, cy1, bx, by); }
+      else path.lineTo(bx, by);
+    }
+    if (started && ctx.isPointInStroke(path, cx, cy)) { ctx.restore(); return arc.label; }
+  }
+  ctx.restore();
+  return null;
+}
+
+function hitTestSchematicRegion(canvasEl, anim, cx, cy) {
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvasEl.width, H = canvasEl.height;
+  const curves = animCurves(anim).filter(c => !isTextAnim(c))
+    .map(c => isPrimitiveAnim(c) ? primitiveToTopologyPath(c) : c).filter(Boolean);
+  if (!curves.length) return null;
+  let minRe = Infinity, maxRe = -Infinity, minIm = Infinity, maxIm = -Infinity;
+  for (const c of curves) for (const a of c.anchors) { minRe = Math.min(minRe, a.re); maxRe = Math.max(maxRe, a.re); minIm = Math.min(minIm, a.im); maxIm = Math.max(maxIm, a.im); }
+  if (!isFinite(minRe)) return null;
+  const PAD = 9 * dpr;
+  const sc = Math.min((W - PAD * 2) / Math.max(maxRe - minRe, 1e-6), (H - PAD * 2) / Math.max(maxIm - minIm, 1e-6));
+  const offX = (W - (maxRe - minRe) * sc) / 2, offY = (H - (maxIm - minIm) * sc) / 2;
+  const toC = pt => ({ x: offX + (pt.re - minRe) * sc, y: H - (offY + (pt.im - minIm) * sc) });
+  const curvesMap = new Map(curves.map(c => [c.id, c]));
+  const ctx = canvasEl.getContext('2d');
+  for (const region of (anim.regions ?? [])) {
+    const path = new Path2D();
+    let isFirst = true;
+    for (const edge of region.boundary) {
+      const c = curvesMap.get(edge.animId);
+      if (!c) continue;
+      const fwd = edge.endIdx > edge.startIdx;
+      const sMin = Math.min(edge.startIdx, edge.endIdx), sMax = Math.max(edge.startIdx, edge.endIdx);
+      if (fwd) {
+        for (let s = sMin; s < sMax; s++) {
+          const p0 = c.anchors[s], p1 = c.anchors[s + 1], seg = c.segments[s];
+          if (!p0 || !p1) continue;
+          const { x: ax, y: ay } = toC(p0), { x: bx, y: by } = toC(p1);
+          if (isFirst) { path.moveTo(ax, ay); isFirst = false; } else path.lineTo(ax, ay);
+          if (seg?.h0 && seg?.h1) { const { x: cx0, y: cy0 } = toC(seg.h0), { x: cx1, y: cy1 } = toC(seg.h1); path.bezierCurveTo(cx0, cy0, cx1, cy1, bx, by); }
+          else path.lineTo(bx, by);
+        }
+      } else {
+        for (let s = sMax - 1; s >= sMin; s--) {
+          const p0 = c.anchors[s], p1 = c.anchors[s + 1], seg = c.segments[s];
+          if (!p0 || !p1) continue;
+          const { x: ax, y: ay } = toC(p1), { x: bx, y: by } = toC(p0);
+          if (isFirst) { path.moveTo(ax, ay); isFirst = false; } else path.lineTo(ax, ay);
+          if (seg?.h0 && seg?.h1) { const { x: cx0, y: cy0 } = toC(seg.h1), { x: cx1, y: cy1 } = toC(seg.h0); path.bezierCurveTo(cx0, cy0, cx1, cy1, bx, by); }
+          else path.lineTo(bx, by);
+        }
       }
     }
-    for (const p of disp) { p.x += (p.ox - p.x) * 0.15; p.y += (p.oy - p.y) * 0.15; }
+    path.closePath();
+    if (ctx.isPointInPath(path, cx, cy)) return region.id;
   }
-  for (const p of disp) { p.x = Math.max(nodeR + 1, Math.min(W - nodeR - 1, p.x)); p.y = Math.max(nodeR + 1, Math.min(H - nodeR - 1, p.y)); }
-  const hitR = nodeR + 4 * dpr;
-  for (const { num, x, y } of disp) { if (Math.hypot(cx - x, cy - y) <= hitR) return num; }
   return null;
 }
 
@@ -20712,7 +21147,7 @@ function renderAnimListLegacy() {
   const _detailIdx = _detailItems.findIndex(it => it.type === 'anim' && it.item.id === anim.id);
   const objectLabelNumber = _detailIdx >= 0 ? getDrillPrefix() + (_detailIdx + 1) : animations.indexOf(anim) + 1;
   numSpan.textContent = `Object ${objectLabelNumber}`;
-  const _topoActive = drillObjectArc?.animId === anim.id || selectedObjectRegionId?.animId === anim.id;
+  const _topoActive = drillObjectArc?.animId === anim.id || (selectedRegionIds.size > 0 && selectedId === anim.id);
   if (_topoActive) {
     numSpan.style.cursor = 'pointer';
     numSpan.title = 'Back to object';
@@ -20914,31 +21349,71 @@ function renderAnimListLegacy() {
     detailEl.appendChild(schemWrap);
 
     const buildOpts = () => ({
-      selectedNodeNum:  -1,
-      hoveredNodeNum:   hoveredObjectNodeNum ?? -1,
-      selectedArcLabel: drillObjectArc?.animId === anim.id ? drillObjectArc.label : null,
-      hoveredArcLabel:  hoveredObjectArcLabel,
-      selectedRegionId: selectedObjectRegionId?.animId === anim.id ? selectedObjectRegionId.id : -1,
-      hoveredRegionId:  hoveredObjectRegionId,
+      hoveredNodeNum:    hoveredObjectNodeNum ?? -1,
+      selectedArcLabels: drillObjectArc?.animId === anim.id ? selectedArcKeys : new Set(),
+      hoveredArcLabel:   hoveredObjectArcLabel,
+      selectedRegionIds: selectedId === anim.id ? selectedRegionIds : new Set(),
+      hoveredRegionId:   hoveredObjectRegionId,
     });
     drawObjectSchematic(schemCanvas, anim, buildOpts());
 
     schemCanvas.addEventListener('mousemove', e => {
       const rect = schemCanvas.getBoundingClientRect();
       const px = (e.clientX - rect.left) * _dpr, py = (e.clientY - rect.top) * _dpr;
-      const hit = hitTestNodeBadge(schemCanvas, anim, px, py);
-      if (hit !== hoveredObjectNodeNum) {
-        hoveredObjectNodeNum = hit;
+      const nodeHit = hitTestNodeBadge(schemCanvas, anim, px, py);
+      const arcHit  = nodeHit === null ? hitTestSchematicArc(schemCanvas, anim, px, py) : null;
+      const regHit  = (nodeHit === null && arcHit === null) ? hitTestSchematicRegion(schemCanvas, anim, px, py) : null;
+      if (nodeHit !== hoveredObjectNodeNum || arcHit !== hoveredObjectArcLabel || regHit !== hoveredObjectRegionId) {
+        hoveredObjectNodeNum   = nodeHit;
+        hoveredObjectArcLabel  = arcHit;
+        hoveredObjectRegionId  = regHit;
+        schemCanvas.style.cursor = (arcHit !== null || regHit !== null) ? 'pointer' : '';
         drawObjectSchematic(schemCanvas, anim, buildOpts());
         detailEl.querySelectorAll('[data-node-num]').forEach(r =>
-          r.classList.toggle('node-hovered', Number(r.dataset.nodeNum) === hit));
+          r.classList.toggle('node-hovered', Number(r.dataset.nodeNum) === nodeHit));
       }
     });
     schemCanvas.addEventListener('mouseleave', () => {
-      if (hoveredObjectNodeNum !== null) {
-        hoveredObjectNodeNum = null;
+      const changed = hoveredObjectNodeNum !== null || hoveredObjectArcLabel !== null || hoveredObjectRegionId !== null;
+      if (changed) {
+        hoveredObjectNodeNum  = null;
+        hoveredObjectArcLabel = null;
+        hoveredObjectRegionId = null;
+        schemCanvas.style.cursor = '';
         drawObjectSchematic(schemCanvas, anim, buildOpts());
         detailEl.querySelectorAll('[data-node-num]').forEach(r => r.classList.remove('node-hovered'));
+      }
+    });
+    schemCanvas.addEventListener('click', e => {
+      e.stopPropagation();
+      const rect = schemCanvas.getBoundingClientRect();
+      const px = (e.clientX - rect.left) * _dpr, py = (e.clientY - rect.top) * _dpr;
+      // Dead zone: click within node dot center → do nothing (avoids ambiguous junction clicks)
+      {
+        const _bb = _schemBB(schemCanvas, anim);
+        if (_bb) {
+          const { essentialPoints: _eps } = computeObjectTopologyData(anim);
+          const _deadR = 5 * _dpr;
+          for (const ep of _eps) {
+            const { x, y } = _bb.toC(ep.pos);
+            if (Math.hypot(px - x, py - y) < _deadR) return;
+          }
+        }
+      }
+      const arcHit = hitTestSchematicArc(schemCanvas, anim, px, py);
+      if (arcHit !== null) {
+        const arc = topoArcs.find(a => a.label === arcHit);
+        if (arc) { selectTopologyArc(anim, arc); renderAnimList(); draw(); }
+        return;
+      }
+      const regHit = hitTestSchematicRegion(schemCanvas, anim, px, py);
+      if (regHit !== null) {
+        selectedObjectNode = null; drillObjectArc = null; selectedArcKeys = new Set();
+        for (const _c of animCurves(anim)) _c.activeSegments = new Set();
+        if (selectedRegionIds.has(regHit)) selectedRegionIds.delete(regHit);
+        else selectedRegionIds.add(regHit);
+        objectDetailTab = 'fill';
+        renderAnimList(); draw();
       }
     });
   }
@@ -20947,10 +21422,11 @@ function renderAnimListLegacy() {
   if (_lastDetailAnimId !== anim.id) {
     _lastDetailAnimId = anim.id;
     const _hasArcSel = drillObjectArc?.animId === anim.id;
-    const _hasRegSel = selectedObjectRegionId?.animId === anim.id;
-    if (!_hasArcSel && !_hasRegSel) { objectDetailTab = 'arcs'; selectedArcKeys = new Set(); }
-    else if (_hasRegSel && !_hasArcSel) { objectDetailTab = 'regions'; }
+    const _hasRegSel = selectedRegionIds.size > 0;
+    if (!_hasArcSel && !_hasRegSel) { objectDetailTab = 'outline'; selectedArcKeys = new Set(); }
+    else if (_hasRegSel && !_hasArcSel) { objectDetailTab = 'fill'; }
     regionFillSubTab = 1;
+    outlineSubTab = 1;
     _cvtBezierShowUI = false;
     _cvtBezierPreviewId = null;
     _cvtBezierN = 12;
@@ -21017,7 +21493,7 @@ function renderAnimListLegacy() {
         if (topoArcs.length > 0) {
           const _fa = topoArcs[0];
           drillObjectArc = { animId: anim.id, label: _fa.label, curveId: _fa.curveId, fromIdx: _fa.fromIdx, toIdx: _fa.toIdx };
-          selectedArcKeys = new Set([_fa.label]); objectDetailTab = 'arcs';
+          selectedArcKeys = new Set([_fa.label]); objectDetailTab = 'outline';
         }
         saveProject(); renderAnimList(); draw();
       });
@@ -21027,12 +21503,12 @@ function renderAnimListLegacy() {
     detailEl.appendChild(_cvtWrap);
   }
 
-  // ── 3-tab bar: Anchors | Arcs | Regions (primitives get only Arcs | Regions) ──
-  if (_isCvtPrimitive && objectDetailTab === 'anchors') objectDetailTab = 'arcs';
+  // ── 2-tab bar: Outline | Fill ──
+  if (objectDetailTab === 'anchors') objectDetailTab = 'outline';
   const _dtTabBar = document.createElement('div');
   _dtTabBar.className = 'color-tab-bar';
   _dtTabBar.style.cssText = 'margin-top:4px;padding:0 8px;';
-  (_isCvtPrimitive ? ['Arcs', 'Regions'] : ['Anchors', 'Arcs', 'Regions']).forEach(t => {
+  ['Outline', 'Fill'].forEach(t => {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'color-tab' + (objectDetailTab === t.toLowerCase() ? ' active' : '');
@@ -21041,6 +21517,7 @@ function renderAnimListLegacy() {
     btn.addEventListener('click', e => {
       e.stopPropagation();
       objectDetailTab = t.toLowerCase();
+      if (objectDetailTab === 'fill') autoSelectFillRegions(anim);
       renderAnimList();
     });
     _dtTabBar.appendChild(btn);
@@ -21049,238 +21526,204 @@ function renderAnimListLegacy() {
 
   const _dtContent = document.createElement('div');
   _dtContent.className = 'color-tab-content';
-  _dtContent.style.cssText = 'padding:6px;max-height:320px;overflow-y:auto;';
+  _dtContent.style.cssText = 'padding:10px;max-height:320px;overflow-y:auto;';
   _dtContent.addEventListener('mousedown', e => e.stopPropagation());
   _dtContent.addEventListener('click', e => e.stopPropagation());
   detailEl.appendChild(_dtContent);
 
   const _regions = anim.regions ?? [];
 
-  if (objectDetailTab === 'anchors') {
-    // ── Anchors tab ──
-    const _allCurves = animCurves(anim).filter(c => !isTextAnim(c) && !isPrimitiveAnim(c));
-    if (_allCurves.length === 0) {
-      const _note = document.createElement('div');
-      _note.style.cssText = 'padding:12px 4px;font-size:0.7rem;color:#6c7086;text-align:center;';
-      _note.textContent = 'No editable anchors.';
-      _dtContent.appendChild(_note);
-    }
-    for (const _ac of _allCurves) {
-      if (_allCurves.length > 1) {
-        const _chdr = document.createElement('div');
-        _chdr.style.cssText = 'font-size:0.6rem;color:#6c7086;padding:4px 2px 2px;border-top:1px solid #313244;margin-top:2px;';
-        _chdr.textContent = `Curve ${_allCurves.indexOf(_ac) + 1}`;
-        _dtContent.appendChild(_chdr);
-      }
-      for (let _ai = 0; _ai < _ac.anchors.length; _ai++) {
-        const _isOpenEndpt = !_ac.closed && (_ai === 0 || _ai === _ac.anchors.length - 1);
-        const _isPromoted = !!(_ac.promotedAnchors?.[_ai]);
-        const _isNode = _isOpenEndpt || _isPromoted;
-        const _isLocked = !!(_ac.anchorLocked?.[_ai]);
+  if (objectDetailTab === 'outline') {
+    // ── Outline tab ──
 
-        const _arow = document.createElement('div');
-        _arow.style.cssText = 'display:flex;align-items:center;gap:4px;padding:2px 0;';
+    const _DROPPER_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21l1.5-4.5L15.5 6l3 3L8 20.5z"/><path d="M18.5 6l1.5-1.5c.8-.8.8-2.2 0-3s-2.2-.8-3 0L15.5 3"/></svg>`;
+    const _appendOutlineDropper = (row, targetKey) => {
+      const _isActive = eyedropperTarget === targetKey && eyedropperAnimId === anim.id;
+      const _db = document.createElement('button');
+      _db.className = 'eyedropper-btn' + (_isActive ? ' active' : '');
+      _db.title = _isActive ? 'Click a canvas to sample color (Escape to cancel)' : 'Pick color from canvas';
+      _db.innerHTML = _DROPPER_SVG + (_isActive ? ' Sampling…' : ' Sample');
+      _db.addEventListener('click', e => {
+        e.stopPropagation();
+        if (_isActive) { deactivateEyedropper(); } else { eyedropperTarget = targetKey; eyedropperAnimId = anim.id; updateCursor(); }
+        renderAnimList();
+      });
+      row.appendChild(_db);
+    };
 
-        const _nodeDot = document.createElement('span');
-        _nodeDot.style.cssText = 'font-size:10px;min-width:10px;color:' + (_isNode ? '#cdd6f4' : '#45475a') + ';';
-        _nodeDot.textContent = _isNode ? '●' : '○';
-        _arow.appendChild(_nodeDot);
-
-        const _aLbl = document.createElement('span');
-        _aLbl.style.cssText = 'flex:1;font-size:0.65rem;color:#cdd6f4;';
-        _aLbl.textContent = _isOpenEndpt ? `Anchor ${_ai} (endpoint)` : `Anchor ${_ai}`;
-        _arow.appendChild(_aLbl);
-
-        // Lock toggle
-        const _lockBtn = document.createElement('button');
-        _lockBtn.style.cssText = 'width:22px;height:20px;border:1px solid #313244;border-radius:4px;background:' + (_isLocked ? '#45475a' : '#1e1e2e') + ';cursor:pointer;font-size:9px;color:#cdd6f4;padding:0;flex-shrink:0;';
-        _lockBtn.title = _isLocked ? 'Unlock anchor' : 'Lock anchor';
-        _lockBtn.textContent = _isLocked ? '🔒' : '🔓';
-        _lockBtn.addEventListener('click', e => {
-          e.stopPropagation();
-          if (!_ac.anchorLocked) _ac.anchorLocked = Array(_ac.anchors.length).fill(false);
-          _ac.anchorLocked[_ai] = !_isLocked;
-          saveProject(); draw(); renderAnimList();
-        });
-        _arow.appendChild(_lockBtn);
-
-        // Promote / Demote button (not for structural endpoints)
-        if (!_isOpenEndpt) {
-          const _pdBtn = document.createElement('button');
-          _pdBtn.style.cssText = 'height:20px;border:1px solid #313244;border-radius:4px;background:#1e1e2e;cursor:pointer;font-size:0.6rem;color:#cdd6f4;padding:0 5px;flex-shrink:0;';
-          _pdBtn.textContent = _isPromoted ? 'Demote' : 'Promote';
-          _pdBtn.addEventListener('click', e => {
-            e.stopPropagation();
-            pushUndo();
-            if (!_ac.promotedAnchors) _ac.promotedAnchors = Array(_ac.anchors.length).fill(false);
-            _ac.promotedAnchors[_ai] = !_isPromoted;
-            detectObjectTopology(anim);
-            saveProject(); renderAnimList(); draw();
-          });
-          _arow.appendChild(_pdBtn);
-        }
-
-        _dtContent.appendChild(_arow);
-      }
-    }
-
-  } else if (objectDetailTab === 'arcs') {
-    // ── Arcs tab ──
+    // ── Color | Style sub-tab bar ──
+    const _outSubBar = document.createElement('div');
+    _outSubBar.className = 'color-tab-bar';
+    ['Color', 'Style'].forEach((t, idx) => {
+      const _sb = document.createElement('button');
+      _sb.type = 'button';
+      _sb.className = 'color-tab' + (outlineSubTab === idx + 1 ? ' active' : '');
+      _sb.textContent = t;
+      _sb.style.cssText = 'flex:1;padding:4px 6px;font-size:0.65rem;';
+      _sb.addEventListener('click', e => { e.stopPropagation(); outlineSubTab = idx + 1; renderAnimList(); });
+      _outSubBar.appendChild(_sb);
+    });
+    _dtContent.appendChild(_outSubBar);
 
     if (_isCvtPrimitive) {
-      // Primitive circle/ellipse: show stroke controls directly
+      // Primitive circle/ellipse: Color | Style sub-tabs
       const _ctrlDiv = document.createElement('div');
-      _ctrlDiv.style.cssText = 'padding-top:4px;';
-      let _arcColorPreview = normalizeColorString(anim.color) || anim.color;
-      let _arcOpacityCtrl = null;
-      appendHslColorPicker(_ctrlDiv, anim.color, (color, meta = {}) => {
-        anim.color = color; saveProject(); draw();
-        if (meta.fromHueClick) renderAnimList();
-      }, { withUndo: true, fallbackHue: colorToHsl(anim.color).h,
-        onPreviewChange(hex) { _arcColorPreview = hex; _arcOpacityCtrl?.setTrack(opacitySliderTrack(hex)); } });
-      _arcOpacityCtrl = appendSliderRow(_ctrlDiv, 'Opacity', 0, 100, 1,
-        Math.round(clamp(anim.outlineOpacity ?? 1, 0, 1) * 100),
-        v => `${Math.round(v)}%`, v => { anim.outlineOpacity = clamp(parseFloat(v) / 100, 0, 1); saveProject(); draw(); },
-        false, { colorTrack: opacitySliderTrack(_arcColorPreview) });
-      appendSliderRow(_ctrlDiv, 'Thickness', 1, 10, 1, anim.thickness ?? 2,
-        v => `${Math.round(v)}`, v => { anim.thickness = parseInt(v, 10); saveProject(); draw(); },
-        false, { valAlign: 'center' });
+      _ctrlDiv.style.cssText = 'display:flex;flex-direction:column;gap:6px;';
+      if (outlineSubTab === 1) {
+        let _arcColorPreview = normalizeColorString(anim.color) || anim.color;
+        let _arcOpacityCtrl = null;
+        const _primRow = appendHslColorPicker(_ctrlDiv, anim.color, (color, meta = {}) => {
+          anim.color = color; saveProject(); draw();
+          if (meta.fromHueClick) renderAnimList();
+        }, { withUndo: true, fallbackHue: colorToHsl(anim.color).h,
+          onPreviewChange(hex) { _arcColorPreview = hex; _arcOpacityCtrl?.setTrack(opacitySliderTrack(hex)); } });
+        _appendOutlineDropper(_primRow, 'outline');
+        _arcOpacityCtrl = appendSliderRow(_ctrlDiv, 'Opacity', 0, 100, 1,
+          Math.round(clamp(anim.outlineOpacity ?? 1, 0, 1) * 100),
+          v => `${Math.round(v)}%`, v => { anim.outlineOpacity = clamp(parseFloat(v) / 100, 0, 1); saveProject(); draw(); },
+          false, { colorTrack: opacitySliderTrack(_arcColorPreview) });
+      } else {
+        appendSliderRow(_ctrlDiv, 'Thickness', 1, 10, 1, anim.thickness ?? 2,
+          v => `${Math.round(v)}`, v => { anim.thickness = parseInt(v, 10); saveProject(); draw(); },
+          false, { valAlign: 'center' });
+      }
       _dtContent.appendChild(_ctrlDiv);
     } else {
-
-    // Select All button
-    const _arcTopRow = document.createElement('div');
-    _arcTopRow.style.cssText = 'display:flex;gap:4px;margin-bottom:6px;align-items:center;';
-    const _selAllBtn = document.createElement('button');
-    _selAllBtn.style.cssText = 'height:22px;border:1px solid #313244;border-radius:4px;background:#1e1e2e;cursor:pointer;font-size:0.65rem;color:#cdd6f4;padding:0 8px;';
-    _selAllBtn.textContent = 'Select All';
-    _selAllBtn.addEventListener('click', e => {
-      e.stopPropagation();
-      selectedArcKeys = new Set(topoArcs.map(a => a.label));
-      if (topoArcs.length > 0) {
-        const _la = topoArcs[topoArcs.length - 1];
-        drillObjectArc = { animId: anim.id, label: _la.label, curveId: _la.curveId, fromIdx: _la.fromIdx, toIdx: _la.toIdx };
-      }
-      renderAnimList(); draw();
-    });
-    _arcTopRow.appendChild(_selAllBtn);
-    _dtContent.appendChild(_arcTopRow);
 
     if (topoArcs.length === 0) {
       const _note = document.createElement('div');
       _note.style.cssText = 'font-size:0.7rem;color:#6c7086;padding:8px 2px;';
       _note.textContent = 'No arcs detected. Draw a curve to get started.';
       _dtContent.appendChild(_note);
-    }
+    } else {
+      const _selArcObjs = topoArcs.filter(a => selectedArcKeys.has(a.label));
+      const _arcCtrlDiv = document.createElement('div');
+      _arcCtrlDiv.style.cssText = 'display:flex;flex-direction:column;gap:6px;';
 
-    for (const _arc of topoArcs) {
-      const _arcKey = _arc.label;
-      const _arcSel = selectedArcKeys.has(_arcKey);
-      const _arcStyle = getArcStyle(anim, _arc.curveId, _arc.fromIdx, _arc.toIdx);
-      const _effColor = _arcStyle?.color ?? anim.color;
-      const _normColor = normalizeColorString(_effColor) || _effColor;
-
-      const _arcRow = document.createElement('div');
-      _arcRow.style.cssText = 'display:flex;align-items:center;gap:6px;padding:3px 4px;cursor:pointer;border-radius:4px;margin-bottom:1px;background:' + (_arcSel ? '#313244' : 'transparent') + ';';
-
-      const _swatch = document.createElement('div');
-      _swatch.style.cssText = `width:13px;height:13px;border-radius:3px;background:${_normColor};border:1px solid #45475a;flex-shrink:0;`;
-      _arcRow.appendChild(_swatch);
-
-      const _arcLblSpan = document.createElement('span');
-      _arcLblSpan.style.cssText = 'flex:1;font-size:0.7rem;color:#cdd6f4;';
-      _arcLblSpan.textContent = _arc.label;
-      _arcRow.appendChild(_arcLblSpan);
-
-      const _arcCb = document.createElement('input');
-      _arcCb.type = 'checkbox';
-      _arcCb.checked = _arcSel;
-      _arcCb.style.cssText = 'cursor:pointer;flex-shrink:0;accent-color:#89b4fa;';
-      _arcCb.addEventListener('change', e => {
-        e.stopPropagation();
-        if (_arcCb.checked) {
-          selectedArcKeys.add(_arcKey);
-          drillObjectArc = { animId: anim.id, label: _arc.label, curveId: _arc.curveId, fromIdx: _arc.fromIdx, toIdx: _arc.toIdx };
+      if (_selArcObjs.length === 0) {
+        // No arc selected — global stroke controls
+        if (outlineSubTab === 1) {
+          let _gColorPreview = normalizeColorString(anim.color) || anim.color;
+          let _gOpacityCtrl = null;
+          const _gRow = appendHslColorPicker(_arcCtrlDiv, anim.color, (color, meta = {}) => {
+            anim.color = color; saveProject(); draw();
+            if (meta.fromHueClick) renderAnimList();
+          }, { withUndo: true, fallbackHue: colorToHsl(anim.color).h,
+            onPreviewChange(hex) { _gColorPreview = hex; _gOpacityCtrl?.setTrack(opacitySliderTrack(hex)); } });
+          _appendOutlineDropper(_gRow, 'outline');
+          _gOpacityCtrl = appendSliderRow(_arcCtrlDiv, 'Opacity', 0, 100, 1,
+            Math.round(clamp(anim.outlineOpacity ?? 1, 0, 1) * 100),
+            v => `${Math.round(v)}%`, v => { anim.outlineOpacity = clamp(parseFloat(v) / 100, 0, 1); saveProject(); draw(); },
+            false, { colorTrack: opacitySliderTrack(_gColorPreview) });
         } else {
-          selectedArcKeys.delete(_arcKey);
-          if (drillObjectArc?.label === _arcKey) drillObjectArc = null;
+          appendSliderRow(_arcCtrlDiv, 'Thickness', 1, 10, 1, anim.thickness ?? 2,
+            v => `${Math.round(v)}`, v => { anim.thickness = parseInt(v, 10); saveProject(); draw(); },
+            false, { valAlign: 'center' });
+          const _gSoftWrap = document.createElement('div');
+          _gSoftWrap.style.cssText = 'display:flex;flex-direction:column;gap:0;';
+          const _gSoftLabel = document.createElement('div');
+          _gSoftLabel.style.cssText = 'font-size:0.65rem;color:#a6adc8;padding:4px 8px 0 8px;';
+          _gSoftLabel.textContent = 'Softness';
+          _gSoftWrap.appendChild(_gSoftLabel);
+          appendSliderRow(_gSoftWrap, '', 0, 100, 1, Math.round((anim.innerSoftness ?? 0) * 100),
+            v => `${Math.round(v)}%`, v => { anim.innerSoftness = parseFloat(v) / 100; saveProject(); draw(); }, false);
+          appendSliderRow(_gSoftWrap, '', 0, 100, 1, Math.round((anim.outerSoftness ?? 0) * 100),
+            v => `${Math.round(v)}%`, v => { anim.outerSoftness = parseFloat(v) / 100; saveProject(); draw(); }, false);
+          _gSoftWrap.querySelectorAll('label').forEach(l => l.style.display = 'none');
+          _arcCtrlDiv.appendChild(_gSoftWrap);
         }
-        renderAnimList(); draw();
-      });
-      _arcRow.appendChild(_arcCb);
+      } else {
+        // Arc(s) selected — arc-specific controls with disagreement detection
+        const _firstArc = _selArcObjs[0];
+        const _firstStyle = getArcStyle(anim, _firstArc.curveId, _firstArc.fromIdx, _firstArc.toIdx);
+        const _isWholeArc = topoArcs.length === 1;
+        const _allSelected = selectedArcKeys.size === topoArcs.length;
+        const _initArcColor = _firstStyle?.color ?? anim.color;
+        let _arcColorPreview = normalizeColorString(_initArcColor) || _initArcColor;
+        let _arcOpacityCtrl = null;
 
-      _arcRow.addEventListener('click', e => {
-        e.stopPropagation();
-        if (e.target === _arcCb) return;
-        if (selectedArcKeys.has(_arcKey)) {
-          selectedArcKeys.delete(_arcKey);
-          if (drillObjectArc?.label === _arcKey) drillObjectArc = null;
-        } else {
-          selectedArcKeys.add(_arcKey);
-          drillObjectArc = { animId: anim.id, label: _arc.label, curveId: _arc.curveId, fromIdx: _arc.fromIdx, toIdx: _arc.toIdx };
-        }
-        renderAnimList(); draw();
-      });
+        const _getArcOpacity = a => { const s = getArcStyle(anim, a.curveId, a.fromIdx, a.toIdx); return s?.opacity ?? anim.outlineOpacity ?? 1; };
+        const _getArcThick  = a => { const s = getArcStyle(anim, a.curveId, a.fromIdx, a.toIdx); return s?.thickness ?? anim.thickness ?? 2; };
+        const _getArcInner  = a => { const s = getArcStyle(anim, a.curveId, a.fromIdx, a.toIdx); return s?.innerSoftness ?? anim.innerSoftness ?? 0; };
+        const _getArcOuter  = a => { const s = getArcStyle(anim, a.curveId, a.fromIdx, a.toIdx); return s?.outerSoftness ?? anim.outerSoftness ?? 0; };
+        const _initArcOpacity = _getArcOpacity(_firstArc);
+        const _initArcThick   = _getArcThick(_firstArc);
+        const _initArcInner   = _getArcInner(_firstArc);
+        const _initArcOuter   = _getArcOuter(_firstArc);
+        const _mixedOp = _selArcObjs.length > 1 && !_selArcObjs.every(a => _getArcOpacity(a) === _initArcOpacity);
+        const _mixedTh = _selArcObjs.length > 1 && !_selArcObjs.every(a => _getArcThick(a)  === _initArcThick);
+        const _mixedIn = _selArcObjs.length > 1 && !_selArcObjs.every(a => _getArcInner(a)  === _initArcInner);
+        const _mixedOu = _selArcObjs.length > 1 && !_selArcObjs.every(a => _getArcOuter(a)  === _initArcOuter);
 
-      _dtContent.appendChild(_arcRow);
-    }
-
-    // Controls for selected arc(s)
-    const _selArcObjs = topoArcs.filter(a => selectedArcKeys.has(a.label));
-    if (_selArcObjs.length > 0) {
-      const _ctrlDiv = document.createElement('div');
-      _ctrlDiv.style.cssText = 'margin-top:6px;border-top:1px solid #313244;padding-top:6px;';
-
-      const _firstArc = _selArcObjs[0];
-      const _firstStyle = getArcStyle(anim, _firstArc.curveId, _firstArc.fromIdx, _firstArc.toIdx);
-      const _isWholeArc = topoArcs.length === 1;
-      const _allSelected = selectedArcKeys.size === topoArcs.length;
-      const _initArcColor = _firstStyle?.color ?? anim.color;
-      let _arcColorPreview = normalizeColorString(_initArcColor) || _initArcColor;
-      let _arcOpacityCtrl = null;
-
-      const _applyArc = updates => {
-        if (_isWholeArc && _allSelected) {
-          if ('color' in updates) anim.color = updates.color;
-          if ('opacity' in updates) anim.outlineOpacity = updates.opacity;
-          if ('thickness' in updates) anim.thickness = updates.thickness;
-          if ('innerSoftness' in updates || 'outerSoftness' in updates) {
+        const _applyArc = updates => {
+          if (_isWholeArc && _allSelected) {
+            if ('color' in updates) anim.color = updates.color;
+            if ('opacity' in updates) anim.outlineOpacity = updates.opacity;
+            if ('thickness' in updates) anim.thickness = updates.thickness;
+            if ('innerSoftness' in updates || 'outerSoftness' in updates)
+              for (const _sa of _selArcObjs) setArcStyle(anim, _sa.curveId, _sa.fromIdx, _sa.toIdx, updates);
+          } else {
             for (const _sa of _selArcObjs) setArcStyle(anim, _sa.curveId, _sa.fromIdx, _sa.toIdx, updates);
           }
+          saveProject(); draw();
+        };
+
+        if (outlineSubTab === 1) {
+          const _arcRow = appendHslColorPicker(_arcCtrlDiv, _initArcColor, (color, meta = {}) => {
+            _applyArc({ color });
+            if (meta.fromHueClick) renderAnimList();
+          }, { withUndo: true, fallbackHue: colorToHsl(_initArcColor).h,
+            onPreviewChange(hex) { _arcColorPreview = hex; _arcOpacityCtrl?.setTrack(opacitySliderTrack(hex)); } });
+          _appendOutlineDropper(_arcRow, 'arc-stroke');
+
+          _arcOpacityCtrl = appendSliderRow(_arcCtrlDiv, 'Opacity', 0, 100, 1, Math.round(clamp(_initArcOpacity, 0, 1) * 100),
+            v => `${Math.round(v)}%`, v => { _applyArc({ opacity: clamp(parseFloat(v) / 100, 0, 1) }); },
+            false, { colorTrack: opacitySliderTrack(_arcColorPreview), mixed: _mixedOp });
         } else {
-          for (const _sa of _selArcObjs) setArcStyle(anim, _sa.curveId, _sa.fromIdx, _sa.toIdx, updates);
+          // Style sub-tab
+          appendSliderRow(_arcCtrlDiv, 'Thickness', 1, 10, 1, _initArcThick,
+            v => `${Math.round(v)}`, v => { _applyArc({ thickness: parseInt(v, 10) }); },
+            false, { valAlign: 'center', mixed: _mixedTh });
+
+          // Softness — two unlabeled sliders grouped under one heading
+          const _softWrap = document.createElement('div');
+          _softWrap.style.cssText = 'display:flex;flex-direction:column;gap:0;';
+          const _softLabel = document.createElement('div');
+          _softLabel.style.cssText = 'font-size:0.65rem;color:#a6adc8;padding:4px 8px 0 8px;';
+          _softLabel.textContent = 'Softness';
+          _softWrap.appendChild(_softLabel);
+          appendSliderRow(_softWrap, '', 0, 100, 1, Math.round(_initArcInner * 100),
+            v => `${Math.round(v)}%`, v => { _applyArc({ innerSoftness: parseFloat(v) / 100 }); }, false, { mixed: _mixedIn });
+          appendSliderRow(_softWrap, '', 0, 100, 1, Math.round(_initArcOuter * 100),
+            v => `${Math.round(v)}%`, v => { _applyArc({ outerSoftness: parseFloat(v) / 100 }); }, false, { mixed: _mixedOu });
+          _softWrap.querySelectorAll('label').forEach(l => l.style.display = 'none');
+          _arcCtrlDiv.appendChild(_softWrap);
         }
-        saveProject(); draw();
-      };
+      }
 
-      appendHslColorPicker(_ctrlDiv, _initArcColor, (color, meta = {}) => {
-        _applyArc({ color });
-        if (meta.fromHueClick) renderAnimList();
-      }, { withUndo: true, fallbackHue: colorToHsl(_initArcColor).h,
-        onPreviewChange(hex) { _arcColorPreview = hex; _arcOpacityCtrl?.setTrack(opacitySliderTrack(hex)); } });
-
-      const _initArcOpacity = _firstStyle?.opacity ?? anim.outlineOpacity ?? 1;
-      _arcOpacityCtrl = appendSliderRow(_ctrlDiv, 'Opacity', 0, 100, 1, Math.round(clamp(_initArcOpacity, 0, 1) * 100),
-        v => `${Math.round(v)}%`, v => { _applyArc({ opacity: clamp(parseFloat(v) / 100, 0, 1) }); },
-        false, { colorTrack: opacitySliderTrack(_arcColorPreview) });
-
-      appendSliderRow(_ctrlDiv, 'Thickness', 1, 10, 1, _firstStyle?.thickness ?? anim.thickness ?? 2,
-        v => `${Math.round(v)}`, v => { _applyArc({ thickness: parseInt(v, 10) }); },
-        false, { valAlign: 'center' });
-
-      appendSliderRow(_ctrlDiv, 'Inner Edge', 0, 100, 1, Math.round((_firstStyle?.innerSoftness ?? 0) * 100),
-        v => `${Math.round(v)}%`, v => { _applyArc({ innerSoftness: parseFloat(v) / 100 }); }, false, {});
-
-      appendSliderRow(_ctrlDiv, 'Outer Edge', 0, 100, 1, Math.round((_firstStyle?.outerSoftness ?? 0) * 100),
-        v => `${Math.round(v)}%`, v => { _applyArc({ outerSoftness: parseFloat(v) / 100 }); }, false, {});
-
-      _dtContent.appendChild(_ctrlDiv);
+      _dtContent.appendChild(_arcCtrlDiv);
     }
 
-    } // end else (!_isCvtPrimitive) for arcs tab
+    } // end else (!_isCvtPrimitive) for outline tab
 
   } else {
     // ── Regions tab ──
+
+    const _FILL_DROPPER_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21l1.5-4.5L15.5 6l3 3L8 20.5z"/><path d="M18.5 6l1.5-1.5c.8-.8.8-2.2 0-3s-2.2-.8-3 0L15.5 3"/></svg>`;
+    const _appendFillDropper = (row, targetKey, regionId) => {
+      const _isActive = eyedropperTarget === targetKey && eyedropperAnimId === anim.id && eyedropperRegionId === regionId;
+      const _db = document.createElement('button');
+      _db.className = 'eyedropper-btn' + (_isActive ? ' active' : '');
+      _db.title = _isActive ? 'Click a canvas to sample color (Escape to cancel)' : 'Pick color from canvas';
+      _db.innerHTML = _FILL_DROPPER_SVG + (_isActive ? ' Sampling…' : ' Sample');
+      _db.addEventListener('click', e => {
+        e.stopPropagation();
+        if (_isActive) { deactivateEyedropper(); }
+        else { eyedropperTarget = targetKey; eyedropperAnimId = anim.id; eyedropperRegionId = regionId; eyedropperCurveId = null; updateCursor(); }
+        renderAnimList();
+      });
+      row.appendChild(_db);
+    };
 
     if (_isCvtPrimitive) {
       // Primitive circle/ellipse: show fill controls directly
@@ -21300,101 +21743,50 @@ function renderAnimListLegacy() {
       _dtContent.appendChild(_fillWrap);
     } else {
 
-    // Top buttons
-    const _regTopRow = document.createElement('div');
-    _regTopRow.style.cssText = 'display:flex;gap:4px;margin-bottom:6px;align-items:center;';
-
-    const _regSelAllBtn = document.createElement('button');
-    _regSelAllBtn.style.cssText = 'height:22px;border:1px solid #313244;border-radius:4px;background:#1e1e2e;cursor:pointer;font-size:0.65rem;color:#cdd6f4;padding:0 8px;';
-    _regSelAllBtn.textContent = 'Select All';
-    _regSelAllBtn.addEventListener('click', e => {
-      e.stopPropagation();
-      if (_regions.length > 0) { selectedObjectRegionId = { animId: anim.id, id: _regions[0].id }; anim._treatRegionsAsOne = false; }
-      renderAnimList(); draw();
-    });
-    _regTopRow.appendChild(_regSelAllBtn);
-
     const _treatIsOne = !!anim._treatRegionsAsOne;
-    const _treatBtn = document.createElement('button');
-    _treatBtn.style.cssText = 'height:22px;border:1px solid #313244;border-radius:4px;background:' + (_treatIsOne ? '#45475a' : '#1e1e2e') + ';cursor:pointer;font-size:0.65rem;color:' + (_treatIsOne ? '#cdd6f4' : '#6c7086') + ';padding:0 8px;';
-    _treatBtn.textContent = 'Treat as One';
-    _treatBtn.addEventListener('click', e => {
-      e.stopPropagation();
-      anim._treatRegionsAsOne = !_treatIsOne;
-      if (anim._treatRegionsAsOne) selectedObjectRegionId = null;
-      renderAnimList(); draw();
-    });
-    _regTopRow.appendChild(_treatBtn);
-    _dtContent.appendChild(_regTopRow);
+    const _selRegObjs = _regions.filter(r => selectedRegionIds.has(r.id));
+    const _isSubset = _selRegObjs.length > 0 && _selRegObjs.length < _regions.length;
+    const _showTreat = !_isSubset;
 
     if (_regions.length === 0) {
       const _note = document.createElement('div');
       _note.style.cssText = 'font-size:0.7rem;color:#6c7086;padding:8px 2px;';
       _note.textContent = 'No regions. Regions form where curves enclose an area.';
       _dtContent.appendChild(_note);
-    }
+    } else {
+      // Fill controls — fall back to first region when nothing is explicitly selected
+      const _activeReg = _treatIsOne ? _regions[0] : (_selRegObjs[0] ?? _regions[0]);
+      const _applyTargets = _treatIsOne ? _regions : (_selRegObjs.length > 0 ? _selRegObjs : [_regions[0]]);
 
-    for (const _reg of _regions) {
-      const _regSel = selectedObjectRegionId?.id === _reg.id && !anim._treatRegionsAsOne;
-      const _rColor = _reg.fillColor || anim.color;
-      const _rNorm = normalizeColorString(_rColor) || _rColor;
-      const _rIdx = _regions.indexOf(_reg);
-
-      const _regRow = document.createElement('div');
-      _regRow.style.cssText = 'display:flex;align-items:center;gap:6px;padding:3px 4px;cursor:pointer;border-radius:4px;margin-bottom:1px;background:' + (_regSel ? '#313244' : 'transparent') + ';';
-
-      const _rSwatch = document.createElement('div');
-      _rSwatch.style.cssText = `width:13px;height:13px;border-radius:3px;background:${_rNorm};border:1px solid #45475a;flex-shrink:0;opacity:${_reg.fillOpacity ?? 1};`;
-      _regRow.appendChild(_rSwatch);
-
-      const _rLbl = document.createElement('span');
-      _rLbl.style.cssText = 'flex:1;font-size:0.7rem;color:#cdd6f4;';
-      _rLbl.textContent = regionLabel(_reg, topoArcs) || `Region ${_rIdx + 1}`;
-      _regRow.appendChild(_rLbl);
-
-      _regRow.addEventListener('click', e => {
-        e.stopPropagation();
-        selectedObjectRegionId = { animId: anim.id, id: _reg.id };
-        anim._treatRegionsAsOne = false;
-        objectDetailTab = 'regions';
-        renderAnimList(); draw();
-      });
-
-      _dtContent.appendChild(_regRow);
-    }
-
-    // Fill controls for selected/treated region
-    const _activeReg = (!anim._treatRegionsAsOne && selectedObjectRegionId?.animId === anim.id)
-      ? _regions.find(r => r.id === selectedObjectRegionId.id) ?? null
-      : (anim._treatRegionsAsOne && _regions.length > 0 ? _regions[0] : null);
-
-    if (_activeReg) {
       const _fillWrap = document.createElement('div');
-      _fillWrap.style.cssText = 'margin-top:6px;border-top:1px solid #313244;padding-top:6px;';
+      _fillWrap.style.cssText = 'display:flex;flex-direction:column;gap:6px;';
 
       const _fillStyle = _activeReg.fillStyle || 'solid';
       const _hasColor2 = _fillStyle !== 'solid';
 
+      // Disagreement detection (for multi-select, not Treat as One)
+      const _multiSel = !_treatIsOne && _selRegObjs.length > 1;
+      const _initFillOpacity = _activeReg.fillOpacity ?? 1;
+      const _mixedFillOp = _multiSel && !_selRegObjs.every(r => (r.fillOpacity ?? 1) === _initFillOpacity);
+
+      // Lock to Style sub-tab while in contour boundary select mode
+      if (contourSelectMode?.regionId === _activeReg.id) regionFillSubTab = 3;
       // Sub-tabs: Color 1 | Color 2 | Style
       const _subBar = document.createElement('div');
       _subBar.className = 'color-tab-bar';
-      _subBar.style.marginBottom = '6px';
       ['Color 1', 'Color 2', 'Style'].forEach((t, idx) => {
         const _sb = document.createElement('button');
         _sb.type = 'button';
         _sb.className = 'color-tab' + (regionFillSubTab === idx + 1 ? ' active' : '');
         _sb.textContent = t;
-        _sb.style.cssText = 'flex:1;padding:3px 4px;font-size:0.65rem;';
+        _sb.style.cssText = 'flex:1;padding:4px 6px;font-size:0.65rem;';
         _sb.disabled = (idx === 1 && !_hasColor2);
         _sb.addEventListener('click', e => { e.stopPropagation(); regionFillSubTab = idx + 1; renderAnimList(); });
         _subBar.appendChild(_sb);
       });
       _fillWrap.appendChild(_subBar);
 
-      const _applyReg = updates => {
-        const _targets = anim._treatRegionsAsOne ? _regions : [_activeReg];
-        _targets.forEach(r => Object.assign(r, updates));
-      };
+      const _applyReg = updates => { _applyTargets.forEach(r => Object.assign(r, updates)); };
 
       if (regionFillSubTab === 1) {
         // Color 1
@@ -21407,14 +21799,15 @@ function renderAnimListLegacy() {
         }
         let _c1Prev = normalizeColorString(_activeReg.fillColor) || _activeReg.fillColor;
         let _c1Op = null;
-        appendHslColorPicker(_fillWrap, _activeReg.fillColor, (color, meta = {}) => {
+        const _c1Row = appendHslColorPicker(_fillWrap, _activeReg.fillColor, (color, meta = {}) => {
           _applyReg({ fillColor: color });
           saveProject(); if (meta.fromHueClick) renderAnimList(); draw();
         }, { withUndo: true, fallbackHue: colorToHsl(_activeReg.fillColor).h,
           onPreviewChange(hex) { _c1Prev = hex; _c1Op?.setTrack(opacitySliderTrack(hex)); } });
-        _c1Op = appendSliderRow(_fillWrap, 'Opacity', 0, 100, 1, Math.round((_activeReg.fillOpacity ?? 1) * 100),
+        _appendFillDropper(_c1Row, 'region-fill', _activeReg.id);
+        _c1Op = appendSliderRow(_fillWrap, 'Opacity', 0, 100, 1, Math.round(_initFillOpacity * 100),
           v => `${Math.round(v)}%`, v => { _applyReg({ fillOpacity: clamp(parseFloat(v) / 100, 0, 1) }); saveProject(); draw(); },
-          false, { colorTrack: opacitySliderTrack(_c1Prev) });
+          false, { colorTrack: opacitySliderTrack(_c1Prev), mixed: _mixedFillOp });
 
       } else if (regionFillSubTab === 2) {
         // Color 2
@@ -21425,32 +21818,53 @@ function renderAnimListLegacy() {
           _fillWrap.appendChild(_no2);
         } else {
           const _c2Init = _activeReg.gradientToColor || _activeReg.fillColor || anim.color;
+          const _initGradOp = _activeReg.gradientToOpacity ?? 0;
+          const _mixedGradOp = _multiSel && !_selRegObjs.every(r => (r.gradientToOpacity ?? 0) === _initGradOp);
           let _c2Prev = normalizeColorString(_c2Init) || _c2Init;
           let _c2Op = null;
-          appendHslColorPicker(_fillWrap, _c2Init, (color, meta = {}) => {
+          const _c2Row = appendHslColorPicker(_fillWrap, _c2Init, (color, meta = {}) => {
             _applyReg({ gradientToColor: color });
             saveProject(); if (meta.fromHueClick) renderAnimList(); draw();
           }, { withUndo: true, fallbackHue: colorToHsl(_activeReg.fillColor || anim.color).h,
             onPreviewChange(hex) { _c2Prev = hex; _c2Op?.setTrack(opacitySliderTrack(hex)); } });
-          _c2Op = appendSliderRow(_fillWrap, 'Opacity', 0, 100, 1, Math.round((_activeReg.gradientToOpacity ?? 0) * 100),
+          _appendFillDropper(_c2Row, 'region-fill2', _activeReg.id);
+          _c2Op = appendSliderRow(_fillWrap, 'Opacity', 0, 100, 1, Math.round(_initGradOp * 100),
             v => `${Math.round(v)}%`, v => { _applyReg({ gradientToOpacity: clamp(parseFloat(v) / 100, 0, 1) }); saveProject(); draw(); },
-            false, { colorTrack: opacitySliderTrack(_c2Prev) });
+            false, { colorTrack: opacitySliderTrack(_c2Prev), mixed: _mixedGradOp });
         }
 
       } else {
         // Style
+        if (_regions.length > 0 && _showTreat) {
+          const _treatRow = document.createElement('div');
+          _treatRow.style.cssText = 'display:flex;gap:4px;margin-bottom:4px;align-items:center;';
+          const _treatBtn = document.createElement('button');
+          _treatBtn.style.cssText = 'height:22px;border:1px solid #313244;border-radius:4px;background:' + (_treatIsOne ? '#45475a' : '#1e1e2e') + ';cursor:pointer;font-size:0.65rem;color:' + (_treatIsOne ? '#cdd6f4' : '#6c7086') + ';padding:0 8px;';
+          _treatBtn.textContent = 'Treat as One';
+          _treatBtn.addEventListener('click', e => {
+            e.stopPropagation();
+            anim._treatRegionsAsOne = !_treatIsOne;
+            if (anim._treatRegionsAsOne) selectedRegionIds = new Set();
+            renderAnimList(); draw();
+          });
+          _treatRow.appendChild(_treatBtn);
+          _fillWrap.appendChild(_treatRow);
+        }
+        const _isGradFam = _fillStyle === 'gradient' || _fillStyle === 'contour-gradient';
         const _styleRow = document.createElement('div');
         _styleRow.className = 'fill-style-row';
         [{ key: 'solid', title: 'Solid' }, { key: 'gradient', title: 'Gradient' }, { key: 'pattern', title: 'Pattern' }].forEach(({ key, title }) => {
           const _fsb = document.createElement('button');
-          _fsb.className = 'fill-style-btn' + (_fillStyle === key ? ' active' : '');
+          const _isActive = key === 'gradient' ? _isGradFam : _fillStyle === key;
+          _fsb.className = 'fill-style-btn' + (_isActive ? ' active' : '');
           _fsb.title = title;
           _fsb.appendChild(makeFillStyleIcon(key));
           _fsb.addEventListener('click', e => {
             e.stopPropagation();
-            if (_fillStyle !== key) {
-              pushUndo(); _applyReg({ fillStyle: key });
-              if (key !== 'solid' && !_activeReg.gradientToColor) _applyReg({ gradientToColor: _activeReg.fillColor || anim.color, gradientToOpacity: 0 });
+            const _newStyle = key === 'gradient' ? (_isGradFam ? _fillStyle : 'gradient') : key;
+            if (_fillStyle !== _newStyle) {
+              pushUndo(); _applyReg({ fillStyle: _newStyle });
+              if (_newStyle !== 'solid' && !_activeReg.gradientToColor) _applyReg({ gradientToColor: _activeReg.fillColor || anim.color, gradientToOpacity: 0 });
               saveProject(); renderAnimList(); draw();
             }
           });
@@ -21458,7 +21872,30 @@ function renderAnimListLegacy() {
         });
         _fillWrap.appendChild(_styleRow);
 
-        if (_fillStyle === 'gradient' || _fillStyle === 'contour-gradient') {
+        // Gradient sub-type: Linear | Contour
+        if (_isGradFam) {
+          const _subRow = document.createElement('div');
+          _subRow.className = 'fill-style-row';
+          _subRow.style.marginTop = '4px';
+          [{ key: 'gradient', title: 'Linear' }, { key: 'contour-gradient', title: 'Contour' }].forEach(({ key, title }) => {
+            const _gsb = document.createElement('button');
+            _gsb.className = 'fill-style-btn' + (_fillStyle === key ? ' active' : '');
+            _gsb.title = title;
+            _gsb.appendChild(makeFillStyleIcon(key));
+            _gsb.addEventListener('click', e => {
+              e.stopPropagation();
+              if (_fillStyle !== key) {
+                pushUndo(); _applyReg({ fillStyle: key });
+                if (!_activeReg.gradientToColor) _applyReg({ gradientToColor: _activeReg.fillColor || anim.color, gradientToOpacity: 0 });
+                saveProject(); renderAnimList(); draw();
+              }
+            });
+            _subRow.appendChild(_gsb);
+          });
+          _fillWrap.appendChild(_subRow);
+        }
+
+        if (_fillStyle === 'gradient') {
           const _wRow = document.createElement('div');
           _wRow.className = 'direction-wheel-row';
           const _wLbl = document.createElement('span'); _wLbl.className = 'direction-wheel-label'; _wLbl.textContent = 'Direction';
@@ -21485,8 +21922,6 @@ function renderAnimListLegacy() {
           });
           _fillWrap.appendChild(_patRow);
 
-          // Pattern direction and spacing (reuse existing controls via appendRegionColorExpansion helpers)
-          const _patAngle = _activeReg.patternAngle ?? 0;
           const _patSpacing = _activeReg.patternSpacing ?? 20;
           const _pWRow = document.createElement('div');
           _pWRow.className = 'direction-wheel-row';
@@ -21498,6 +21933,87 @@ function renderAnimListLegacy() {
           appendSliderRow(_fillWrap, 'Spacing', 5, 80, 1, _patSpacing,
             v => `${Math.round(v)}`, v => { _applyReg({ patternSpacing: parseInt(v, 10) }); saveProject(); draw(); },
             false, { valAlign: 'center' });
+        }
+
+        // Boundary assignment (contour gradient only)
+        if (_fillStyle === 'contour-gradient' && _activeReg.boundary?.length) {
+          const _arcSec = document.createElement('div');
+          _arcSec.className = 'contour-arc-section';
+          const _isSelecting = contourSelectMode?.regionId === _activeReg.id;
+          if (_isSelecting) {
+            const _cm = contourSelectMode;
+            const _sideColor = _cm.side === 'b1' ? '#89b4fa' : '#fab387';
+            const _sideLabel = _cm.side === 'b1' ? 'Boundary 1' : 'Boundary 2';
+            const _modeLbl = document.createElement('div');
+            _modeLbl.className = 'contour-mode-label';
+            _modeLbl.style.color = _sideColor;
+            _modeLbl.textContent = `Setting ${_sideLabel}`;
+            _arcSec.appendChild(_modeLbl);
+            const _cntLbl = document.createElement('div');
+            _cntLbl.className = 'contour-mode-count';
+            const _nNodes = _cm.nodeIndices.length;
+            _cntLbl.textContent = _nNodes === 0 ? 'Click junction nodes on canvas'
+              : _nNodes === 1 ? '1 node clicked — click the next junction (CCW) or same to close'
+              : `${_nNodes} nodes clicked`;
+            _arcSec.appendChild(_cntLbl);
+            const _canSet = _nNodes >= 2;
+            const _actRow = document.createElement('div');
+            _actRow.className = 'contour-mode-actions';
+            const _setBtn = document.createElement('button');
+            _setBtn.className = 'contour-confirm-btn';
+            _setBtn.textContent = 'Set';
+            _setBtn.disabled = !_canSet;
+            _setBtn.addEventListener('click', e => {
+              e.stopPropagation();
+              if (!_canSet) return;
+              pushUndo();
+              const _edges = contourModeEdgesFromNodes(_activeReg.boundary, _cm.nodeIndices, getCurvesMapForContourMode());
+              if (_cm.side === 'b1') _activeReg.fill1Arcs = _edges.length ? _edges : null;
+              else _activeReg.fill2Arcs = _edges.length ? _edges : null;
+              contourSelectMode = null;
+              saveProject(); renderAnimList(); draw();
+            });
+            const _cancelBtn = document.createElement('button');
+            _cancelBtn.className = 'contour-cancel-btn';
+            _cancelBtn.textContent = 'Cancel';
+            _cancelBtn.addEventListener('click', e => {
+              e.stopPropagation();
+              contourSelectMode = null;
+              renderAnimList(); draw();
+            });
+            _actRow.append(_setBtn, _cancelBtn);
+            _arcSec.appendChild(_actRow);
+          } else {
+            const _bHdr = document.createElement('div');
+            _bHdr.className = 'contour-arc-heading';
+            _bHdr.textContent = 'Boundaries';
+            _arcSec.appendChild(_bHdr);
+            ['b1', 'b2'].forEach(side => {
+              const _bRow = document.createElement('div');
+              _bRow.className = 'contour-arc-row';
+              const _arcs = side === 'b1' ? _activeReg.fill1Arcs : _activeReg.fill2Arcs;
+              const _bLbl = document.createElement('span');
+              _bLbl.className = 'contour-arc-label';
+              _bLbl.textContent = side === 'b1' ? 'Boundary 1' : 'Boundary 2';
+              const _bStatus = document.createElement('span');
+              _bStatus.className = 'contour-arc-status';
+              _bStatus.textContent = _arcs?.length === 1 && _arcs[0]?.isPoint ? 'point'
+                : _arcs?.length ? `${_arcs.length} arc${_arcs.length === 1 ? '' : 's'}` : 'auto';
+              const _bBtn = document.createElement('button');
+              _bBtn.className = `contour-set-btn ${side}`;
+              _bBtn.textContent = 'Set';
+              _bBtn.title = `Draw ${side === 'b1' ? 'Boundary 1' : 'Boundary 2'} on canvas`;
+              _bBtn.addEventListener('click', e => {
+                e.stopPropagation();
+                regionFillSubTab = 3;
+                contourSelectMode = { regionId: _activeReg.id, groupId: null, animId: anim.id, side, nodeIndices: [] };
+                renderAnimList(); draw();
+              });
+              _bRow.append(_bLbl, _bStatus, _bBtn);
+              _arcSec.appendChild(_bRow);
+            });
+          }
+          _fillWrap.appendChild(_arcSec);
         }
       }
 
