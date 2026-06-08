@@ -1329,6 +1329,37 @@
       width: 34px; text-align: right; flex-shrink: 0;
       font-variant-numeric: tabular-nums; font-size: 0.7rem;
     }
+    .range-slider-wrap {
+      position: relative; flex: 1; height: 20px;
+      display: flex; align-items: center;
+    }
+    .range-slider-bg {
+      position: absolute; left: 0; right: 0; height: 4px;
+      background: #45475a; border-radius: 2px; pointer-events: none;
+    }
+    .range-slider-fill {
+      position: absolute; height: 4px;
+      background: #cba6f7; border-radius: 2px; pointer-events: none;
+    }
+    .range-slider-thumb {
+      position: absolute; width: 100%; margin: 0; padding: 0; height: 20px;
+      appearance: none; -webkit-appearance: none;
+      background: transparent; pointer-events: none;
+    }
+    .range-slider-thumb::-webkit-slider-thumb {
+      pointer-events: auto; -webkit-appearance: none;
+      width: 13px; height: 13px; border-radius: 50%;
+      background: #cba6f7; cursor: pointer;
+      border: 2px solid #11111b;
+      box-shadow: 0 0 0 1px rgba(205,214,244,0.5);
+    }
+    .range-slider-thumb::-moz-range-thumb {
+      pointer-events: auto;
+      width: 13px; height: 13px; border-radius: 50%;
+      background: #cba6f7; cursor: pointer;
+      border: 2px solid #11111b;
+      box-shadow: 0 0 0 1px rgba(205,214,244,0.5);
+    }
     .text-edit-area {
       width: 100%;
       min-height: 68px;
@@ -4231,6 +4262,7 @@ let selectedObjectNode = null;     // { animId, num } — selected node in Nodes
 let drillObjectArc = null;         // { animId, label } — topo arc being drilled into
 let selectedRegionIds = new Set(); // Set of region IDs selected in Regions tab (belongs to selectedId)
 let objectDetailTab = 'outline';    // 'anchors' | 'outline' | 'fill' — active tab in detail panel
+let lastOutlineFillTab = 'outline'; // persists across object selections (session-only)
 let selectedArcKeys = new Set();   // arc labels selected in Arcs tab
 let regionFillSubTab = 1;          // 1=Color1, 2=Color2, 3=Style — sub-tab in Regions tab
 let outlineSubTab = 1;             // 1=Color, 2=Style — sub-tab in Outline tab
@@ -15783,6 +15815,17 @@ function makeFillStyleIcon(style) {
     }));
     return svg;
   }
+  if (style === 'radial-gradient') {
+    const uid = 'rgfi' + (++_gradIconId);
+    const defs = makeSvgEl('defs');
+    const grad = makeSvgEl('radialGradient', { id: uid, cx: '50%', cy: '50%', r: '50%' });
+    grad.appendChild(makeSvgEl('stop', { offset: '0%', style: 'stop-color:currentColor;stop-opacity:1' }));
+    grad.appendChild(makeSvgEl('stop', { offset: '100%', style: 'stop-color:currentColor;stop-opacity:0' }));
+    defs.appendChild(grad); svg.appendChild(defs);
+    rect.setAttribute('style', `fill:url(#${uid});stroke:currentColor;`);
+    svg.appendChild(rect);
+    return svg;
+  }
   svg.appendChild(rect);
   const addLine = (x1, y1, x2, y2) => svg.appendChild(makeSvgEl('line', { x1, y1, x2, y2 }));
   if (style === 'circular') {
@@ -15862,6 +15905,64 @@ function appendSliderRow(parent, labelText, min, max, step, value, formatValue, 
       valSpan.textContent = formatValue(slider.value);
     },
   };
+}
+
+function appendRangeSliderRow(parent, labelText, startVal, endVal, onChange) {
+  const row = document.createElement('div');
+  row.className = 'tree-slider-row';
+  row.style.padding = '2px 8px 2px 0';
+  const label = document.createElement('label');
+  label.textContent = labelText;
+
+  const wrap = document.createElement('div');
+  wrap.className = 'range-slider-wrap';
+  const bg = document.createElement('div');
+  bg.className = 'range-slider-bg';
+  const fill = document.createElement('div');
+  fill.className = 'range-slider-fill';
+  const iStart = document.createElement('input');
+  iStart.type = 'range'; iStart.min = 0; iStart.max = 100; iStart.step = 1;
+  iStart.className = 'range-slider-thumb';
+  iStart.value = Math.round(startVal * 100);
+  const iEnd = document.createElement('input');
+  iEnd.type = 'range'; iEnd.min = 0; iEnd.max = 100; iEnd.step = 1;
+  iEnd.className = 'range-slider-thumb';
+  iEnd.value = Math.round(endVal * 100);
+
+  const valSpan = document.createElement('span');
+  valSpan.className = 'tree-slider-val';
+  valSpan.style.cssText = 'width:54px;text-align:center;';
+
+  const updateFill = () => {
+    const s = parseInt(iStart.value), e = parseInt(iEnd.value);
+    fill.style.left = s + '%';
+    fill.style.width = (e - s) + '%';
+    valSpan.textContent = s + '–' + e + '%';
+  };
+
+  iStart.addEventListener('mousedown', () => { pushUndo(); iStart.style.zIndex = 3; iEnd.style.zIndex = 2; });
+  iEnd.addEventListener('mousedown',   () => { pushUndo(); iEnd.style.zIndex = 3; iStart.style.zIndex = 2; });
+  iStart.addEventListener('touchstart', () => { pushUndo(); }, { passive: true });
+  iEnd.addEventListener('touchstart',   () => { pushUndo(); }, { passive: true });
+
+  iStart.addEventListener('input', () => {
+    if (parseInt(iStart.value) > parseInt(iEnd.value)) iStart.value = iEnd.value;
+    updateFill();
+    onChange(parseInt(iStart.value) / 100, parseInt(iEnd.value) / 100);
+    saveProject(); draw();
+  });
+  iEnd.addEventListener('input', () => {
+    if (parseInt(iEnd.value) < parseInt(iStart.value)) iEnd.value = iStart.value;
+    updateFill();
+    onChange(parseInt(iStart.value) / 100, parseInt(iEnd.value) / 100);
+    saveProject(); draw();
+  });
+
+  wrap.append(bg, fill, iStart, iEnd);
+  row.append(label, wrap, valSpan);
+  parent.appendChild(row);
+  updateFill();
+  return { iStart, iEnd };
 }
 
 function _appendAllRegionColor(parent, anim) {
@@ -18526,6 +18627,28 @@ function drawContourSelectOverlay() {
 
   ctx.save();
 
+  // If no nodes clicked yet, show already-set boundary in its fill color (dashed)
+  if (nodeIndices.length === 0) {
+    const existingArcs = side === 'b1' ? region.fill1Arcs : region.fill2Arcs;
+    if (existingArcs?.length) {
+      const existingColor = side === 'b1'
+        ? (region.fillColor || color)
+        : (region.gradientToColor || region.fillColor || color);
+      const prePts = sampleBoundaryEdges(existingArcs, curvesMap, 80);
+      if (prePts.length >= 2) {
+        ctx.beginPath();
+        ctx.moveTo(prePts[0][0], prePts[0][1]);
+        for (let i = 1; i < prePts.length; i++) ctx.lineTo(prePts[i][0], prePts[i][1]);
+        ctx.strokeStyle = existingColor;
+        ctx.lineWidth = 3 * dpr;
+        ctx.globalAlpha = 0.75;
+        ctx.setLineDash([6 * dpr, 4 * dpr]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    }
+  }
+
   // Draw path (requires at least 2 clicks to have any path)
   if (nodeIndices.length >= 2) {
     const formingEdges = contourModeEdgesFromNodes(boundary, nodeIndices, curvesMap);
@@ -18614,47 +18737,89 @@ function sampleBoundaryEdges(edges, curvesMap, N) {
   return result;
 }
 
-function drawTwoBoundaryBlend(ctx, pts1, pts2, color1, opacity1, color2, opacity2) {
+function drawTwoBoundaryBlend(ctx, pts1, pts2, color1, opacity1, color2, opacity2, gradStart = 0, gradEnd = 1) {
   const N = Math.min(pts1.length, pts2.length);
   if (N < 2) return;
   const c1 = parseColorToRgb(color1), c2 = parseColorToRgb(color2);
   if (!c1 || !c2) return;
   const edist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
-  // Ensure both paths run in the same geometric direction so quads don't cross.
-  // The DCEL may traverse one arc backward relative to the other; if reversing
-  // pts2 gives smaller total endpoint distance, it is the correct orientation.
   let p2 = pts2;
   if (edist(pts1[0], p2[N - 1]) + edist(pts1[N - 1], p2[0]) <
       edist(pts1[0], p2[0])    + edist(pts1[N - 1], p2[N - 1])) {
     p2 = [...p2].reverse();
   }
-  // 50% blend used for quads whose gradient axis is degenerate (both paths meet
-  // at a shared endpoint, e.g. the tips of a crescent or corners of a box).
-  const midColor = rgbaCss(
-    { r: (c1.r + c2.r) / 2, g: (c1.g + c2.g) / 2, b: (c1.b + c2.b) / 2 },
-    (opacity1 + opacity2) / 2
-  );
-  for (let i = 0; i < N - 1; i++) {
-    const p1a = pts1[i], p1b = pts1[i + 1], p2a = p2[i], p2b = p2[i + 1];
-    const mx1 = (p1a[0] + p1b[0]) * 0.5, my1 = (p1a[1] + p1b[1]) * 0.5;
-    const mx2 = (p2a[0] + p2b[0]) * 0.5, my2 = (p2a[1] + p2b[1]) * 0.5;
-    ctx.beginPath();
-    ctx.moveTo(p1a[0], p1a[1]);
-    ctx.lineTo(p1b[0], p1b[1]);
-    ctx.lineTo(p2b[0], p2b[1]);
-    ctx.lineTo(p2a[0], p2a[1]);
-    ctx.closePath();
-    if (edist([mx1, my1], [mx2, my2]) < 0.5) {
-      ctx.fillStyle = midColor;
-    } else {
-      const grad = ctx.createLinearGradient(mx1, my1, mx2, my2);
-      grad.addColorStop(0, rgbaCss(c1, opacity1));
-      grad.addColorStop(1, rgbaCss(c2, opacity2));
-      ctx.fillStyle = grad;
+  const polyArea = pts => {
+    let a = 0;
+    for (let i = 0; i < pts.length; i++) {
+      const [x0, y0] = pts[i], [x1, y1] = pts[(i + 1) % pts.length];
+      a += x0 * y1 - x1 * y0;
     }
-    ctx.globalAlpha = 1;
-    ctx.fill();
+    return Math.abs(a) / 2;
+  };
+  let outerPts, innerPts, b1IsOuter;
+  if (polyArea(pts1) >= polyArea(p2)) {
+    outerPts = pts1; innerPts = p2; b1IsOuter = true;
+  } else {
+    outerPts = p2; innerPts = pts1; b1IsOuter = false;
   }
+  const offscreen = document.createElement('canvas');
+  offscreen.width = ctx.canvas.width;
+  offscreen.height = ctx.canvas.height;
+  const octx = offscreen.getContext('2d');
+  const K = 150;
+  for (let k = 0; k < K; k++) {
+    const t0 = k / K;
+    const t1 = (k + 1) / K;
+    const tm = (t0 + t1) / 2;
+    // frac: 0 = at boundary 1, 1 = at boundary 2 (regardless of which is geometrically outer)
+    const frac = b1IsOuter ? tm : 1 - tm;
+    const tc = frac <= gradStart ? 0 : frac >= gradEnd ? 1
+      : gradEnd > gradStart ? (frac - gradStart) / (gradEnd - gradStart) : 0.5;
+    const r = Math.round(c1.r + (c2.r - c1.r) * tc);
+    const g = Math.round(c1.g + (c2.g - c1.g) * tc);
+    const b = Math.round(c1.b + (c2.b - c1.b) * tc);
+    const alpha = opacity1 + (opacity2 - opacity1) * tc;
+    octx.fillStyle = `rgba(${r},${g},${b},${alpha})`;
+    octx.beginPath();
+    for (let i = 0; i < N; i++) {
+      const x = outerPts[i][0] * (1 - t0) + innerPts[i][0] * t0;
+      const y = outerPts[i][1] * (1 - t0) + innerPts[i][1] * t0;
+      if (i === 0) octx.moveTo(x, y); else octx.lineTo(x, y);
+    }
+    octx.closePath();
+    for (let i = 0; i < N; i++) {
+      const x = outerPts[i][0] * (1 - t1) + innerPts[i][0] * t1;
+      const y = outerPts[i][1] * (1 - t1) + innerPts[i][1] * t1;
+      if (i === 0) octx.moveTo(x, y); else octx.lineTo(x, y);
+    }
+    octx.closePath();
+    octx.fill('evenodd');
+  }
+  ctx.globalAlpha = 1;
+  ctx.drawImage(offscreen, 0, 0);
+}
+
+function drawRadialGradientBlend(ctx, region, curvesMap, color1, opacity1, color2, opacity2, gradStart = 0, gradEnd = 1) {
+  const c1 = parseColorToRgb(color1), c2 = parseColorToRgb(color2);
+  if (!c1 || !c2) return;
+  const pts = sampleBoundaryEdges(region.boundary, curvesMap, 200);
+  if (pts.length < 2) return;
+  let cx = 0, cy = 0;
+  for (const [x, y] of pts) { cx += x; cy += y; }
+  cx /= pts.length; cy /= pts.length;
+  const r = pts.reduce((s, [x, y]) => s + Math.hypot(x - cx, y - cy), 0) / pts.length;
+  if (r <= 0) return;
+  const s = Math.max(0, Math.min(1, gradStart));
+  const e = Math.max(s, Math.min(1, gradEnd));
+  const rgba1 = `rgba(${c1.r},${c1.g},${c1.b},${opacity1})`;
+  const rgba2 = `rgba(${c2.r},${c2.g},${c2.b},${opacity2})`;
+  const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+  grad.addColorStop(0, rgba1);
+  if (s > 0.005) grad.addColorStop(s, rgba1);
+  if (e < 0.995) grad.addColorStop(e, rgba2);
+  grad.addColorStop(1, rgba2);
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
 }
 
 function contourEdgesEqual(a, b) {
@@ -18836,11 +19001,15 @@ function drawGroupRegionFills() {
       ctx.save();
       if (region.fillStyle === 'contour-gradient') {
         const { b1, b2 } = resolveContourBoundaries(region);
-        const pts1 = sampleBoundaryEdges(b1, curvesMap, 120);
-        const pts2 = sampleBoundaryEdges(b2, curvesMap, 120);
+        const pts1 = sampleBoundaryEdges(b1, curvesMap, 300);
+        const pts2 = sampleBoundaryEdges(b2, curvesMap, 300);
         clipToRegionPath(ctx, region, curvesMap);
         drawTwoBoundaryBlend(ctx, pts1, pts2, region.fillColor, opacity,
-          region.gradientToColor || region.fillColor, region.gradientToOpacity ?? 0);
+          region.gradientToColor || region.fillColor, region.gradientToOpacity ?? 0, region.gradientStart ?? 0, region.gradientEnd ?? 1);
+      } else if (region.fillStyle === 'radial-gradient') {
+        clipToRegionPath(ctx, region, curvesMap);
+        drawRadialGradientBlend(ctx, region, curvesMap, region.fillColor, opacity,
+          region.gradientToColor || region.fillColor, region.gradientToOpacity ?? 0, region.gradientStart ?? 0, region.gradientEnd ?? 1);
       } else if (region.fillStyle === 'pattern') {
         drawRegionPattern(ctx, region, curvesMap, opacity);
       } else {
@@ -18852,9 +19021,13 @@ function drawGroupRegionFills() {
           const c2 = parseColorToRgb(region.gradientToColor || region.fillColor);
           if (bounds && c1 && c2) {
             const { x1, y1, x2, y2 } = makeLinearGradientAxis(bounds, region.gradientAngle ?? Math.PI / 4);
+            const _gs = region.gradientStart ?? 0, _ge = Math.max(region.gradientStart ?? 0, region.gradientEnd ?? 1);
+            const _ra1 = rgbaCss(c1, opacity), _ra2 = rgbaCss(c2, region.gradientToOpacity ?? 0);
             const grad = ctx.createLinearGradient(x1, y1, x2, y2);
-            grad.addColorStop(0, rgbaCss(c1, opacity));
-            grad.addColorStop(1, rgbaCss(c2, region.gradientToOpacity ?? 0));
+            grad.addColorStop(0, _ra1);
+            if (_gs > 0.005) grad.addColorStop(_gs, _ra1);
+            if (_ge < 0.995) grad.addColorStop(_ge, _ra2);
+            grad.addColorStop(1, _ra2);
             ctx.fillStyle = grad; ctx.globalAlpha = 1;
           } else { ctx.fillStyle = region.fillColor; ctx.globalAlpha = opacity; }
         } else { ctx.fillStyle = region.fillColor; ctx.globalAlpha = opacity; }
@@ -18895,10 +19068,13 @@ function drawObjectRegionFillsForAnim(anim) {
     ctx.save();
     if (_rStyle === 'contour-gradient') {
       const { b1, b2 } = resolveContourBoundaries(region);
-      const pts1 = sampleBoundaryEdges(b1, curvesMap, 120);
-      const pts2 = sampleBoundaryEdges(b2, curvesMap, 120);
+      const pts1 = sampleBoundaryEdges(b1, curvesMap, 300);
+      const pts2 = sampleBoundaryEdges(b2, curvesMap, 300);
       clipToRegionPath(ctx, region, curvesMap);
-      drawTwoBoundaryBlend(ctx, pts1, pts2, _rFill, opacity, _rGradTo || _rFill, _rGradToOp);
+      drawTwoBoundaryBlend(ctx, pts1, pts2, _rFill, opacity, _rGradTo || _rFill, _rGradToOp, region.gradientStart ?? 0, region.gradientEnd ?? 1);
+    } else if (_rStyle === 'radial-gradient') {
+      clipToRegionPath(ctx, region, curvesMap);
+      drawRadialGradientBlend(ctx, region, curvesMap, _rFill, opacity, _rGradTo || _rFill, _rGradToOp, region.gradientStart ?? 0, region.gradientEnd ?? 1);
     } else if (_rStyle === 'pattern') {
       drawRegionPattern(ctx, region, curvesMap, opacity);
     } else {
@@ -18910,9 +19086,13 @@ function drawObjectRegionFillsForAnim(anim) {
         const c2 = parseColorToRgb(_rGradTo || _rFill);
         if (bounds && c1 && c2) {
           const { x1, y1, x2, y2 } = makeLinearGradientAxis(bounds, region.gradientAngle ?? Math.PI / 4);
+          const _gs = region.gradientStart ?? 0, _ge = Math.max(region.gradientStart ?? 0, region.gradientEnd ?? 1);
+          const _ra1 = rgbaCss(c1, opacity), _ra2 = rgbaCss(c2, _rGradToOp);
           const grad = ctx.createLinearGradient(x1, y1, x2, y2);
-          grad.addColorStop(0, rgbaCss(c1, opacity));
-          grad.addColorStop(1, rgbaCss(c2, _rGradToOp));
+          grad.addColorStop(0, _ra1);
+          if (_gs > 0.005) grad.addColorStop(_gs, _ra1);
+          if (_ge < 0.995) grad.addColorStop(_ge, _ra2);
+          grad.addColorStop(1, _ra2);
           ctx.fillStyle = grad; ctx.globalAlpha = 1;
         } else { ctx.fillStyle = _rFill; ctx.globalAlpha = opacity; }
       } else { ctx.fillStyle = _rFill; ctx.globalAlpha = opacity; }
@@ -21417,7 +21597,7 @@ function renderAnimListLegacy() {
     _lastDetailAnimId = anim.id;
     const _hasArcSel = drillObjectArc?.animId === anim.id;
     const _hasRegSel = selectedRegionIds.size > 0;
-    if (!_hasArcSel && !_hasRegSel) { objectDetailTab = 'outline'; selectedArcKeys = new Set(); }
+    if (!_hasArcSel && !_hasRegSel) { objectDetailTab = lastOutlineFillTab; selectedArcKeys = new Set(); }
     else if (_hasRegSel && !_hasArcSel) { objectDetailTab = 'fill'; }
     regionFillSubTab = 1;
     outlineSubTab = 1;
@@ -21498,7 +21678,7 @@ function renderAnimListLegacy() {
   }
 
   // ── 2-tab bar: Outline | Fill ──
-  if (objectDetailTab === 'anchors') objectDetailTab = 'outline';
+  if (objectDetailTab === 'anchors') objectDetailTab = lastOutlineFillTab;
   const _dtTabBar = document.createElement('div');
   _dtTabBar.className = 'color-tab-bar';
   _dtTabBar.style.cssText = 'margin-top:4px;padding:0 8px;';
@@ -21511,6 +21691,7 @@ function renderAnimListLegacy() {
     btn.addEventListener('click', e => {
       e.stopPropagation();
       objectDetailTab = t.toLowerCase();
+      lastOutlineFillTab = objectDetailTab;
       if (objectDetailTab === 'fill') autoSelectFillRegions(anim);
       renderAnimList();
     });
@@ -21844,7 +22025,7 @@ function renderAnimListLegacy() {
           _treatRow.appendChild(_treatBtn);
           _fillWrap.appendChild(_treatRow);
         }
-        const _isGradFam = _fillStyle === 'gradient' || _fillStyle === 'contour-gradient';
+        const _isGradFam = _fillStyle === 'gradient' || _fillStyle === 'contour-gradient' || _fillStyle === 'radial-gradient';
         const _styleRow = document.createElement('div');
         _styleRow.className = 'fill-style-row';
         [{ key: 'solid', title: 'Solid' }, { key: 'gradient', title: 'Gradient' }, { key: 'pattern', title: 'Pattern' }].forEach(({ key, title }) => {
@@ -21871,7 +22052,7 @@ function renderAnimListLegacy() {
           const _subRow = document.createElement('div');
           _subRow.className = 'fill-style-row';
           _subRow.style.marginTop = '4px';
-          [{ key: 'gradient', title: 'Linear' }, { key: 'contour-gradient', title: 'Contour' }].forEach(({ key, title }) => {
+          [{ key: 'gradient', title: 'Linear' }, { key: 'radial-gradient', title: 'Radial' }, { key: 'contour-gradient', title: 'Contour' }].forEach(({ key, title }) => {
             const _gsb = document.createElement('button');
             _gsb.className = 'fill-style-btn' + (_fillStyle === key ? ' active' : '');
             _gsb.title = title;
@@ -21887,6 +22068,12 @@ function renderAnimListLegacy() {
             _subRow.appendChild(_gsb);
           });
           _fillWrap.appendChild(_subRow);
+        }
+
+        if (_isGradFam) {
+          appendRangeSliderRow(_fillWrap, 'Blend',
+            _activeReg.gradientStart ?? 0, _activeReg.gradientEnd ?? 1,
+            (s, e) => { _applyReg({ gradientStart: s, gradientEnd: e }); });
         }
 
         if (_fillStyle === 'gradient') {
