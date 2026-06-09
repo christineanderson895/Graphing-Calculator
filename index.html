@@ -4261,8 +4261,8 @@ let selectedGroupArc = null;     // { groupId, animId, segIdx }
 let selectedObjectNode = null;     // { animId, num } — selected node in Nodes tab
 let drillObjectArc = null;         // { animId, label } — topo arc being drilled into
 let selectedRegionIds = new Set(); // Set of region IDs selected in Regions tab (belongs to selectedId)
-let objectDetailTab = 'outline';    // 'anchors' | 'outline' | 'fill' — active tab in detail panel
-let lastOutlineFillTab = 'outline'; // persists across object selections (session-only)
+let objectDetailTab = 'fill';       // 'anchors' | 'outline' | 'fill' — active tab in detail panel
+let lastOutlineFillTab = 'fill';    // persists across object selections (session-only)
 let selectedArcKeys = new Set();   // arc labels selected in Arcs tab
 let regionFillSubTab = 1;          // 1=Color1, 2=Color2, 3=Style — sub-tab in Regions tab
 let outlineSubTab = 1;             // 1=Color, 2=Style — sub-tab in Outline tab
@@ -14134,7 +14134,7 @@ function drawNodeDots(anim) {
       }
     }
     const [ncx, ncy] = toCanvas(ep.pos.re, ep.pos.im);
-    drawAnchorDot([ncx, ncy], dotColor || anim.color, 6 * dpr);
+    drawAnchorDot([ncx, ncy], dotColor || anim.color, 4.5 * dpr);
   }
 }
 
