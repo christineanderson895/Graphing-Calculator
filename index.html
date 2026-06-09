@@ -7369,15 +7369,6 @@ function trySelectAdjacentTopologyArcAtJunction(cx, cy) {
 function autoSelectFillRegions(anim) {
   const _regions = anim.regions ?? [];
   if (_regions.length === 0) return;
-  // Treat as One with gradient: leave it alone — it is already showing controls
-  if (anim._treatRegionsAsOne) {
-    const _tStyle = _regions[0]?.fillStyle || 'solid';
-    if (_tStyle !== 'solid') return;
-    // Treat as One with solid is equivalent to Select All — convert for clarity
-    selectedRegionIds = new Set(_regions.map(r => r.id));
-    anim._treatRegionsAsOne = false;
-    return;
-  }
   // Already have a selection: keep it
   if (selectedRegionIds.size > 0) return;
   // Check if all regions share the same fillColor and fillStyle
@@ -8304,7 +8295,7 @@ canvas.addEventListener('mousedown', e => {
         const loopIndex = activeLoopIdxCsm ?? closestJn.loopIndex;
         const loopBoundary = loopsCsm[loopIndex] ?? loopsCsm[0] ?? [];
         const expandedCsm = expandedContourBoundary(loopBoundary, curvesMapCsm);
-        const arcGroupsCsm = computeArcGroups(expandedCsm, curvesMapCsm);
+        const arcGroupsCsm = computeEffectiveArcGroups(expandedCsm, curvesMapCsm);
         let newGroupIdx;
         if (prev.length === 0) {
           // First click: use the longest arc at this junction (avoids short connectors)
@@ -8987,7 +8978,7 @@ canvas.addEventListener('mousedown', e => {
         const _cbBounds = selectedObjectCanvasBounds(_topoAnim);
         if (_cbBounds) {
           const _lw = isPrimitiveAnim(_topoAnim) ? primitiveStrokeWidth(_topoAnim)
-            : (1 + 5 * ((_topoAnim.thickness ?? 1) / 10)) * devicePixelRatio;
+            : zoomStrokeWidth(_topoAnim.thickness);
           const _fbFrame = frameMetricsFromCanvasBounds(_cbBounds, _lw);
           const _tol = 12 * devicePixelRatio;
           let _inFrame = false;
@@ -9027,7 +9018,7 @@ canvas.addEventListener('mousedown', e => {
       const _fbBounds = selectedObjectCanvasBounds(_fbAnim);
       if (_fbBounds) {
         const _lw = isPrimitiveAnim(_fbAnim) ? primitiveStrokeWidth(_fbAnim)
-          : (1 + 5 * (_fbAnim.thickness / 10)) * devicePixelRatio;
+          : zoomStrokeWidth(_fbAnim.thickness);
         const _fbFrame = frameMetricsFromCanvasBounds(_fbBounds, _lw);
         if (_fbFrame) {
           const _tol = 12 * devicePixelRatio;
@@ -9963,7 +9954,7 @@ window.addEventListener('mouseup', e => {
         const _sfCbB = selectedObjectCanvasBounds(_sfA);
         if (_sfCbB) {
           const _sfLw = isPrimitiveAnim(_sfA) ? primitiveStrokeWidth(_sfA)
-            : (1 + 5 * ((_sfA.thickness ?? 1) / 10)) * devicePixelRatio;
+            : zoomStrokeWidth(_sfA.thickness);
           const _sfFr = frameMetricsFromCanvasBounds(_sfCbB, _sfLw);
           const _sfTol = 12 * devicePixelRatio;
           if (_sfFr) {
@@ -10157,73 +10148,10 @@ window.addEventListener('mouseup', e => {
     renderAnimList(); draw(); updateCursor(); return;
   }
   if (handleDrag) {
-    const _hdTiny = Math.hypot(e.clientX - mouseDownClientX, e.clientY - mouseDownClientY) < 5;
-    if (_hdTiny && undoStack.length) {
-      // Tiny click on a handle: restore the pre-drag state so an accidental grab
-      // near an arc body cannot permanently alter a control point or erase a topology node.
-      const _hdSnap = undoStack.pop();
-      restoreSnapshot(_hdSnap);
-      updateUndoRedoButtons();
-      saveProject();
-      handleDrag = null;
-      updateCursor(); return;
-    }
     handleDrag = null;
     renderAnimList(); draw(); updateCursor(); return;
   }
   if (anchorDrag) {
-    const _adTiny = Math.hypot(e.clientX - mouseDownClientX, e.clientY - mouseDownClientY) < 5;
-    if (_adTiny && undoStack.length) {
-      // Tiny click on an anchor: restore the pre-drag state to prevent accidental grabs
-      // of boundary junction anchors from corrupting the shape or erasing topology nodes.
-      const _adMx = anchorDrag.startMathX, _adMy = anchorDrag.startMathY;
-      const _adSnap = undoStack.pop();
-      restoreSnapshot(_adSnap);
-      updateUndoRedoButtons();
-      saveProject();
-      anchorDrag = null;
-      // If we were in arc-selection mode, find the arc body at the click position so the
-      // user gets the arc-selection they intended rather than a silent no-op.
-      if (drillObjectArc?.animId === selectedId) {
-        const _adParent = animations.find(a => a.id === selectedId);
-        if (_adParent && !isTextAnim(_adParent)) {
-          const [_adCx, _adCy] = toCanvas(_adMx, _adMy);
-          const { topoArcs: _adTas } = computeObjectTopologyData(_adParent);
-          const _adCurvesMap = buildTopologyCurvesMap(_adParent);
-          const _adThresh = 14 * devicePixelRatio;
-          let _adBestDist = Infinity, _adBestArc = null;
-          for (const _a of _adTas) {
-            const _c = _adCurvesMap.get(_a.curveId);
-            if (!_c) continue;
-            for (let _si = _a.fromIdx; _si < _a.toIdx; _si++) {
-              const _seg = _c.segments[_si];
-              if (!_seg?.compiled) continue;
-              const _dist = polylineHitInfo(sampleCompiledAdaptive(_seg.compiled), _adCx, _adCy).dist;
-              if (_dist < _adBestDist) { _adBestDist = _dist; _adBestArc = _a; }
-            }
-          }
-          if (_adBestArc && _adBestDist <= _adThresh) {
-            selectedObjectNode = null; selectedRegionIds = new Set(); promoteNodeMode = null;
-            drillObjectArc = { animId: selectedId, label: _adBestArc.label, curveId: _adBestArc.curveId, fromIdx: _adBestArc.fromIdx, toIdx: _adBestArc.toIdx };
-            objectDetailTab = 'outline';
-            selectedArcKeys = new Set([_adBestArc.label]);
-            if (!_adParent.curves) {
-              if (editModeAnimId !== _adParent.id) enterEditMode(_adParent, new Set());
-              _adParent.activeSegments = new Set();
-              for (let _si2 = _adBestArc.fromIdx; _si2 < _adBestArc.toIdx; _si2++) _adParent.activeSegments.add(_si2);
-            } else {
-              const _adCurve = animCurves(_adParent).find(c => c.id === _adBestArc.curveId);
-              if (_adCurve) {
-                _adCurve.activeSegments = new Set();
-                for (let _si2 = _adBestArc.fromIdx; _si2 < _adBestArc.toIdx; _si2++) _adCurve.activeSegments.add(_si2);
-              }
-            }
-            renderAnimList(); draw();
-          }
-        }
-      }
-      updateCursor(); return;
-    }
     anchorDrag = null;
     renderAnimList(); draw(); updateCursor(); return;
   }
@@ -11388,10 +11316,9 @@ function addCurveFillPath(renderCtx, anim, closedOnly = false) {
 }
 
 function strokeCompiledSegmentsMask(renderCtx, anim) {
-  const dpr = devicePixelRatio;
   renderCtx.save();
   renderCtx.strokeStyle = '#000';
-  renderCtx.lineWidth = (1 + 5 * ((anim.thickness ?? 1) / 10)) * dpr;
+  renderCtx.lineWidth = zoomStrokeWidth(anim.thickness);
   renderCtx.lineCap = 'round';
   renderCtx.lineJoin = 'round';
   for (const seg of anim.segments || []) {
@@ -11745,7 +11672,7 @@ function drawSegment(anim, segIdx, colorOverride = null, opacityScale = 1, thick
   if (!seg || !seg.compiled) return;
   const dpr = devicePixelRatio;
   const effectiveThickness = thicknessOverride !== null ? thicknessOverride : anim.thickness;
-  const cw = (1 + 5 * (effectiveThickness / 10)) * dpr;
+  const cw = zoomStrokeWidth(effectiveThickness);
   const color = colorOverride || anim.color;
   const opacity = absOpacity !== null ? absOpacity : animOutlineOpacity(anim) * opacityScale;
   if (seg.visible === false) {
@@ -11782,7 +11709,10 @@ function drawSegment(anim, segIdx, colorOverride = null, opacityScale = 1, thick
 }
 
 function primitiveStrokeWidth(anim, extra = 0) {
-  return (1 + 5 * (anim.thickness / 10)) * devicePixelRatio + extra;
+  return zoomStrokeWidth(anim.thickness) + extra;
+}
+function zoomStrokeWidth(t) {
+  return (1 + 5 * ((t ?? 1) / 10)) * devicePixelRatio;
 }
 
 function fillStyleValueForContext(renderCtx, color, style) {
@@ -12434,7 +12364,7 @@ function selectionFrameMetrics(anim) {
   let bounds = arcBounds || selectedObjectCanvasBounds(anim);
   if (!bounds) return null;
   const dpr = devicePixelRatio;
-  const lineWidth = isPrimitiveAnim(anim) ? primitiveStrokeWidth(anim) : (1 + 5 * (anim.thickness / 10)) * dpr;
+  const lineWidth = isPrimitiveAnim(anim) ? primitiveStrokeWidth(anim) : zoomStrokeWidth(anim.thickness);
   return frameMetricsFromCanvasBounds(bounds, lineWidth);
 }
 
@@ -13033,6 +12963,12 @@ function cloneResizeSeg(seg) {
 }
 
 function cloneTransformState(anim) {
+  const origArcThicknesses = {};
+  if (anim.arcStyles) {
+    for (const [k, s] of Object.entries(anim.arcStyles)) {
+      if (s.thickness !== undefined) origArcThicknesses[k] = s.thickness;
+    }
+  }
   return {
     anim,
     origKind: animKind(anim),
@@ -13045,11 +12981,23 @@ function cloneTransformState(anim) {
     origAnchors: anim.anchors.map(cloneCx),
     origSegs: anim.segments.map(cloneResizeSeg),
     origAnchorLocked: anim.anchorLocked ? [...anim.anchorLocked] : [],
+    origThickness: anim.thickness ?? 2,
+    origArcThicknesses,
   };
 }
 
 function applyPointTransformFromState(state, transformPoint, options = {}) {
   const { anim, origKind, origAnchors, origSegs } = state;
+  if (options.thicknessScale !== undefined && state.origThickness !== undefined) {
+    anim.thickness = Math.max(0.1, state.origThickness * options.thicknessScale);
+    if (anim.arcStyles && state.origArcThicknesses) {
+      for (const _k of Object.keys(anim.arcStyles)) {
+        const _s = anim.arcStyles[_k];
+        if (_s.thickness !== undefined && state.origArcThicknesses[_k] !== undefined)
+          _s.thickness = Math.max(0.1, state.origArcThicknesses[_k] * options.thicknessScale);
+      }
+    }
+  }
   anim.kind = origKind;
   anim.closed = !!state.origClosed;
   anim.rotation = state.origRotation;
@@ -13644,8 +13592,13 @@ function applyGroupResizeOrShearForCursor(drag, mathX, mathY) {
     ? multiplyMatrix2(shearCanvasMatrixForParams(params), resizeMatrix)
     : resizeMatrix;
   const forcePath = !!params || isSideResizeHandle(drag.handle);
+  const _gOW = Math.abs(drag.origBounds.right - drag.origBounds.left);
+  const _gOH = Math.abs(drag.origBounds.top - drag.origBounds.bottom);
+  const _gNW = Math.abs(nextBounds.right - nextBounds.left);
+  const _gNH = Math.abs(nextBounds.top - nextBounds.bottom);
+  const thicknessScale = (_gOW > 1e-9 && _gOH > 1e-9) ? Math.sqrt((_gNW / _gOW) * (_gNH / _gOH)) : 1;
   for (const state of drag.origStates) {
-    applyPointTransformFromState(state, transformPoint, { canvasMatrix, forcePath });
+    applyPointTransformFromState(state, transformPoint, { canvasMatrix, forcePath, thicknessScale });
   }
   return true;
 }
@@ -13665,8 +13618,13 @@ function applyMultiSelectionResizeOrShearForCursor(drag, mathX, mathY) {
     ? multiplyMatrix2(shearCanvasMatrixForParams(params), resizeMatrix)
     : resizeMatrix;
   const forcePath = !!params || isSideResizeHandle(drag.handle);
+  const _mOW = Math.abs(drag.origBounds.right - drag.origBounds.left);
+  const _mOH = Math.abs(drag.origBounds.top - drag.origBounds.bottom);
+  const _mNW = Math.abs(nextBounds.right - nextBounds.left);
+  const _mNH = Math.abs(nextBounds.top - nextBounds.bottom);
+  const thicknessScale = (_mOW > 1e-9 && _mOH > 1e-9) ? Math.sqrt((_mNW / _mOW) * (_mNH / _mOH)) : 1;
   for (const state of drag.origStates) {
-    applyPointTransformFromState(state, transformPoint, { canvasMatrix, forcePath });
+    applyPointTransformFromState(state, transformPoint, { canvasMatrix, forcePath, thicknessScale });
   }
   return true;
 }
@@ -13775,6 +13733,25 @@ function applyResizeBounds(drag, nextBounds) {
     compiledRef: null,
   }) : null);
   anim.anchorLocked = drag.origAnchorLocked ? [...drag.origAnchorLocked] : [];
+  {
+    const _ow = Math.abs(origBounds.right - origBounds.left);
+    const _oh = Math.abs(origBounds.top - origBounds.bottom);
+    const _nw = Math.abs(nextBounds.right - nextBounds.left);
+    const _nh = Math.abs(nextBounds.top - nextBounds.bottom);
+    if (_ow > 1e-9 && _oh > 1e-9) {
+      const _ts = Math.sqrt((_nw / _ow) * (_nh / _oh));
+      anim.thickness = Math.max(0.1, (drag.origThickness ?? anim.thickness ?? 2) * _ts);
+      if (anim.arcStyles) {
+        for (const _key of Object.keys(anim.arcStyles)) {
+          const _s = anim.arcStyles[_key];
+          if (_s.thickness !== undefined) {
+            const _origT = drag.origArcThicknesses?.[_key] ?? _s.thickness;
+            _s.thickness = Math.max(0.1, _origT * _ts);
+          }
+        }
+      }
+    }
+  }
   if (!isPrimitiveAnim(anim)) recompileAnim(anim);
 }
 
@@ -14376,7 +14353,7 @@ function drawSelectedObjectBounds(anim) {
       }
     }
     const dpr = devicePixelRatio;
-    const _lw = isPrimitiveAnim(anim) ? primitiveStrokeWidth(anim) : (1 + 5 * (anim.thickness / 10)) * dpr;
+    const _lw = isPrimitiveAnim(anim) ? primitiveStrokeWidth(anim) : zoomStrokeWidth(anim.thickness);
     const _frame = frameMetricsFromCanvasBounds(_objBounds, _lw);
     if (!_frame) return;
     const { x, y, w, h, outerX, outerY, outerW, outerH, extend } = _frame;
@@ -14787,7 +14764,7 @@ function drawGroupElementHighlight() {
     if (anim && isAnimEffectivelyVisible(anim)) {
       const seg = anim.segments[selectedGroupArc.segIdx];
       if (seg?.compiled) {
-        const cw = (1 + 5 * ((anim.thickness ?? 1) / 10)) * dpr;
+        const cw = zoomStrokeWidth(anim.thickness);
         drawCompiledCurve(seg.compiled, anim.color, cw + 10 * dpr, 0.25);
         drawCompiledCurve(seg.compiled, anim.color, cw + 2 * dpr, 1);
       }
@@ -14828,7 +14805,7 @@ function drawAnimations() {
     } else {
       const seg = segmentHover.anim.segments[segmentHover.segIdx];
       if (seg && seg.compiled && activeArcIndex(segmentHover.anim) !== segmentHover.segIdx) {
-        const cw = (1 + 5 * (segmentHover.anim.thickness / 10)) * dpr;
+        const cw = zoomStrokeWidth(segmentHover.anim.thickness);
         drawCompiledCurve(seg.compiled, segmentHover.anim.color, cw + 8 * dpr, 0.22);
       }
     }
@@ -14847,7 +14824,7 @@ function drawAnimations() {
         continue;
       }
       if (isPolylineAnim(anim)) {
-        const cw = (1 + 5 * (anim.thickness / 10)) * dpr;
+        const cw = zoomStrokeWidth(anim.thickness);
         drawPolylinePlacement(anim, placementPreviewPos, cw, dpr);
         continue;
       }
@@ -14857,7 +14834,7 @@ function drawAnimations() {
       }
       const n = anim.anchors.length;
       const hasPreview = placementPreviewPos && placementPreviewPos.ok();
-      const cw = (1 + 5 * (anim.thickness / 10)) * dpr;
+      const cw = zoomStrokeWidth(anim.thickness);
       const isExt = anim.extensionAnchorIdx != null;
 
       if (!isExt) {
@@ -17871,6 +17848,15 @@ function assignRegionHoles(regions, curvesMap) {
   }
 }
 
+function _preserveRegionFill(anim, priorRegions) {
+  if (anim.regions.length > 0 || anim.fillColor) return;
+  const _pf = priorRegions[0];
+  if (!_pf?.fillColor) return;
+  anim.fillColor   = _pf.fillColor;
+  anim.fillOpacity = _pf.fillOpacity ?? 0.5;
+  anim.fillStyle   = _pf.fillStyle   ?? 'solid';
+}
+
 function detectObjectTopology(anim) {
   const priorRegions = anim.regions ?? [];
   anim.regions = [];
@@ -17878,7 +17864,7 @@ function detectObjectTopology(anim) {
     .filter(a => !isTextAnim(a))
     .map(a => { if (isPrimitiveAnim(a)) { const p = primitiveToTopologyPath(a); if (p) recompileAnim(p); return p; } return a; })
     .filter(a => a && a.segments.length > 0);
-  if (rawCurves.length < 1) return;
+  if (rawCurves.length < 1) { _preserveRegionFill(anim, priorRegions); return; }
   // For closed curves (segments.length >= anchors.length), always append a virtual copy of
   // anchors[0] so the closing segment runs forward (fromIdx < toIdx) like every other segment.
   const curves = rawCurves.map(a => {
@@ -17915,7 +17901,7 @@ function detectObjectTopology(anim) {
   }
   for (const [k, v] of keyToNode) keyToNode.set(k, ufFind(v));
   const uniqueNodes = new Set(keyToNode.values());
-  if (uniqueNodes.size < 2) return;
+  if (uniqueNodes.size < 2) { _preserveRegionFill(anim, priorRegions); return; }
 
   // One half-edge pair per compiled segment; skip self-loops (closing arc when first=last anchor).
   const halfEdges = [];
@@ -17933,7 +17919,7 @@ function detectObjectTopology(anim) {
       halfEdges.push(fwd, bwd);
     }
   }
-  if (!halfEdges.length) return;
+  if (!halfEdges.length) { _preserveRegionFill(anim, priorRegions); return; }
 
   // Keep each distinct geometric edge, but collapse duplicate coincident edges from
   // separately drawn face outlines. Different curves with the same endpoints are still
@@ -17943,10 +17929,10 @@ function detectObjectTopology(anim) {
     const toNid   = keyToNode.get(`${he.animId}:${he.toIdx}`);
     return fromNid !== undefined && toNid !== undefined;
   });
-  if (!activeHalfEdges.length) return;
+  if (!activeHalfEdges.length) { _preserveRegionFill(anim, priorRegions); return; }
   const curvesMap = new Map(curves.map(a => [a.id, a]));
   activeHalfEdges = collapseCoincidentHalfEdges(activeHalfEdges, curvesMap, keyToNode);
-  if (!activeHalfEdges.length) return;
+  if (!activeHalfEdges.length) { _preserveRegionFill(anim, priorRegions); return; }
 
   const outgoing = new Map();
   for (const he of activeHalfEdges) {
@@ -17980,7 +17966,7 @@ function detectObjectTopology(anim) {
     } while (he !== startHE);
     if (he === startHE && face.length >= 2) faces.push(face);
   }
-  if (!faces.length) return;
+  if (!faces.length) { _preserveRegionFill(anim, priorRegions); return; }
 
   let regionId = 0;
   for (const face of faces) {
@@ -18035,6 +18021,7 @@ function detectObjectTopology(anim) {
       for (const c of rawCurves) { c.fillColor = null; c.fillOpacity = 0; c.fillStyle = 'solid'; }
     }
   }
+  _preserveRegionFill(anim, priorRegions);
 }
 
 // Returns { essentialPoints: [{num, pos}], topoArcs: [{label, fromNum, toNum, curveId, fromIdx, toIdx}] }
@@ -18184,14 +18171,16 @@ function computeObjectTopologyData(anim) {
   for (const [root, cs] of _rootCurves) {
     if (cs.size >= 2) endpointRoots.add(root);
   }
-  // For closed curves with no essential points: anchor 0 becomes the default node
+  // For closed curves: anchor 0 is always a default node unless it is already an
+  // endpoint root in its own right (open-curve endpoint or self-promoted).
+  // Promoted anchors ADD to the node set; they do not replace the anchor-0 default.
   const _cwEss = new Set();
   for (let j = 0; j < pts.length; j++) {
     if (endpointRoots.has(find(j))) _cwEss.add(pts[j].c);
   }
   for (let j = 0; j < pts.length; j++) {
     const { c, i } = pts[j];
-    if (c.closed && i === 0 && !_cwEss.has(c)) { endpointRoots.add(find(j)); _cwEss.add(c); }
+    if (c.closed && i === 0 && !endpointRoots.has(find(j))) { endpointRoots.add(find(j)); _cwEss.add(c); }
   }
 
   const rootToNum = new Map();
@@ -18508,13 +18497,34 @@ function computeArcGroups(expanded, curvesMap) {
   return groups;
 }
 
+// One arc-group per individual segment (every anchor is a split point).
+function computeArcGroupsFine(expanded, curvesMap) {
+  return expanded.map((edge, i) => {
+    const anim = curvesMap.get(edge.animId);
+    let x = null, y = null;
+    if (anim) {
+      const anchor = anim.anchors?.[edge.startIdx];
+      if (anchor?.ok?.()) { [x, y] = toCanvas(anchor.re, anchor.im); }
+    }
+    return { x, y, startExpIdx: i, endExpIdx: i, animId: edge.animId };
+  });
+}
+
+// Coarse arc groups when there are ≥2 (multi-junction objects); fine per-anchor
+// groups when there is only 1 coarse group (simple closed curve, no real junctions).
+// All contour boundary code must use this instead of computeArcGroups directly so
+// that nodeIndices stored by clicks, drawn by the overlay, and resolved by
+// contourModeEdgesFromNodes all reference the same group set.
+function computeEffectiveArcGroups(expanded, curvesMap) {
+  const coarse = computeArcGroups(expanded, curvesMap);
+  return coarse.length <= 1 ? computeArcGroupsFine(expanded, curvesMap) : coarse;
+}
+
 // Returns one entry per unique junction position (deduplicating arc groups that
 // start at the same canvas location). Each entry: {x, y, groupIndices: [...]}.
-// nodeIndices in contourSelectMode are arc-group indices; junctions are only
-// used for dot placement and hit-testing.
 function junctionNodesForRegion(boundary, curvesMap) {
   const expanded = expandedContourBoundary(boundary, curvesMap);
-  const groups = computeArcGroups(expanded, curvesMap);
+  const groups = computeEffectiveArcGroups(expanded, curvesMap);
   const MERGE_PX = 2;
   const junctions = [];
   for (let gi = 0; gi < groups.length; gi++) {
@@ -18560,7 +18570,7 @@ function shortestPathEdgeIndices(N, fromIdx, toIdx) {
 function contourModeEdgesFromNodes(boundary, nodeIndices, curvesMap) {
   if (nodeIndices.length < 2) return [];
   const expanded = expandedContourBoundary(boundary, curvesMap);
-  const groups = computeArcGroups(expanded, curvesMap);
+  const groups = computeEffectiveArcGroups(expanded, curvesMap);
   const N = groups.length;
   if (!N) return [];
   const result = [];
@@ -21692,7 +21702,14 @@ function renderAnimListLegacy() {
       e.stopPropagation();
       objectDetailTab = t.toLowerCase();
       lastOutlineFillTab = objectDetailTab;
-      if (objectDetailTab === 'fill') autoSelectFillRegions(anim);
+      if (objectDetailTab === 'fill') {
+        if (!(anim.regions?.length) && canFillAnim(anim) && !isPrimitiveAnim(anim)) {
+          detectObjectTopology(anim);
+          draw();
+          saveProject();
+        }
+        autoSelectFillRegions(anim);
+      }
       renderAnimList();
     });
     _dtTabBar.appendChild(btn);
@@ -21904,24 +21921,27 @@ function renderAnimListLegacy() {
       // Primitive circle/ellipse: show fill controls directly
       const _fillWrap = document.createElement('div');
       _fillWrap.style.cssText = 'padding-top:4px;';
-      const _initFillColor = anim.fillColor || anim.color;
+      const _initFillColor = (anim.regions?.[0]?.fillColor) || anim.fillColor || anim.color;
       let _fillOpCtrl = null;
       appendHslColorPicker(_fillWrap, _initFillColor, (color, meta = {}) => {
-        anim.fillColor = color; saveProject(); draw();
+        anim.fillColor = color;
+        syncObjectFillToDetectedRegions(anim, { fillColor: color, fillOpacity: anim.fillOpacity ?? 0.5, fillStyle: anim.fillStyle || 'solid' });
+        saveProject(); draw();
         if (meta.fromHueClick) renderAnimList();
       }, { withUndo: true, fallbackHue: colorToHsl(_initFillColor).h,
         onPreviewChange(hex) { _fillOpCtrl?.setTrack(opacitySliderTrack(hex)); } });
       _fillOpCtrl = appendSliderRow(_fillWrap, 'Opacity', 0, 100, 1,
-        Math.round(clamp(anim.fillOpacity ?? 0.5, 0, 1) * 100),
-        v => `${Math.round(v)}%`, v => { anim.fillOpacity = clamp(parseFloat(v) / 100, 0, 1); saveProject(); draw(); },
+        Math.round(clamp((anim.regions?.[0]?.fillOpacity ?? anim.fillOpacity) ?? 0.5, 0, 1) * 100),
+        v => `${Math.round(v)}%`, v => {
+          anim.fillOpacity = clamp(parseFloat(v) / 100, 0, 1);
+          syncObjectFillToDetectedRegions(anim, { fillColor: anim.fillColor, fillOpacity: anim.fillOpacity, fillStyle: anim.fillStyle || 'solid' });
+          saveProject(); draw();
+        },
         false, { colorTrack: opacitySliderTrack(_initFillColor) });
       _dtContent.appendChild(_fillWrap);
     } else {
 
-    const _treatIsOne = !!anim._treatRegionsAsOne;
     const _selRegObjs = _regions.filter(r => selectedRegionIds.has(r.id));
-    const _isSubset = _selRegObjs.length > 0 && _selRegObjs.length < _regions.length;
-    const _showTreat = !_isSubset;
 
     if (_regions.length === 0) {
       const _note = document.createElement('div');
@@ -21930,8 +21950,8 @@ function renderAnimListLegacy() {
       _dtContent.appendChild(_note);
     } else {
       // Fill controls — fall back to first region when nothing is explicitly selected
-      const _activeReg = _treatIsOne ? _regions[0] : (_selRegObjs[0] ?? _regions[0]);
-      const _applyTargets = _treatIsOne ? _regions : (_selRegObjs.length > 0 ? _selRegObjs : [_regions[0]]);
+      const _activeReg = _selRegObjs[0] ?? _regions[0];
+      const _applyTargets = _selRegObjs.length > 0 ? _selRegObjs : [_regions[0]];
 
       const _fillWrap = document.createElement('div');
       _fillWrap.style.cssText = 'display:flex;flex-direction:column;gap:6px;';
@@ -21939,8 +21959,8 @@ function renderAnimListLegacy() {
       const _fillStyle = _activeReg.fillStyle || 'solid';
       const _hasColor2 = _fillStyle !== 'solid';
 
-      // Disagreement detection (for multi-select, not Treat as One)
-      const _multiSel = !_treatIsOne && _selRegObjs.length > 1;
+      // Disagreement detection for multi-select
+      const _multiSel = _selRegObjs.length > 1;
       const _initFillOpacity = _activeReg.fillOpacity ?? 1;
       const _mixedFillOp = _multiSel && !_selRegObjs.every(r => (r.fillOpacity ?? 1) === _initFillOpacity);
 
@@ -22010,21 +22030,6 @@ function renderAnimListLegacy() {
 
       } else {
         // Style
-        if (_regions.length > 0 && _showTreat) {
-          const _treatRow = document.createElement('div');
-          _treatRow.style.cssText = 'display:flex;gap:4px;margin-bottom:4px;align-items:center;';
-          const _treatBtn = document.createElement('button');
-          _treatBtn.style.cssText = 'height:22px;border:1px solid #313244;border-radius:4px;background:' + (_treatIsOne ? '#45475a' : '#1e1e2e') + ';cursor:pointer;font-size:0.65rem;color:' + (_treatIsOne ? '#cdd6f4' : '#6c7086') + ';padding:0 8px;';
-          _treatBtn.textContent = 'Treat as One';
-          _treatBtn.addEventListener('click', e => {
-            e.stopPropagation();
-            anim._treatRegionsAsOne = !_treatIsOne;
-            if (anim._treatRegionsAsOne) selectedRegionIds = new Set();
-            renderAnimList(); draw();
-          });
-          _treatRow.appendChild(_treatBtn);
-          _fillWrap.appendChild(_treatRow);
-        }
         const _isGradFam = _fillStyle === 'gradient' || _fillStyle === 'contour-gradient' || _fillStyle === 'radial-gradient';
         const _styleRow = document.createElement('div');
         _styleRow.className = 'fill-style-row';
