@@ -299,6 +299,11 @@
     }
     .obj-tile-wrap.drop-before::before { left: -4px; }
     .obj-tile-wrap.drop-after::after { right: -4px; }
+    .obj-tile-wrap.drop-join-group .obj-tile {
+      border-color: #89dceb !important;
+      border-width: 2px !important;
+      box-shadow: 0 0 0 3px rgba(137,220,235,0.35);
+    }
     .obj-group-backdrop {
       position: absolute;
       z-index: 1;
@@ -5118,13 +5123,13 @@ function clearGroupMode() {
   groupSelectionGuideShear = null;
 }
 
-function selectGroup(groupId) {
+function selectGroup(groupId, { drill = true } = {}) {
   if (groupId == null) return;
   finishCanvasTextEdit(false);
   clearMultiSelection();
   clearGroupMode();
   selectedGroupId = groupId;
-  tilesDrillPath = groupPathFromRoot(groupId);
+  if (drill) tilesDrillPath = groupPathFromRoot(groupId);
   clearObjectSelectionState();
   clearSelectionHovers();
   animations.forEach(a => {
@@ -5234,7 +5239,6 @@ function createGroupFromCandidates() {
   renumberAnimationsByStackOrder();
   clearGroupMode();
   selectGroup(newGroupId);
-  if (groupHasLinkableCurves(newGroupId)) linkGroupCurves(newGroupId, true);
   saveProject();
   renderAnimList(); draw(); updateCursor();
   return true;
@@ -17210,9 +17214,44 @@ function objectTileInsertionIndexFromEvent(e) {
 }
 
 function clearObjectTileDropCues() {
-  document.querySelectorAll('.obj-tile-wrap.drop-before, .obj-tile-wrap.drop-after').forEach(el => {
-    el.classList.remove('drop-before', 'drop-after');
+  document.querySelectorAll('.obj-tile-wrap.drop-before, .obj-tile-wrap.drop-after, .obj-tile-wrap.drop-join-group').forEach(el => {
+    el.classList.remove('drop-before', 'drop-after', 'drop-join-group');
   });
+}
+
+function objectTileJoinGroupTarget(e) {
+  if (!objectTileDrag || objectTileDrag.isGroupDrag || objectTileDrag.animIds.length !== 1) return null;
+  const wrap = e.target.closest?.('.obj-tile-wrap');
+  if (!wrap) return null;
+  const groupId = wrap.dataset.groupId ? parseFloat(wrap.dataset.groupId) : null;
+  if (groupId == null) return null;
+  const rect = wrap.getBoundingClientRect();
+  const relX = e.clientX - rect.left;
+  if (relX >= rect.width * 0.2 && relX <= rect.width * 0.8) return groupId;
+  return null;
+}
+
+function addAnimToGroup(animId, targetGroupId) {
+  const anim = animations.find(a => a.id === animId);
+  const group = groups.find(g => g.id === targetGroupId);
+  if (!anim || !group) return;
+  if (anim.groupId === targetGroupId) return;
+  pushUndo();
+  const oldGroupId = anim.groupId ?? null;
+  anim.groupId = targetGroupId;
+  // Place anim right after the last existing direct/descendant member in the stack
+  const existingMemberIds = new Set(allDescendantAnims(targetGroupId).filter(a => a.id !== animId).map(a => a.id));
+  const remaining = animations.filter(a => a.id !== animId);
+  let insertAt = remaining.length;
+  for (let i = remaining.length - 1; i >= 0; i--) {
+    if (existingMemberIds.has(remaining[i].id)) { insertAt = i + 1; break; }
+  }
+  animations = remaining.slice(0, insertAt).concat([anim], remaining.slice(insertAt));
+  if (oldGroupId != null) cleanupSingletonGroups();
+  renumberAnimationsByStackOrder();
+  if (selectedId === animId) { selectedId = null; editModeAnimId = null; }
+  saveProject();
+  renderAnimList(); draw(); updateCursor();
 }
 
 function updateObjectTileDropCue(insertionIndex) {
@@ -17297,12 +17336,17 @@ function handleObjectTileDrop(e) {
   if (!objectTileDrag) return;
   e.preventDefault();
   const drag = objectTileDrag;
-  const fromIndex = animations.findIndex(anim => anim.id === drag.animId);
-  const insertionIndex = objectTileInsertionIndexFromEvent(e);
+  const joinGroupId = objectTileJoinGroupTarget(e); // must read before nulling objectTileDrag
   objectTileDrag = null;
   suppressTileClickUntil = Date.now() + 250;
   clearObjectTileDropCues();
   setObjectTileDragVisual(drag.animIds, false);
+  if (joinGroupId != null && !drag.isGroupDrag && drag.animIds.length === 1) {
+    addAnimToGroup(drag.animId, joinGroupId);
+    return;
+  }
+  const fromIndex = animations.findIndex(anim => anim.id === drag.animId);
+  const insertionIndex = objectTileInsertionIndexFromEvent(e);
   moveAnimationInStack(fromIndex, insertionIndex, drag.animIds);
 }
 
@@ -17423,8 +17467,15 @@ function handleObjectTileDragOver(e) {
     if (e.clientX < rect.left + edge) tilesEl.scrollLeft -= 10;
     else if (e.clientX > rect.right - edge) tilesEl.scrollLeft += 10;
   }
-  objectTileDrag.insertionIndex = objectTileInsertionIndexFromEvent(e);
-  updateObjectTileDropCue(objectTileDrag.insertionIndex);
+  const joinGroupId = objectTileJoinGroupTarget(e);
+  if (joinGroupId != null) {
+    clearObjectTileDropCues();
+    const wrap = tilesEl?.querySelector(`.obj-tile-wrap[data-group-id="${joinGroupId}"]`);
+    if (wrap) wrap.classList.add('drop-join-group');
+  } else {
+    objectTileDrag.insertionIndex = objectTileInsertionIndexFromEvent(e);
+    updateObjectTileDropCue(objectTileDrag.insertionIndex);
+  }
 }
 
 function renderGroupMosaicThumbnail(groupId, canvasEl, size = 48) {
@@ -20129,7 +20180,6 @@ function updateGroupObjectsButton() {
 }
 
 function activeTrayGroupPath(detailAnim) {
-  if (isGroupSelectionActive()) return groupPathFromRoot(selectedGroupId);
   const detailGroupId = objectGroupId(detailAnim);
   if (detailGroupId != null) return groupPathFromRoot(detailGroupId);
   const drillGroupId = currentDrillGroupId();
@@ -20171,6 +20221,7 @@ function configureGroupTileDrag(wrap, groupId) {
       animIds,
       fromIndex,
       insertionIndex: fromIndex,
+      isGroupDrag: true,
     };
     suppressTileClickUntil = Date.now() + 250;
     if (e.dataTransfer) {
@@ -20254,6 +20305,12 @@ function appendGroupTrayTile(tilesEl, group, { label = '', path = false, child =
       renderAnimList(); updateGroupObjectsButton();
       return;
     }
+    selectGroup(group.id, { drill: false });
+    renderAnimList(); draw(); updateCursor();
+  });
+  tile.addEventListener('dblclick', (e) => {
+    if (Date.now() < suppressTileClickUntil) return;
+    if (groupSelectionMode) return;
     selectGroup(group.id);
     renderAnimList(); draw(); updateCursor();
   });
@@ -20401,7 +20458,7 @@ function renderObjectTray(detailAnim) {
   });
 
   tilesEl.scrollLeft = clampObjectTrayScroll(tilesEl, previousScrollLeft);
-  if (!groupSelectionMode) {
+  if (!groupSelectionMode && !isMultiSelectionActive()) {
     const focus = activeFocus || lastObjectTrayFocus;
     const didFocus = focusObjectTrayTile(tilesEl, focus);
     if (!didFocus) tilesEl.scrollLeft = clampObjectTrayScroll(tilesEl, previousScrollLeft);
