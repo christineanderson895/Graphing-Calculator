@@ -10142,12 +10142,14 @@ window.addEventListener('mousemove', e => {
             }
           }
           // Dead zone: suppress add-preview when cursor is within DEAD px of any existing anchor
-          // (covers both topology nodes via essentialPoints and non-topo anchors via original curves)
+          // (non-topo anchors: DEAD=12px; topology junction nodes: HIT=6px — intersection positions
+          // can shift when a removed node changes the merged segment shape, so a smaller radius
+          // avoids blocking positions that were only recently vacated)
           if (_editNodeArcHover) {
             let _nearNode = false;
             for (const _ep of _enEss) {
               const [_ecx, _ecy] = toCanvas(_ep.pos.re, _ep.pos.im);
-              if (Math.hypot(_ecx - cx, _ecy - cy) < DEAD) { _nearNode = true; break; }
+              if (Math.hypot(_ecx - cx, _ecy - cy) < HIT) { _nearNode = true; break; }
             }
             if (!_nearNode) {
               const _seenC = new Set();
@@ -19104,6 +19106,7 @@ function removeAnchorOnArc(anim, arc, anchorIdx) {
 // After inserting or removing an anchor, rerun topology and re-latch drillObjectArc to the same arc.
 function reselectArcAfterEdit(anim, currentArc) {
   detectObjectTopology(anim);
+  if (editNodesMode) return;
   const { topoArcs } = computeObjectTopologyData(anim);
   const matching = topoArcs.find(a => a.label === currentArc.label);
   if (matching) {
