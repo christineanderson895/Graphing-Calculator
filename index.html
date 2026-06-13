@@ -90,7 +90,7 @@
     #object-detail,
     #function-list {
       scrollbar-width: thin;
-      scrollbar-color: #585b70 #181825;
+      scrollbar-color: #6c7086 #181825;
     }
     #anim-list::-webkit-scrollbar,
     #object-detail::-webkit-scrollbar,
@@ -182,6 +182,14 @@
       border-radius: 999px;
     }
     #object-tiles::-webkit-scrollbar-thumb:hover { background: #6c7086; }
+    #tool-hint {
+      display: none;
+      font-size: 0.72rem;
+      color: #7f849c;
+      padding: 6px 10px 8px;
+      font-style: italic;
+      line-height: 1.55;
+    }
     #group-objects-btn {
       margin: 0 8px 7px;
       min-height: 30px;
@@ -255,7 +263,7 @@
       flex-shrink: 0;
       text-align: center;
       font-size: 0.75rem;
-      color: #585b70;
+      color: #6c7086;
       padding: 3px 0;
       display: none;
       user-select: none;
@@ -265,7 +273,7 @@
       flex-shrink: 0;
       text-align: center;
       font-size: 0.75rem;
-      color: #585b70;
+      color: #6c7086;
       padding: 3px 0;
       display: none;
       user-select: none;
@@ -355,7 +363,7 @@
       position: relative;
       transition: border-color 0.12s, background 0.12s;
     }
-    .obj-tile:hover { border-color: #6c7086; }
+    .obj-tile:hover { border-color: #7f849c; }
     .obj-tile.selected {
       border-color: #cdd6f4;
       border-width: 2px;
@@ -438,7 +446,7 @@
       flex-shrink: 0;
     }
     .detail-group-tile canvas { display: block; width: 100%; height: 100%; }
-    .detail-group-tile:hover { border-color: #585b70; }
+    .detail-group-tile:hover { border-color: #6c7086; }
     .detail-group-tile.selected { border-color: #cdd6f4; border-width: 2px; }
     .group-name-placeholder { color: #a6adc8; font-weight: 600; }
     #tiles-breadcrumb {
@@ -491,7 +499,7 @@
       display: flex; align-items: baseline; gap: 6px;
       font-size: 0.72rem;
     }
-    .arc-coord-label { color: #6c7086; min-width: 130px; flex-shrink: 0; }
+    .arc-coord-label { color: #7f849c; min-width: 130px; flex-shrink: 0; }
     .arc-coord-val { color: #cdd6f4; font-family: monospace; font-size: 0.7rem; }
 
     /* ── Anchor rows (interleaved list) ── */
@@ -503,7 +511,7 @@
     .anchor-list-header {
       display: flex; align-items: center;
       padding: 3px 8px; cursor: default;
-      font-size: 0.72rem; color: #6c7086; user-select: none;
+      font-size: 0.72rem; color: #7f849c; user-select: none;
       gap: 6px;
     }
     .anchor-list-header:hover { background: #1e1e2e; }
@@ -511,7 +519,7 @@
     .anchor-list-header.node-hovered { background: #252537; }
     .arc-list-header.arc-hovered { background: #252537; }
     .anchor-label { flex: 0 0 auto; font-family: monospace; min-width: 32px; }
-    .anchor-coords { flex: 1; font-size: 0.68rem; color: #585b70; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .anchor-coords { flex: 1; font-size: 0.68rem; color: #6c7086; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .node-badge {
       display: inline-flex; align-items: center; justify-content: center;
       width: 18px; height: 18px; border-radius: 50%;
@@ -520,7 +528,7 @@
     }
     .anchor-split-btn, .arc-split-btn {
       flex-shrink: 0; background: none; border: 1px solid #45475a;
-      color: #6c7086; border-radius: 3px; padding: 1px 5px;
+      color: #7f849c; border-radius: 3px; padding: 1px 5px;
       font-size: 0.65rem; cursor: pointer; line-height: 1.4;
       transition: color 0.1s, border-color 0.1s, background 0.1s;
     }
@@ -594,7 +602,7 @@
       background: none;
       border: none;
       border-bottom: 2px solid transparent;
-      color: #6c7086;
+      color: #7f849c;
       cursor: pointer;
       padding: 7px 0 5px;
       font-size: 0.73rem;
@@ -618,7 +626,7 @@
       color: #9399b2;
     }
     .regions-empty {
-      color: #6c7086;
+      color: #7f849c;
       font-size: 0.72rem;
       padding: 12px 0;
       text-align: center;
@@ -788,7 +796,7 @@
     }
     .anim-row.is-hidden .anim-color-btn {
       opacity: 0.34;
-      border-color: #6c7086;
+      border-color: #7f849c;
     }
     .anim-icon-btn {
       width: 30px;
@@ -873,7 +881,7 @@
       padding: 4px 14px;
       font-size: 0.72rem;
       font-weight: 600;
-      color: #585b70;
+      color: #6c7086;
       background: #11111b;
       border: 1px solid #45475a;
       border-bottom: 1px solid #45475a;
@@ -979,7 +987,7 @@
     .color-preview-value:focus {
       cursor: text;
       background: rgba(255,255,255,0.06);
-      border-bottom-color: #585b70;
+      border-bottom-color: #6c7086;
     }
     .fill-style-row {
       display: grid;
@@ -989,7 +997,7 @@
     }
     .gradient-color-label {
       font-size: 0.7rem;
-      color: #6c7086;
+      color: #7f849c;
       text-transform: uppercase;
       letter-spacing: 0.05em;
       margin: 6px 0 2px;
@@ -1005,7 +1013,7 @@
     .contour-arc-heading {
       font-size: 0.68rem;
       font-weight: 600;
-      color: #6c7086;
+      color: #7f849c;
       text-transform: uppercase;
       letter-spacing: 0.04em;
       padding: 2px 0;
@@ -1028,14 +1036,14 @@
       border-radius: 4px;
       border: 1px solid #45475a;
       background: #313244;
-      color: #6c7086;
+      color: #7f849c;
       cursor: pointer;
       transition: background 0.1s, color 0.1s, border-color 0.1s;
     }
     .contour-arc-btn.b1.active { background: #1e3a5f; color: #89b4fa; border-color: #89b4fa; }
     .contour-arc-btn.b2.active { background: #3d2a1a; color: #fab387; border-color: #fab387; }
     .contour-arc-btn:not(.active):hover { background: #45475a; color: #cdd6f4; }
-    .contour-arc-status { font-size: 0.62rem; color: #585b70; margin-right: 2px; }
+    .contour-arc-status { font-size: 0.62rem; color: #6c7086; margin-right: 2px; }
     .contour-set-btn {
       font-size: 0.65rem; font-weight: 600; padding: 2px 8px; border-radius: 4px;
       border: 1px solid #45475a; background: #313244; color: #a6adc8; cursor: pointer;
@@ -1043,7 +1051,7 @@
     .contour-set-btn.b1:hover { background: #1e3a5f; color: #89b4fa; border-color: #89b4fa; }
     .contour-set-btn.b2:hover { background: #3d2a1a; color: #fab387; border-color: #fab387; }
     .contour-mode-label { font-size: 0.72rem; font-weight: 600; padding: 4px 0 2px; }
-    .contour-mode-count { font-size: 0.65rem; color: #6c7086; padding: 2px 0 6px; line-height: 1.4; }
+    .contour-mode-count { font-size: 0.65rem; color: #7f849c; padding: 2px 0 6px; line-height: 1.4; }
     .contour-mode-actions { display: flex; gap: 6px; }
     .contour-confirm-btn {
       flex: 1; padding: 4px 8px; font-size: 0.7rem; font-weight: 600;
@@ -1053,7 +1061,7 @@
     .contour-confirm-btn:disabled { opacity: 0.4; cursor: default; }
     .contour-cancel-btn {
       flex: 1; padding: 4px 8px; font-size: 0.7rem;
-      background: #313244; color: #6c7086; border: 1px solid #45475a;
+      background: #313244; color: #7f849c; border: 1px solid #45475a;
       border-radius: 4px; cursor: pointer;
     }
     .contour-cancel-btn:hover { background: #45475a; color: #cdd6f4; }
@@ -1065,7 +1073,7 @@
     }
     .direction-wheel-label {
       font-size: 0.7rem;
-      color: #6c7086;
+      color: #7f849c;
       text-transform: uppercase;
       letter-spacing: 0.05em;
     }
@@ -1086,7 +1094,7 @@
       padding: 4px 10px;
       font-size: 0.72rem;
       background: #313244;
-      color: #6c7086;
+      color: #7f849c;
       border: 1px solid #45475a;
       border-bottom: none;
       border-radius: 5px 5px 0 0;
@@ -1098,7 +1106,7 @@
     .gradient-stop-tab.active {
       background: #181825;
       color: #cdd6f4;
-      border-color: #6c7086;
+      border-color: #7f849c;
       z-index: 1;
     }
     .gradient-stop-tab:not(.active):hover { background: #45475a; color: #a6adc8; }
@@ -1148,7 +1156,7 @@
 
     /* ── Placement hint ── */
     .placement-hint {
-      font-size: 0.7rem; color: #6c7086;
+      font-size: 0.7rem; color: #7f849c;
       padding: 4px 6px; font-style: italic;
     }
     .bend-slider,
@@ -1899,6 +1907,7 @@
         <span class="tool-text-icon" aria-hidden="true">T</span>
       </button>
     </div>
+    <div id="tool-hint"></div>
     <button id="group-objects-btn" type="button">Group Objects</button>
     <button id="merge-objects-btn" type="button" style="display:none">Merge</button>
     <div id="object-detail"></div>
@@ -2110,6 +2119,11 @@ const SCISSORS_CURSOR = (() => {
 const EYEDROPPER_CURSOR = (() => {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M3 21l1.5-4.5L15.5 6l3 3L8 20.5z" fill="#ffffff" stroke="#000000" stroke-width="1.5" stroke-linejoin="round"/><path d="M18.5 6l1.5-1.5c.8-.8.8-2.2 0-3s-2.2-.8-3 0L15.5 3" fill="none" stroke="#000000" stroke-width="2" stroke-linecap="round"/><circle cx="3" cy="21" r="2" fill="#000000"/></svg>`;
   return `url("data:image/svg+xml;base64,${btoa(svg)}") 3 21, crosshair`;
+})();
+
+const FREEFORM_PEN_CURSOR = (() => {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M18.5 2.5L21.5 5.5 6.5 20.5 2 22 3.5 17.5z" fill="#ffffff" stroke="#000000" stroke-width="1.2" stroke-linejoin="round"/><path d="M3.5 17.5L2 22 6.5 20.5z" fill="#888888"/><path d="M18.5 2.5L21.5 5.5 23 4 20 1z" fill="#f38ba8" stroke="#000000" stroke-width="0.5"/></svg>`;
+  return `url("data:image/svg+xml;base64,${btoa(svg)}") 2 22, crosshair`;
 })();
 
 // ── SVG namespace ──
@@ -2492,61 +2506,6 @@ function _splitCurveHalves(orig, anchorIdx) {
            leftLabels, rightLabels, leftPromoted, rightPromoted, leftOverrides, rightOverrides };
 }
 
-function splitChildCurveAtAnchor(parentAnim, curveId, anchorIdx) {
-  if (!parentAnim.curves) {
-    // Single-curve object: convert in-place to a merged container.
-    if (parentAnim.id !== curveId) return;
-    const orig = parentAnim;
-    if (anchorIdx <= 0 || anchorIdx >= orig.anchors.length - 1) return;
-    pushUndo();
-    const { leftAnchors, rightAnchors, leftSegs, rightSegs, leftLocked, rightLocked,
-            leftLabels, rightLabels, leftPromoted, rightPromoted, leftOverrides, rightOverrides } = _splitCurveHalves(orig, anchorIdx);
-    const base = _splitCurveBaseProps(orig, orig.groupId);
-    const curveLeft  = { ...base, id: Date.now() + Math.random(),
-      anchors: leftAnchors,  segments: leftSegs,  anchorLocked: leftLocked,  anchorLabels: leftLabels,
-      promotedAnchors: leftPromoted,
-      ...(leftOverrides.size  ? { arcOverrideSegments: leftOverrides }  : {}) };
-    const curveRight = { ...base, id: Date.now() + Math.random() + 0.5,
-      anchors: rightAnchors, segments: rightSegs, anchorLocked: rightLocked, anchorLabels: rightLabels,
-      promotedAnchors: rightPromoted,
-      ...(rightOverrides.size ? { arcOverrideSegments: rightOverrides } : {}) };
-    recompileAnim(curveLeft);
-    recompileAnim(curveRight);
-    parentAnim.curves = [curveLeft, curveRight];
-    parentAnim.anchors = []; parentAnim.segments = []; parentAnim.anchorLocked = []; parentAnim.anchorLabels = []; parentAnim.promotedAnchors = [];
-    parentAnim.activeSegments = new Set();
-    delete parentAnim.arcOverrideSegments;
-    if (editModeAnimId === parentAnim.id) editModeAnimId = null;
-    detectObjectTopology(parentAnim);
-    drillObjectArc = null;
-    promoteNodeMode = null;
-    saveProject(); renderAnimList(); draw();
-    return;
-  }
-  const cIdx = parentAnim.curves.findIndex(c => c.id === curveId);
-  if (cIdx === -1) return;
-  const orig = parentAnim.curves[cIdx];
-  if (anchorIdx <= 0 || anchorIdx >= orig.anchors.length - 1) return;
-  pushUndo();
-  const { leftAnchors, rightAnchors, leftSegs, rightSegs, leftLocked, rightLocked,
-          leftLabels, rightLabels, leftPromoted, rightPromoted, leftOverrides, rightOverrides } = _splitCurveHalves(orig, anchorIdx);
-  const base = _splitCurveBaseProps(orig, parentAnim.groupId);
-  const curveLeft  = { ...base, id: Date.now() + Math.random(),
-    anchors: leftAnchors,  segments: leftSegs,  anchorLocked: leftLocked,  anchorLabels: leftLabels,
-    promotedAnchors: leftPromoted,
-    ...(leftOverrides.size  ? { arcOverrideSegments: leftOverrides }  : {}) };
-  const curveRight = { ...base, id: Date.now() + Math.random() + 0.5,
-    anchors: rightAnchors, segments: rightSegs, anchorLocked: rightLocked, anchorLabels: rightLabels,
-    promotedAnchors: rightPromoted,
-    ...(rightOverrides.size ? { arcOverrideSegments: rightOverrides } : {}) };
-  recompileAnim(curveLeft);
-  recompileAnim(curveRight);
-  parentAnim.curves.splice(cIdx, 1, curveLeft, curveRight);
-  detectObjectTopology(parentAnim);
-  drillObjectArc = null;
-  promoteNodeMode = null;
-  saveProject(); renderAnimList(); draw();
-}
 
 let globalSettings = loadGlobalSettings();
 
@@ -4322,11 +4281,13 @@ let freeformPenActive  = false;
 let freeformPenCapture = null; // null | {points:[{x,y},...]} in device pixels
 let freeformPenTolerance = 2; // CSS pixels, used by RDP simplification
 let lockHover    = null; // {anim, anchorIdx} | null — interior anchor lock toggle (legacy arc-drill context)
-let anchorIconHover = null; // 'lock' | 'promote' | 'demote' | null — hovered icon in the anchor icon cluster
-let _anchorIconPositions = null; // { lock, promote, demote } — canvas hit zones, set during draw()
+let anchorIconHover = null; // 'lock' | null — hovered icon in the anchor icon cluster
+let _anchorIconPositions = null; // { lock? } — canvas hit zones, set during draw()
+let editNodesMode = false;         // true while user is in "edit nodes" mode (add or remove non-topo anchors)
+let _editNodeArcHover = null;      // { arc, origSegIdx, t, mathPos, pxDist } — cursor on arc stroke (add target)
+let _editNodeAnchorHover = null;   // { anim, anchorIdx, arc, cx, cy } — cursor on non-topo anchor (remove target)
 let rubberBand   = null; // {startX,startY,curX,curY,ctrl} | null — drag-region selection
 let splitArcMode = null; // {anim, segIdx} | null — pending arc split waiting for canvas click
-let promoteNodeMode = null; // { animId, curveId, fromIdx, toIdx } | null — click an interior anchor to split child curve and create a topology node
 let pendingBodyDrag = null; // {anim, startMathX, startMathY, startClientX, startClientY, dragContext, groupId, onSelect} — deferred select+move
 let pendingRubberBand = null; // {startX, startY, startClientX, startClientY} — upgrades pendingBodyDrag to rubber-band when an object is already selected
 let fillHover    = null;    // anim | null — unselected object fill under cursor (for grab cursor)
@@ -4391,6 +4352,7 @@ function snapshotAnimations() {
     gradientToOpacity: a.gradientToOpacity ?? null,
     name: a.name ?? null,
     arcStyles: a.arcStyles && Object.keys(a.arcStyles).length ? { ...a.arcStyles } : null,
+    deletedArcs: a.deletedArcs?.length ? a.deletedArcs.map(d => ({ ...d })) : [],
     curves: a.curves ? a.curves.map(c => ({
       id: c.id, color: c.color, kind: c.kind || 'freeform',
       freeformPen: c.freeformPen ?? false,
@@ -4418,10 +4380,14 @@ function snapshotAnimations() {
   }));
 }
 
+function isArcBuilderPlacing() {
+  return !!animations.find(a => a.inPlacementMode && !isPrimitiveAnim(a) && !isTextAnim(a));
+}
+
 function updateUndoRedoButtons() {
   const u = document.getElementById('undo-btn');
   const r = document.getElementById('redo-btn');
-  if (u) u.disabled = undoStack.length === 0;
+  if (u) u.disabled = !isArcBuilderPlacing() && undoStack.length === 0;
   if (r) r.disabled = redoStack.length === 0;
 }
 
@@ -4431,6 +4397,21 @@ function pushUndo(preSnapshot) {
   redoStack = [];
   updateUndoRedoButtons();
   setTimeout(saveProject, 0);
+}
+
+function undoPlacementStep(anim) {
+  if (anim.anchors.length <= 1) {
+    cancelPlacement(anim);
+    updateUndoRedoButtons();
+    return;
+  }
+  anim.anchors.pop();
+  anim.anchorLocked.pop();
+  anim.segments.pop();
+  resetFreeformPlacementPathTracking();
+  if (anim.segments.length > 0) recompileAnim(anim);
+  renderAnimList(); draw();
+  updateUndoRedoButtons();
 }
 
 function restoreSnapshot(snap) {
@@ -4566,7 +4547,12 @@ function restoreSnapshot(snap) {
   renderAnimList(); draw();
 }
 
-function undo() { if (!undoStack.length) return; redoStack.push(snapshotState()); restoreSnapshot(undoStack.pop()); updateUndoRedoButtons(); saveProject(); }
+function undo() {
+  const placing = animations.find(a => a.inPlacementMode && !isPrimitiveAnim(a) && !isTextAnim(a));
+  if (placing) { undoPlacementStep(placing); return; }
+  if (!undoStack.length) return;
+  redoStack.push(snapshotState()); restoreSnapshot(undoStack.pop()); updateUndoRedoButtons(); saveProject();
+}
 function redo() { if (!redoStack.length) return; undoStack.push(snapshotState()); restoreSnapshot(redoStack.pop()); updateUndoRedoButtons(); saveProject(); }
 
 function isTypingTarget(el) {
@@ -5169,6 +5155,7 @@ function beginObjectFrameDrag(anim, mathX, mathY) {
     startMathX: mathX, startMathY: mathY,
     origAnchors: anim.anchors.map(cloneCx),
     origSegs: anim.segments.map(s => s ? ({ h0: cloneCx(s.h0), h1: cloneCx(s.h1) }) : null),
+    ...(anim.curves ? { mergedCurves: true, origStates: anim.curves.map(cloneTransformState), origSplitAnchors: buildOrigSplitAnchors(anim) } : {}),
   };
   frameHover = anim;
   return true;
@@ -5456,6 +5443,7 @@ function clearTopoFeatureSelection() {
     selectedArcKeys = new Set();
   }
   selectedRegionIds = new Set();
+  editNodesMode = false; _editNodeArcHover = null; _editNodeAnchorHover = null;
 }
 
 function clearSelectionShearGuides(exceptAnim = null) {
@@ -5562,10 +5550,6 @@ function alignAnchorHandlesOnLock(anim, anchorIdx) {
 function setAnchorLocked(anim, anchorIdx, locked) {
   if (!anim.anchorLocked) anim.anchorLocked = [];
   anim.anchorLocked[anchorIdx] = !!locked;
-  if (locked) {
-    alignAnchorHandlesOnLock(anim, anchorIdx);
-    recompileAnim(anim);
-  }
 }
 
 function activePlacementTool() {
@@ -5642,7 +5626,6 @@ function deleteAnimation(id) {
   editModeAnimId = null;
   selectedId = null;
   if (splitArcMode && splitArcMode.anim.id === id) splitArcMode = null;
-  if (promoteNodeMode && promoteNodeMode.animId === id) promoteNodeMode = null;
   animations = animations.filter(a => a.id !== id);
   cleanupSingletonGroups();
   renumberAnimationsByStackOrder();
@@ -5654,6 +5637,37 @@ function deleteAnimation(id) {
     a.expandedAnchors = new Set();
   });
   renderAnimList(); neutralizeToolPanel(); draw(); updateCursor();
+}
+
+function deleteSubCurve(anim, curveId) {
+  pushUndo();
+  anim.curves = anim.curves.filter(c => c.id !== curveId);
+  drillObjectArc = null;
+  selectedArcKeys = new Set();
+  if (anim.curves.length === 0) {
+    selectedId = null;
+    animations = animations.filter(a => a.id !== anim.id);
+    renderAnimList(); draw();
+    return;
+  }
+  anim._topoSplitCurves = null;
+  detectObjectTopology(anim);
+  renderAnimList(); draw();
+}
+
+// Delete a topological arc: hide its stroke and remove it as a DCEL face boundary so
+// the two adjacent fill regions merge. Does NOT modify child curve geometry.
+function deleteTopoArc(anim, drillArc) {
+  const { curveId, fromIdx, toIdx, wrapAround } = drillArc;
+  if (!anim._topoSplitCurves?.has(curveId)) return;
+  pushUndo();
+  if (!anim.deletedArcs) anim.deletedArcs = [];
+  anim.deletedArcs.push({ curveId, fromIdx, toIdx, wrapAround: !!wrapAround });
+  drillObjectArc = null;
+  selectedArcKeys = new Set();
+  anim._topoSplitCurves = null;
+  detectObjectTopology(anim);
+  renderAnimList(); draw();
 }
 
 function buildClipboardText() {
@@ -5826,7 +5840,7 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     e.preventDefault();
     if (eyedropperTarget !== null) { deactivateEyedropper(); renderAnimList(); return; }
-    if (freeformPenActive) { freeformPenActive = false; freeformPenCapture = null; currentTool = 'select'; updateToolPanel(); renderAnimList(); draw(); return; }
+    if (freeformPenActive) { freeformPenActive = false; freeformPenCapture = null; currentTool = 'select'; updateToolPanel(); renderAnimList(); draw(); updateCursor(); return; }
     if (contourSelectMode !== null) { contourSelectMode = null; renderAnimList(); draw(); return; }
     const placing = animations.find(a => a.inPlacementMode);
     if (placing) {
@@ -5839,9 +5853,12 @@ document.addEventListener('keydown', e => {
       }
       return;
     }
-    if (splitArcMode !== null || promoteNodeMode !== null) {
+    if (editNodesMode) {
+      editNodesMode = false; _editNodeArcHover = null; _editNodeAnchorHover = null;
+      draw(); updateCursor(); return;
+    }
+    if (splitArcMode !== null) {
       splitArcMode = null;
-      promoteNodeMode = null;
       renderAnimList(); draw();
       return;
     }
@@ -5889,6 +5906,9 @@ document.addEventListener('keydown', e => {
   if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId != null) {
     e.preventDefault();
     const anim = animations.find(a => a.id === selectedId);
+    if (anim?.curves && drillObjectArc?.animId === selectedId) {
+      deleteTopoArc(anim, drillObjectArc); return;
+    }
     if (anim && editModeAnimId === anim.id && anim.activeSegments.size === 1) {
       const segIdx = [...anim.activeSegments][0];
       if (anim.segments[segIdx]) { deleteArc(anim, segIdx); return; }
@@ -5963,26 +5983,41 @@ function recompileSegmentRaw(seg, A0, A1) {
   seg.compiledRef = null;
 }
 
-function swingOppositeHandle(anim, anchorIdx, movedWasOutgoing) {
-  if (anim.segments.length < 2) return;
-  if (anchorIdx <= 0 || anchorIdx >= anim.anchors.length - 1) return;
-  if (!isAnchorLocked(anim, anchorIdx)) return;
-  if (!anim.segments[anchorIdx] || !anim.segments[anchorIdx - 1]) return; // gap: no coupling
-  const anchor = anim.anchors[anchorIdx];
+function swingOppositeHandle(anim, anchorIdx, movedWasOutgoing, lockedAngleOffset = Math.PI) {
+  const S = anim.segments.length;
+  if (S < 2) return;
+  const isClosed = !!anim.closed;
+  // Open curves: endpoints have no opposite handle. Use S (segments.length) for range check
+  // because loop-closed curves have anchors.length = S + 1 but only S valid segments.
+  if (!isClosed && (anchorIdx <= 0 || anchorIdx >= S)) return;
+  // Normalize anchorIdx into [0, S) so loop-closed anchor[S] maps to anchor[0].
+  const ai = ((anchorIdx % S) + S) % S;
+  if (!isAnchorLocked(anim, ai)) return;
+  const anchor = anim.anchors[ai];
+  if (!anchor) return;
   let movedHandle, oppSegIdx, oppSide;
   if (movedWasOutgoing) {
-    movedHandle = anim.segments[anchorIdx].h0;
-    oppSegIdx = anchorIdx - 1; oppSide = 'h1';
+    if (!anim.segments[ai]?.h0) return;
+    movedHandle = anim.segments[ai].h0;
+    oppSegIdx = (ai - 1 + S) % S; oppSide = 'h1';
   } else {
-    movedHandle = anim.segments[anchorIdx - 1].h1;
-    oppSegIdx = anchorIdx; oppSide = 'h0';
+    const inSeg = (ai - 1 + S) % S;
+    if (!anim.segments[inSeg]?.h1) return;
+    movedHandle = anim.segments[inSeg].h1;
+    oppSegIdx = ai; oppSide = 'h0';
   }
+  if (!anim.segments[oppSegIdx]) return;
   const opp = anim.segments[oppSegIdx][oppSide];
+  if (!opp) return;
   const dx = movedHandle.re - anchor.re, dy = movedHandle.im - anchor.im;
   const len = Math.hypot(dx, dy);
   if (len < 1e-9) return;
   const oppLen = Math.hypot(opp.re - anchor.re, opp.im - anchor.im);
-  anim.segments[oppSegIdx][oppSide] = new Cx(anchor.re - dx/len*oppLen, anchor.im - dy/len*oppLen);
+  const oppAngle = Math.atan2(dy, dx) + lockedAngleOffset;
+  anim.segments[oppSegIdx][oppSide] = new Cx(
+    anchor.re + Math.cos(oppAngle) * oppLen,
+    anchor.im + Math.sin(oppAngle) * oppLen
+  );
 }
 
 function enterEditMode(anim, activeSegs) {
@@ -6038,7 +6073,6 @@ function exitEditMode() {
   lockHover = null;
   rubberBand = null;
   splitArcMode = null;
-  promoteNodeMode = null;
   renderAnimList();
   draw();
 }
@@ -6114,7 +6148,7 @@ function finalizePrimitivePlacement(anim) {
     const { topoArcs } = computeObjectTopologyData(anim);
     if (topoArcs.length > 0) {
       const _fa = topoArcs[0];
-      drillObjectArc = { animId: anim.id, label: _fa.label, curveId: _fa.curveId, fromIdx: _fa.fromIdx, toIdx: _fa.toIdx };
+      drillObjectArc = { animId: anim.id, label: _fa.label, curveId: _fa.curveId, fromIdx: _fa.fromIdx, toIdx: _fa.toIdx, wrapAround: !!_fa.wrapAround };
       selectedArcKeys = new Set([_fa.label]);
       objectDetailTab = 'outline';
     }
@@ -6193,7 +6227,7 @@ function finalizePlacement(anim) {
     const { topoArcs } = computeObjectTopologyData(anim);
     if (topoArcs.length > 0) {
       const _fa = topoArcs[0];
-      drillObjectArc = { animId: anim.id, label: _fa.label, curveId: _fa.curveId, fromIdx: _fa.fromIdx, toIdx: _fa.toIdx };
+      drillObjectArc = { animId: anim.id, label: _fa.label, curveId: _fa.curveId, fromIdx: _fa.fromIdx, toIdx: _fa.toIdx, wrapAround: !!_fa.wrapAround };
       selectedArcKeys = new Set([_fa.label]);
       objectDetailTab = 'outline';
     }
@@ -6355,7 +6389,7 @@ function startPlacementFromTool(kind) {
     }
     updateToolPanel();
     renderAnimList();
-    draw();
+    draw(); updateCursor();
     return;
   }
   if (freeformPenActive) { freeformPenActive = false; freeformPenCapture = null; }
@@ -6979,6 +7013,10 @@ function updateCursor() {
     isolCanvas.style.cursor = EYEDROPPER_CURSOR;
     return;
   }
+  if (freeformPenActive) {
+    canvas.style.cursor = FREEFORM_PEN_CURSOR;
+    return;
+  }
   const placing = animations.some(a => a.inPlacementMode);
   if (placing) {
     canvas.style.cursor = 'none';
@@ -6987,15 +7025,6 @@ function updateCursor() {
     canvas.style.cursor = 'default';
     objCanvas.style.cursor = onTarget ? SCISSORS_CURSOR : 'not-allowed';
     isolCanvas.style.cursor = onTarget ? SCISSORS_CURSOR : 'not-allowed';
-    return;
-  } else if (promoteNodeMode !== null) {
-    const _pnLo = Math.min(promoteNodeMode.fromIdx, promoteNodeMode.toIdx);
-    const _pnHi = Math.max(promoteNodeMode.fromIdx, promoteNodeMode.toIdx);
-    const _pnOnTarget = anchorHover && anchorHover.anim.id === promoteNodeMode.curveId
-      && anchorHover.anchorIdx > _pnLo && anchorHover.anchorIdx < _pnHi;
-    canvas.style.cursor = 'default';
-    objCanvas.style.cursor = _pnOnTarget ? 'crosshair' : 'default';
-    isolCanvas.style.cursor = _pnOnTarget ? 'crosshair' : 'default';
     return;
   } else if (resizeDrag) {
     const c = resizeCursorForHandle(resizeDrag.handle);
@@ -7008,6 +7037,8 @@ function updateCursor() {
     canvas.style.cursor = 'grab';
   } else if (sideActionHover) {
     canvas.style.cursor = 'grab';
+  } else if (editNodesMode) {
+    canvas.style.cursor = _editNodeAnchorHover ? 'pointer' : 'crosshair';
   } else if (anchorIconHover !== null) {
     canvas.style.cursor = 'pointer';
   } else if (anchorHover || handleHover || lockHover) {
@@ -7058,12 +7089,19 @@ function queryAnchorHover(mathX, mathY, thresholdPx = 7 * devicePixelRatio) {
       const curve = animCurves(parentAnim).find(c => c.id === drillObjectArc.curveId);
       if (curve && !isPrimitiveAnim(curve) && !isTextAnim(curve)) {
         const { fromIdx, toIdx } = drillObjectArc;
-        for (let i = fromIdx; i <= toIdx; i++) {
+        const _checkA = i => {
           const a = curve.anchors[i];
-          if (!a) continue;
+          if (!a) return;
           const [ax, ay] = toCanvas(a.re, a.im);
           const d = Math.hypot(ax - cx, ay - cy);
           if (d <= thresholdPx && d < bestDist) { bestDist = d; best = { anim: curve, anchorIdx: i }; }
+        };
+        if (fromIdx > toIdx) {
+          // Wrap-around arc: covers [fromIdx, anchors.length) ∪ [0, toIdx]
+          for (let i = fromIdx; i < curve.anchors.length; i++) _checkA(i);
+          for (let i = 0; i <= toIdx; i++) _checkA(i);
+        } else {
+          for (let i = fromIdx; i <= toIdx; i++) _checkA(i);
         }
       }
     }
@@ -7122,11 +7160,18 @@ function queryHandleHover(mathX, mathY) {
   if (usingDrillArc) {
     const { fromIdx, toIdx } = drillObjectArc;
     handlePairs = [];
-    for (let si = fromIdx; si < toIdx; si++) {
+    const _addSeg = si => {
       if (curve.segments[si]) {
         handlePairs.push({ segIdx: si, side: 'h0' });
         handlePairs.push({ segIdx: si, side: 'h1' });
       }
+    };
+    if (fromIdx > toIdx) {
+      // Wrap-around arc: covers [fromIdx, segments.length) ∪ [0, toIdx)
+      for (let si = fromIdx; si < curve.segments.length; si++) _addSeg(si);
+      for (let si = 0; si < toIdx; si++) _addSeg(si);
+    } else {
+      for (let si = fromIdx; si < toIdx; si++) _addSeg(si);
     }
   } else {
     ({ handlePairs } = getActiveHandleInfo(curve));
@@ -7251,6 +7296,8 @@ function textFillHit(anim, cx, cy) {
 }
 
 function buildTopologyCurvesMap(anim) {
+  // Use intersection-split curves if topology was run (ensures region boundary indices match).
+  if (anim._topoSplitCurves?.size) return anim._topoSplitCurves;
   const entries = animCurves(anim).map(c => {
     if (isPrimitiveAnim(c)) {
       const path = primitiveToTopologyPath(c);
@@ -7290,11 +7337,18 @@ function findTopologyArcHits(anim, cx, cy, excludeArc = null, arcFilter = null) 
     const curve = curvesById.get(arc.curveId);
     if (!curve) continue;
     let arcDist = Infinity;
-    for (let si = arc.fromIdx; si < arc.toIdx; si++) {
+    const _ftHit = si => {
       const seg = curve.segments[si];
-      if (!seg?.compiled) continue;
+      if (!seg?.compiled) return;
       const dist = polylineHitInfo(sampleCompiledAdaptive(seg.compiled), cx, cy).dist;
       if (dist < arcDist) arcDist = dist;
+    };
+    if (arc.wrapAround) {
+      const _ftM = curve.segments.length;
+      for (let si = arc.fromIdx; si < _ftM; si++) _ftHit(si);
+      for (let si = 0; si < arc.toIdx; si++) _ftHit(si);
+    } else {
+      for (let si = arc.fromIdx; si < arc.toIdx; si++) _ftHit(si);
     }
     if (arcDist < bestDist) { bestDist = arcDist; bestArc = arc; }
     if (!topologyArcMatchesSelection(arc, excludeArc) && arcDist < bestOtherDist) {
@@ -7319,7 +7373,6 @@ function nearestTopologyNodeHit(anim, cx, cy, thresholdPx) {
 function selectTopologyArc(parentAnim, arc) {
   selectedObjectNode = null;
   selectedRegionIds = new Set();
-  promoteNodeMode = null;
   objectDetailTab = 'outline';
   if (selectedArcKeys.has(arc.label)) {
     selectedArcKeys.delete(arc.label);
@@ -7329,27 +7382,36 @@ function selectTopologyArc(parentAnim, arc) {
       const _remain = [...selectedArcKeys][selectedArcKeys.size - 1];
       const { topoArcs: _ta } = computeObjectTopologyData(parentAnim);
       const _ra = _ta.find(a => a.label === _remain);
-      drillObjectArc = _ra ? { animId: parentAnim.id, label: _ra.label, curveId: _ra.curveId, fromIdx: _ra.fromIdx, toIdx: _ra.toIdx } : null;
+      drillObjectArc = _ra ? { animId: parentAnim.id, label: _ra.label, curveId: _ra.curveId, fromIdx: _ra.fromIdx, toIdx: _ra.toIdx, wrapAround: !!_ra.wrapAround } : null;
     }
   } else {
     selectedArcKeys.add(arc.label);
-    drillObjectArc = { animId: parentAnim.id, label: arc.label, curveId: arc.curveId, fromIdx: arc.fromIdx, toIdx: arc.toIdx };
+    drillObjectArc = { animId: parentAnim.id, label: arc.label, curveId: arc.curveId, fromIdx: arc.fromIdx, toIdx: arc.toIdx, wrapAround: !!arc.wrapAround };
   }
   // Sync activeSegments for all selected arcs so canvas handles are accurate
   const { topoArcs: _allArcs } = computeObjectTopologyData(parentAnim);
   for (const c of animCurves(parentAnim)) c.activeSegments = new Set();
   for (const _sa of _allArcs.filter(a => selectedArcKeys.has(a.label))) {
+    const _addSegs = (target, nSegs) => {
+      if (_sa.wrapAround) {
+        for (let si = _sa.fromIdx; si < nSegs; si++) target.add(si);
+        for (let si = 0; si < _sa.toIdx; si++) target.add(si);
+      } else {
+        for (let si = _sa.fromIdx; si < _sa.toIdx; si++) target.add(si);
+      }
+    };
     if (!parentAnim.curves) {
       if (editModeAnimId !== parentAnim.id) enterEditMode(parentAnim, new Set());
-      for (let si = _sa.fromIdx; si < _sa.toIdx; si++) parentAnim.activeSegments.add(si);
+      _addSegs(parentAnim.activeSegments, parentAnim.segments.length);
     } else {
       const _c = animCurves(parentAnim).find(c => c.id === _sa.curveId);
-      if (_c) for (let si = _sa.fromIdx; si < _sa.toIdx; si++) _c.activeSegments.add(si);
+      if (_c) _addSegs(_c.activeSegments, _c.segments.length);
     }
   }
 }
 
 function trySelectAdjacentTopologyArcAtJunction(cx, cy) {
+  if (editNodesMode) return false;
   if (!drillObjectArc || selectedId === null || drillObjectArc.animId !== selectedId) return false;
   const parentAnim = animations.find(a => a.id === selectedId);
   if (!parentAnim || isTextAnim(parentAnim) || !isAnimEffectivelyVisible(parentAnim) || parentAnim.inPlacementMode) return false;
@@ -8415,23 +8477,6 @@ canvas.addEventListener('mousedown', e => {
     return;
   }
 
-  // ── Promote node mode ──
-  if (promoteNodeMode !== null) {
-    e.preventDefault();
-    const _pnAh = queryAnchorHover(mathX, mathY);
-    const _pnLo = Math.min(promoteNodeMode.fromIdx, promoteNodeMode.toIdx);
-    const _pnHi = Math.max(promoteNodeMode.fromIdx, promoteNodeMode.toIdx);
-    if (_pnAh && _pnAh.anim.id === promoteNodeMode.curveId
-        && _pnAh.anchorIdx > _pnLo && _pnAh.anchorIdx < _pnHi) {
-      const _pnParent = animations.find(a => a.id === promoteNodeMode.animId);
-      if (_pnParent) splitChildCurveAtAnchor(_pnParent, promoteNodeMode.curveId, _pnAh.anchorIdx);
-    } else {
-      promoteNodeMode = null;
-      renderAnimList(); draw();
-    }
-    return;
-  }
-
   if (currentTool === 'arc-builder' || currentTool === 'shape' || currentTool === 'text') {
     e.preventDefault();
     const snapped = new Cx(softSnap(mathX), softSnap(mathY));
@@ -8579,7 +8624,7 @@ canvas.addEventListener('mousedown', e => {
         startMathX: mathX, startMathY: mathY,
         origAnchors: fb.anchors.map(cloneCx),
         origSegs: fb.segments.map(s => s ? ({ h0: cloneCx(s.h0), h1: cloneCx(s.h1) }) : null),
-        ...(fb.curves ? { mergedCurves: true, origStates: fb.curves.map(cloneTransformState) } : {}),
+        ...(fb.curves ? { mergedCurves: true, origStates: fb.curves.map(cloneTransformState), origSplitAnchors: buildOrigSplitAnchors(fb) } : {}),
       };
       selectedGroupId = null;
       selectedId = fb.id;
@@ -8728,6 +8773,12 @@ canvas.addEventListener('mousedown', e => {
         // through to topology arc selection instead of triggering rubber-band.
         const _sfSeg = segmentHover ?? querySegmentHover(cx, cy);
         if (_sfSeg?.anim?.id === selectedId) _rbSkip = true;
+        // Also skip when cursor is on an anchor icon (e.g., lock toggle).
+        if (!_rbSkip && anchorIconHover !== null) _rbSkip = true;
+        if (!_rbSkip && _anchorIconPositions?.lock) {
+          const _ip = _anchorIconPositions.lock;
+          if (Math.hypot(cx - _ip.cx, cy - _ip.cy) <= _ip.r) _rbSkip = true;
+        }
         // Also skip when clicking a Bézier control point of an already-drilled arc
         // (merged objects where editModeAnimId is not set after arc selection).
         if (!_rbSkip && drillObjectArc?.animId === selectedId) {
@@ -8745,7 +8796,7 @@ canvas.addEventListener('mousedown', e => {
         }
       }
     }
-    if (!_rbSkip) {
+    if (!_rbSkip && !editNodesMode) {
       pendingRubberBand = { startX: cx, startY: cy, startClientX: e.clientX, startClientY: e.clientY, clickCx: cx, clickCy: cy, clickMathX: mathX, clickMathY: mathY, savedEditModeAnimId: editModeAnimId };
       e.preventDefault();
       return;
@@ -8753,7 +8804,7 @@ canvas.addEventListener('mousedown', e => {
   }
 
   // ── Topology feature selection from canvas ──
-  if (selectedId) {
+  if (selectedId && !editNodesMode) {
     const _topoAnim = animations.find(a => a.id === selectedId);
     if (_topoAnim && !isTextAnim(_topoAnim)) {
       // If an arc is already selected and the cursor is over an anchor or handle that belongs
@@ -8761,6 +8812,11 @@ canvas.addEventListener('mousedown', e => {
       // Extra adjacent handles (from getActiveHandleInfo for locked boundary anchors) live
       // outside [fromIdx, toIdx) and must not block arc-body clicks on a neighbouring arc.
       const _overInteractive = (() => {
+        // In direct edit mode on the selected curve (non-merged, no arc drilled yet):
+        // skip topology arc selection when cursor is over an anchor — drag immediately.
+        if (editModeAnimId === selectedId && !drillObjectArc) {
+          if (queryAnchorHover(mathX, mathY)) return true;
+        }
         if (drillObjectArc?.animId !== selectedId) return false;
         const _anch = queryAnchorHover(mathX, mathY);
         if (_anch) {
@@ -8793,13 +8849,11 @@ canvas.addEventListener('mousedown', e => {
         return _qh.segIdx >= fromIdx && _qh.segIdx < toIdx;
       })();
       if (!_overInteractive) {
-      // Skip arc/region/node-drag when cursor is on an anchor icon — let the icon handler fire.
+      // Skip arc/region/node-drag when cursor is on the lock icon — let the icon handler fire.
       let _overIcon = anchorIconHover !== null;
-      if (!_overIcon && _anchorIconPositions) {
-        for (const _ik of ['lock', 'promote', 'demote']) {
-          const _ip = _anchorIconPositions[_ik];
-          if (_ip && Math.hypot(cx - _ip.cx, cy - _ip.cy) <= _ip.r) { _overIcon = true; break; }
-        }
+      if (!_overIcon && _anchorIconPositions?.lock) {
+        const _ip = _anchorIconPositions.lock;
+        if (Math.hypot(cx - _ip.cx, cy - _ip.cy) <= _ip.r) _overIcon = true;
       }
       if (!_overIcon) {
       const { essentialPoints: _eps } = computeObjectTopologyData(_topoAnim);
@@ -8858,6 +8912,19 @@ canvas.addEventListener('mousedown', e => {
             if (_nodeArcHit) { _bestArcHit = _nodeArcHit; _bestArcDist = _nodeArcDist; }
             if (_preferArc) { _tookArcBreak = true; break; }
           }
+          // If a real anchor from any child curve is closer to the cursor than this node,
+          // let the anchor drag handler below deal with it instead of node drag.
+          let _closestRealAnchorDist = Infinity;
+          for (const _rca_c of animCurves(_topoAnim)) {
+            if (isPrimitiveAnim(_rca_c) || isTextAnim(_rca_c)) continue;
+            for (const _rca_a of _rca_c.anchors) {
+              if (!_rca_a) continue;
+              const [_rax, _ray] = toCanvas(_rca_a.re, _rca_a.im);
+              const _rad = Math.hypot(cx - _rax, cy - _ray);
+              if (_rad < _closestRealAnchorDist) _closestRealAnchorDist = _rad;
+            }
+          }
+          if (_closestRealAnchorDist < _nodeDist) continue;
           e.preventDefault();
           pushUndo();
           // Find all anchors at this node position and drag them together
@@ -8900,7 +8967,61 @@ canvas.addEventListener('mousedown', e => {
                 }
               }
             }
-            if (_nodeAnchors.length === 0) return;
+            if (_nodeAnchors.length === 0) {
+              // Intersection is at a mid-segment crossing with no original anchor.
+              // Split both crossing curves at the intersection t-parameter to insert
+              // real anchors there, then drag them as coincident anchors.
+              const _xCurves = animCurves(_topoAnim).filter(c => !isPrimitiveAnim(c) && !isTextAnim(c));
+              const _xFound = []; // { curve, segIdx, t }
+              outer_xsearch:
+              for (let _xai = 0; _xai < _xCurves.length; _xai++) {
+                const _xA = _xCurves[_xai];
+                for (let _xbi = _xai + 1; _xbi < _xCurves.length; _xbi++) {
+                  const _xB = _xCurves[_xbi];
+                  for (let _xsa = 0; _xsa < _xA.segments.length; _xsa++) {
+                    if (!_xA.segments[_xsa]?.compiled) continue;
+                    for (let _xsb = 0; _xsb < _xB.segments.length; _xsb++) {
+                      if (!_xB.segments[_xsb]?.compiled) continue;
+                      for (const { tA, tB, point } of findCrossSegmentIntersections(
+                          _xA.segments[_xsa].compiled, _xB.segments[_xsb].compiled)) {
+                        if (Math.hypot(point.re - ep.pos.re, point.im - ep.pos.im) < 1e-2) {
+                          if (tA > 0.01 && tA < 0.99 && !_xFound.some(f => f.curve === _xA))
+                            _xFound.push({ curve: _xA, segIdx: _xsa, t: tA });
+                          if (tB > 0.01 && tB < 0.99 && !_xFound.some(f => f.curve === _xB))
+                            _xFound.push({ curve: _xB, segIdx: _xsb, t: tB });
+                          if (_xFound.length >= 2) break outer_xsearch;
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+              if (_xFound.length === 0) return;
+              for (const _xf of _xFound) {
+                const { curve: _xc, segIdx: _xsi, t: _xt } = _xf;
+                const _xSeg = _xc.segments[_xsi];
+                const _xP0 = _xc.anchors[_xsi];
+                const _xP1 = _xsi + 1 < _xc.anchors.length ? _xc.anchors[_xsi + 1] : _xc.anchors[0];
+                if (!_xSeg?.h0 || !_xP0 || !_xP1) continue;
+                const _xSp = splitCubicAtT(_xP0, _xSeg.h0, _xSeg.h1, _xP1, _xt);
+                const _xNewIdx = _xsi + 1;
+                _xc.anchors.splice(_xNewIdx, 0, _xSp.mid);
+                _xc.segments.splice(_xsi, 1,
+                  { h0: _xSp.leftH0, h1: _xSp.leftH1, compiled: null, compiledRef: null, visible: _xSeg.visible ?? true, eccentricity: _xSeg.eccentricity },
+                  { h0: _xSp.rightH0, h1: _xSp.rightH1, compiled: null, compiledRef: null, visible: _xSeg.visible ?? true, eccentricity: _xSeg.eccentricity }
+                );
+                if (Array.isArray(_xc.anchorLocked)) _xc.anchorLocked.splice(_xNewIdx, 0, false);
+                if (Array.isArray(_xc.anchorLabels)) _xc.anchorLabels.splice(_xNewIdx, 0, '');
+                _xc.activeSegments = new Set();
+                recompileAnim(_xc);
+                _nodeAnchors.push({ anim: _xc, anchorIdx: _xNewIdx });
+              }
+              if (_nodeAnchors.length === 0) return;
+              // Topology is stale after insertion; clear arc selection and rebuild.
+              drillObjectArc = null; selectedArcKeys = new Set();
+              for (const _c of animCurves(_topoAnim)) _c.activeSegments = new Set();
+              detectObjectTopology(_topoAnim);
+            }
           }
           const _prim = _nodeAnchors[0];
           const _primOrig = cloneCx(_prim.anim.anchors[_prim.anchorIdx]);
@@ -9052,35 +9173,45 @@ canvas.addEventListener('mousedown', e => {
     e.preventDefault();
     return;
   }
-  // ── Anchor icon click (lock / promote / demote) ──
-  if (anchorIconHover !== null && anchorHover && !anchorDrag) {
+  // ── editNodesMode: add node on arc stroke, remove non-topo anchor, or exit ──
+  if (editNodesMode) {
+    e.preventDefault();
+    const _enAnim = animations.find(a => a.id === selectedId);
+    const _enF = _enAnim && selectionFrameMetrics(_enAnim);
+    const _insideFrame = _enF && cx >= _enF.x && cx <= _enF.x + _enF.w && cy >= _enF.y && cy <= _enF.y + _enF.h;
+    if (!_insideFrame) {
+      editNodesMode = false; _editNodeArcHover = null; _editNodeAnchorHover = null;
+      draw(); updateCursor();
+      return;
+    }
+    if (_editNodeAnchorHover && _enAnim) {
+      pushUndo();
+      removeAnchorOnArc(_enAnim, _editNodeAnchorHover.arc, _editNodeAnchorHover.anchorIdx);
+      _editNodeAnchorHover = null;
+      saveProject(); renderAnimList(); draw(); updateCursor();
+      return;
+    }
+    if (_editNodeArcHover && _enAnim) {
+      pushUndo();
+      insertAnchorOnArc(_enAnim, _editNodeArcHover.arc, _editNodeArcHover);
+      _editNodeArcHover = null;
+      saveProject(); renderAnimList(); draw(); updateCursor();
+      return;
+    }
+    // Dead space inside frame: no effect
+    return;
+  }
+  // ── Anchor icon click (lock) ──
+  if (anchorIconHover === 'lock' && anchorHover && !anchorDrag) {
     const _icAnim = anchorHover.anim, _icIdx = anchorHover.anchorIdx;
-    const _icParent = animations.find(a => a.id === (editModeAnimId ?? selectedId));
+    // Normalize for loop-closed curves where anchor[S] duplicates anchor[0].
+    const _icS = _icAnim.segments.length;
+    const _icNormIdx = _icAnim.closed ? _icIdx % _icS : _icIdx;
     e.preventDefault();
     pushUndo();
-    if (anchorIconHover === 'lock') {
-      if (!_icAnim.anchorLocked) _icAnim.anchorLocked = Array(_icAnim.anchors.length).fill(false);
-      while (_icAnim.anchorLocked.length <= _icIdx) _icAnim.anchorLocked.push(false);
-      _icAnim.anchorLocked[_icIdx] = !isAnchorLocked(_icAnim, _icIdx);
-    } else {
-      if (!_icAnim.promotedAnchors) _icAnim.promotedAnchors = Array(_icAnim.anchors.length).fill(false);
-      while (_icAnim.promotedAnchors.length <= _icIdx) _icAnim.promotedAnchors.push(false);
-      _icAnim.promotedAnchors[_icIdx] = (anchorIconHover === 'promote');
-      if (_icParent) detectObjectTopology(_icParent);
-    }
+    setAnchorLocked(_icAnim, _icNormIdx, !isAnchorLocked(_icAnim, _icNormIdx));
     saveProject(); renderAnimList(); draw(); updateCursor();
-    // Re-evaluate anchorIconHover from freshly-drawn positions so the next click
-    // sees the updated icon set (e.g. promote → demote) without needing a mousemove.
-    if (_anchorIconPositions) {
-      let _newIH = null;
-      for (const _k of ['lock', 'promote', 'demote']) {
-        const _ip = _anchorIconPositions[_k];
-        if (_ip && Math.hypot(cx - _ip.cx, cy - _ip.cy) <= _ip.r) { _newIH = _k; break; }
-      }
-      anchorIconHover = _newIH;
-    } else {
-      anchorIconHover = null;
-    }
+    anchorIconHover = (_anchorIconPositions?.lock && Math.hypot(cx - _anchorIconPositions.lock.cx, cy - _anchorIconPositions.lock.cy) <= _anchorIconPositions.lock.r) ? 'lock' : null;
     return;
   }
 
@@ -9166,6 +9297,39 @@ canvas.addEventListener('mousedown', e => {
           }
         }
       }
+      // Also drag any force-merge paired anchors (intersection nodes on sibling curves).
+      if (_parentAnim._topoForceMerges?.length) {
+        const _inCC = new Set(anchorDrag.coincidentAnchors.map(cc => `${cc.anim.id}:${cc.anchorIdx}`));
+        for (const { idA, anchorIdxA, idB, anchorIdxB } of _parentAnim._topoForceMerges) {
+          let _pAnim = null, _pAI = null;
+          if (idA === aHitAnim.id && anchorIdxA === anchorIdx) {
+            _pAnim = animCurves(_parentAnim).find(c => c.id === idB); _pAI = anchorIdxB;
+          } else if (idB === aHitAnim.id && anchorIdxB === anchorIdx) {
+            _pAnim = animCurves(_parentAnim).find(c => c.id === idA); _pAI = anchorIdxA;
+          }
+          if (!_pAnim || _pAI == null || _inCC.has(`${_pAnim.id}:${_pAI}`)) continue;
+          const _psa = _pAnim.anchors[_pAI]; if (!_psa) continue;
+          const _psaOrig = cloneCx(_psa);
+          const _psaOut = _pAnim.segments[_pAI];
+          const _psaIn  = _pAI > 0 ? _pAnim.segments[_pAI - 1] : null;
+          const _psaN   = _pAnim.anchors[_pAI + 1] ?? null;
+          const _psaP   = _pAI > 0 ? _pAnim.anchors[_pAI - 1] : null;
+          anchorDrag.coincidentAnchors.push({
+            anim: _pAnim, anchorIdx: _pAI, origAnchor: _psaOrig,
+            origH0: _psaOut ? cloneCx(_psaOut.h0) : null,
+            origH1: _psaIn  ? cloneCx(_psaIn.h1)  : null,
+            origOutH1: _psaOut ? cloneCx(_psaOut.h1) : null,
+            origInH0:  _psaIn  ? cloneCx(_psaIn.h0)  : null,
+            outStraight: _psaN ? isSegmentStraight(_psaOut, _psaOrig, _psaN) : false,
+            inStraight:  _psaP ? isSegmentStraight(_psaIn,  _psaP, _psaOrig) : false,
+            outRigid: _psaN ? isSegmentRigid(_pAnim, _pAI)     : false,
+            inRigid:  _psaP ? isSegmentRigid(_pAnim, _pAI - 1) : false,
+            nextAnchor: _psaN ? cloneCx(_psaN) : null,
+            prevAnchor: _psaP ? cloneCx(_psaP) : null,
+          });
+          _inCC.add(`${_pAnim.id}:${_pAI}`);
+        }
+      }
     }
     updateCursor(); draw(); return;
   }
@@ -9176,14 +9340,38 @@ canvas.addEventListener('mousedown', e => {
     e.preventDefault();
     pushUndo();
     const { anim: hAnim, segIdx: hSegIdx, side: hSide } = handleHit;
-    const _hAnchorIdx = hSide === 'h0' ? hSegIdx : hSegIdx + 1;
+    const _hS = hAnim.segments.length; // use segments.length; handles both ring-closed (S=N) and loop-closed (S=N-1)
+    const _hClosed = !!hAnim.closed;
+    // Normalize anchorIdx into [0, S) so loop-closed anchor[S] maps to anchor[0].
+    const _hAnchorIdxRaw = hSide === 'h0' ? hSegIdx : hSegIdx + 1;
+    const _hAnchorIdx = _hClosed ? _hAnchorIdxRaw % _hS : _hAnchorIdxRaw;
     const _hWasCorner = isCornerAnchor(hAnim, _hAnchorIdx);
+    // Capture the current angle between the two handles at this anchor so locking
+    // preserves the actual angle rather than forcing collinear (180°).
+    // Works for all interior anchors on open curves, and ALL anchors on closed curves.
+    let _lockedAngleOffset = Math.PI;
+    const _hIsLockable = isAnchorLocked(hAnim, _hAnchorIdx)
+      && (_hClosed || (_hAnchorIdx > 0 && _hAnchorIdx < _hS));
+    if (_hIsLockable) {
+      const _anchorPt = hAnim.anchors[_hAnchorIdx];
+      const _movedH = hSide === 'h0' ? hAnim.segments[hSegIdx]?.h0 : hAnim.segments[hSegIdx]?.h1;
+      // Opposite segment index: wrap using S (segments.length) so loop-closed works correctly.
+      const _oppSegIdx = hSide === 'h0'
+        ? (_hClosed ? (hSegIdx - 1 + _hS) % _hS : hSegIdx - 1)
+        : (_hClosed ? (hSegIdx + 1) % _hS : hSegIdx + 1);
+      const _oppH = hSide === 'h0'
+        ? (_oppSegIdx >= 0 ? hAnim.segments[_oppSegIdx]?.h1 : null)
+        : (_oppSegIdx < _hS ? hAnim.segments[_oppSegIdx]?.h0 : null);
+      if (_anchorPt && _movedH && _oppH) {
+        const _ma = Math.atan2(_movedH.im - _anchorPt.im, _movedH.re - _anchorPt.re);
+        const _oa = Math.atan2(_oppH.im - _anchorPt.im, _oppH.re - _anchorPt.re);
+        _lockedAngleOffset = _oa - _ma;
+      }
+    }
     handleDrag = {
       anim: hAnim, segIdx: hSegIdx, side: hSide, anchorIdx: _hAnchorIdx,
-      // Record corner state at drag-start so the swing guard is stable throughout the drag.
-      // A corner anchor must never be swung — that would make handles collinear and erase
-      // the topology junction node.
       wasCorner: _hWasCorner,
+      lockedAngleOffset: _lockedAngleOffset,
     };
     updateCursor(); draw(); return;
   }
@@ -9561,7 +9749,7 @@ window.addEventListener('mousemove', e => {
     // which destroys any topology junction node at that anchor. wasCorner is captured
     // at drag-start so the guard stays consistent even if the dot product drifts past
     // 0.99 mid-drag. Smooth anchors (wasCorner=false) swing normally.
-    if (!wasCorner) swingOppositeHandle(anim, anchorIdx, side === 'h0');
+    swingOppositeHandle(anim, anchorIdx, side === 'h0', handleDrag.lockedAngleOffset ?? Math.PI);
     recompileAnim(anim);
     updateSidebarInputs(anim);
     draw(); return;
@@ -9730,6 +9918,7 @@ window.addEventListener('mousemove', e => {
     if (frameDrag.groupId != null || frameDrag.multi || frameDrag.mergedCurves) {
       const dx = softSnap(mathX - frameDrag.startMathX), dy = softSnap(mathY - frameDrag.startMathY);
       applyGroupTranslation(frameDrag, dx, dy);
+      if (frameDrag.mergedCurves) updateTopoSplitCurvesForTranslation(frameDrag, dx, dy);
       draw(); return;
     }
     const { anim, startMathX, startMathY, origAnchors, origSegs } = frameDrag;
@@ -9795,12 +9984,13 @@ window.addEventListener('mousemove', e => {
           anim: _pba, startMathX: _smx, startMathY: _smy,
           origAnchors: _pba.anchors.map(cloneCx),
           origSegs: _pba.segments.map(s => s ? ({ h0: cloneCx(s.h0), h1: cloneCx(s.h1) }) : null),
-          ...(_pba.curves ? { mergedCurves: true, origStates: _pba.curves.map(cloneTransformState) } : {}),
+          ...(_pba.curves ? { mergedCurves: true, origStates: _pba.curves.map(cloneTransformState), origSplitAnchors: buildOrigSplitAnchors(_pba) } : {}),
         };
       }
       const _dx = softSnap(mathX - _smx), _dy = softSnap(mathY - _smy);
       if (frameDrag.groupId != null || frameDrag.multi || frameDrag.mergedCurves) {
         applyGroupTranslation(frameDrag, _dx, _dy);
+        if (frameDrag.mergedCurves) updateTopoSplitCurvesForTranslation(frameDrag, _dx, _dy);
       } else {
         const { anim: _fa, origAnchors: _oa, origSegs: _os } = frameDrag;
         _fa.anchors.forEach((_, i) => { _fa.anchors[i] = new Cx(_oa[i].re + _dx, _oa[i].im + _dy); });
@@ -9850,11 +10040,9 @@ window.addEventListener('mousemove', e => {
       // Keep anchorHover alive when cursor slides from anchor toward/onto icon cluster.
       if (!newAnchorHover && anchorHover && !anchorDrag) {
         // Check icon hit zones from last draw (valid between draw frames).
-        if (_anchorIconPositions) {
-          for (const _k of ['lock', 'promote', 'demote']) {
-            const _ip = _anchorIconPositions[_k];
-            if (_ip && Math.hypot(cx - _ip.cx, cy - _ip.cy) <= _ip.r) { newAnchorHover = anchorHover; break; }
-          }
+        if (_anchorIconPositions?.lock) {
+          const _ip = _anchorIconPositions.lock;
+          if (Math.hypot(cx - _ip.cx, cy - _ip.cy) <= _ip.r) newAnchorHover = anchorHover;
         }
         // Extend proximity to cover the gap between anchor (7px threshold) and icons (≤36px away).
         // This keeps anchorHover alive even after _anchorIconPositions is cleared by draw().
@@ -9895,15 +10083,95 @@ window.addEventListener('mousemove', e => {
       anchorIconHover = null;
     } else if (newAnchorHover !== anchorHover) {
       anchorIconHover = null; // anchor changed — positions stale until next draw
-    } else if (_anchorIconPositions) {
-      let _nih = null;
-      for (const k of ['lock', 'promote', 'demote']) {
-        const p = _anchorIconPositions[k];
-        if (p && Math.hypot(cx - p.cx, cy - p.cy) <= p.r) { _nih = k; break; }
-      }
-      anchorIconHover = _nih;
+    } else if (_anchorIconPositions?.lock) {
+      const _lp = _anchorIconPositions.lock;
+      anchorIconHover = (_lp && Math.hypot(cx - _lp.cx, cy - _lp.cy) <= _lp.r) ? 'lock' : null;
     }
-    const changed = sideActionChanged || resizeChanged || frameChanged || rotationChanged || lockChanged || (newAnchorHover !== anchorHover) || (newHandleHover !== handleHover) ||
+    // Edit-nodes mode: track arc stroke hover (add) and non-topo anchor hover (remove)
+    const _prevEditArc = _editNodeArcHover, _prevEditAnch = _editNodeAnchorHover;
+    _editNodeArcHover = null; _editNodeAnchorHover = null;
+    if (editNodesMode && selectedId) {
+      const _enAnim = animations.find(a => a.id === selectedId);
+      if (_enAnim) {
+        const { topoArcs: _enArcs, essentialPoints: _enEss } = computeObjectTopologyData(_enAnim);
+        const HIT = 6 * devicePixelRatio;
+        const DEAD = 12 * devicePixelRatio;
+        // 1. Non-topo anchor hover (priority) — use split curve so indices match arc.fromIdx/toIdx
+        let _bestAD = HIT;
+        for (const _enArc of _enArcs) {
+          const _enSplit = _enAnim._topoSplitCurves?.get(_enArc.curveId);
+          const _enOrig = animCurves(_enAnim).find(c => c.id === _enArc.curveId) ?? _enAnim;
+          const _enCurve = _enSplit ?? _enOrig; // split curve has the same index space as arc.fromIdx/toIdx
+          if (!_enCurve) continue;
+          const _enNA = _enCurve.anchors.length;
+          const _enRange = [];
+          if (_enArc.wrapAround) {
+            for (let i = _enArc.fromIdx; i < _enNA; i++) _enRange.push(i);
+            for (let i = 0; i < _enArc.toIdx % Math.max(1, _enNA); i++) _enRange.push(i);
+          } else {
+            for (let i = _enArc.fromIdx; i <= Math.min(_enArc.toIdx, _enNA - 1); i++) _enRange.push(i);
+          }
+          for (const _enI of _enRange) {
+            if (!isNonTopoAnchorOfArc(_enArc, _enI, _enNA)) continue;
+            // Skip the virtual closing anchor appended to closed split curves (copy of anchors[0])
+            if (_enSplit && _enI === _enNA - 1) continue;
+            const _enA = _enCurve.anchors[_enI];
+            if (!_enA) continue;
+            // Map split-curve index to original-curve index via position; intersection split anchors
+            // (not present in original) return -1 and are skipped — they are topology nodes, not non-topo.
+            let _origIdx = _enI;
+            if (_enSplit) {
+              _origIdx = _enOrig.anchors.findIndex(a => a && Math.hypot(a.re - _enA.re, a.im - _enA.im) < 1e-6);
+              if (_origIdx < 0) continue;
+            }
+            const [_enAcx, _enAcy] = toCanvas(_enA.re, _enA.im);
+            const _enD = Math.hypot(_enAcx - cx, _enAcy - cy);
+            if (_enD < _bestAD) {
+              _bestAD = _enD;
+              _editNodeAnchorHover = { anim: _enOrig, anchorIdx: _origIdx, arc: _enArc, cx: _enAcx, cy: _enAcy };
+            }
+          }
+        }
+        // 2. Arc stroke hover (if no anchor hover)
+        if (!_editNodeAnchorHover) {
+          let _bestPD = HIT;
+          for (const _enArc of _enArcs) {
+            const _cl = closestPointOnArc(_enAnim, _enArc, mathX, mathY);
+            if (_cl && _cl.pxDist < _bestPD) {
+              _bestPD = _cl.pxDist; _editNodeArcHover = { arc: _enArc, ..._cl };
+            }
+          }
+          // Dead zone: suppress add-preview when cursor is within DEAD px of any existing anchor
+          // (covers both topology nodes via essentialPoints and non-topo anchors via original curves)
+          if (_editNodeArcHover) {
+            let _nearNode = false;
+            for (const _ep of _enEss) {
+              const [_ecx, _ecy] = toCanvas(_ep.pos.re, _ep.pos.im);
+              if (Math.hypot(_ecx - cx, _ecy - cy) < DEAD) { _nearNode = true; break; }
+            }
+            if (!_nearNode) {
+              const _seenC = new Set();
+              for (const _dzArc of _enArcs) {
+                if (_seenC.has(_dzArc.curveId)) continue;
+                _seenC.add(_dzArc.curveId);
+                const _aC = animCurves(_enAnim).find(c => c.id === _dzArc.curveId) ?? _enAnim;
+                for (const _a of (_aC?.anchors ?? [])) {
+                  if (!_a) continue;
+                  const [_acx, _acy] = toCanvas(_a.re, _a.im);
+                  if (Math.hypot(_acx - cx, _acy - cy) < DEAD) { _nearNode = true; break; }
+                }
+                if (_nearNode) break;
+              }
+            }
+            if (_nearNode) _editNodeArcHover = null;
+          }
+        }
+      }
+    }
+    const _editNodeChanged = (_editNodeAnchorHover !== _prevEditAnch) ||
+      (!!_editNodeArcHover !== !!_prevEditArc) ||
+      (_editNodeArcHover && _prevEditArc && (_editNodeArcHover.origSegIdx !== _prevEditArc.origSegIdx || Math.abs(_editNodeArcHover.t - _prevEditArc.t) > 0.01));
+    const changed = sideActionChanged || resizeChanged || frameChanged || rotationChanged || lockChanged || _editNodeChanged || (newAnchorHover !== anchorHover) || (newHandleHover !== handleHover) ||
       (newSegmentHover !== segmentHover &&
         !(newSegmentHover && segmentHover && newSegmentHover.anim === segmentHover.anim && newSegmentHover.segIdx === segmentHover.segIdx)) ||
       (newFillHover !== fillHover) || (anchorIconHover !== _prevIconHover);
@@ -10040,11 +10308,17 @@ window.addEventListener('mouseup', e => {
           for (const _a of _tas) {
             const _c = _curvesById.get(_a.curveId);
             if (!_c) continue;
-            for (let _si = _a.fromIdx; _si < _a.toIdx; _si++) {
+            const _checkSeg = _si => {
               const _seg = _c.segments[_si];
-              if (!_seg?.compiled) continue;
+              if (!_seg?.compiled) return;
               const _dist = polylineHitInfo(sampleCompiledAdaptive(_seg.compiled), _prb.clickCx, _prb.clickCy).dist;
               if (_dist < _bestArcDist2) { _bestArcDist2 = _dist; _bestArcHit2 = _a; }
+            };
+            if (_a.wrapAround) {
+              for (let _si = _a.fromIdx; _si < _c.segments.length; _si++) _checkSeg(_si);
+              for (let _si = 0; _si < _a.toIdx; _si++) _checkSeg(_si);
+            } else {
+              for (let _si = _a.fromIdx; _si < _a.toIdx; _si++) _checkSeg(_si);
             }
           }
         }
@@ -10128,6 +10402,15 @@ window.addEventListener('mouseup', e => {
       renderAnimList(); draw(); updateCursor();
       return;
     }
+    // Nothing hit — but if the click was inside the selected object's frame, don't deselect.
+    // This catches edge cases where region/arc hit tests missed an interior click.
+    if (_rbInSelectedFrame) {
+      if (drillObjectArc !== null || selectedRegionIds.size > 0 || selectedArcKeys.size > 0) {
+        clearTopoFeatureSelection();
+        renderAnimList(); draw();
+      }
+      return;
+    }
     // Nothing hit: clear selection.
     if (editModeAnimId !== null) exitEditMode();
     tilesDrillPath = [];
@@ -10152,10 +10435,14 @@ window.addEventListener('mouseup', e => {
     renderAnimList(); draw(); updateCursor(); return;
   }
   if (handleDrag) {
+    const _hdParent = animations.find(p => p.curves?.includes(handleDrag.anim));
+    if (_hdParent) detectObjectTopology(_hdParent);
     handleDrag = null;
     renderAnimList(); draw(); updateCursor(); return;
   }
   if (anchorDrag) {
+    const _adParent = animations.find(p => p.curves?.includes(anchorDrag.anim));
+    if (_adParent) detectObjectTopology(_adParent);
     anchorDrag = null;
     renderAnimList(); draw(); updateCursor(); return;
   }
@@ -10281,6 +10568,7 @@ window.addEventListener('mouseup', e => {
 
   if (frameDrag) {
     const wasTiny = Math.hypot(e.clientX - mouseDownClientX, e.clientY - mouseDownClientY) < 5;
+    const _fdMergedAnim = frameDrag.mergedCurves ? frameDrag.anim : null;
     if (wasTiny) {
       // Tiny click on frame: undo the translate and just exit edit mode
       undoStack.pop();
@@ -10288,6 +10576,10 @@ window.addEventListener('mouseup', e => {
       exitEditMode();
     } else {
       frameDrag = null;
+      // Recompute split curves and region fills after moving a merged object.
+      // During drag, _topoSplitCurves holds stale compiled closures; rebuilding
+      // here keeps the fill aligned with the outline after release.
+      if (_fdMergedAnim) detectObjectTopology(_fdMergedAnim);
     }
     renderAnimList(); draw(); updateCursor(); return;
   }
@@ -10339,7 +10631,7 @@ canvas.addEventListener('mouseleave', () => {
   // reflow). Clearing it here caused selection to silently fail.
   if (anchorHover || handleHover || segmentHover || resizeHover || rotateHover || sideActionHover || frameHover || lockHover || fillHover || anchorIconHover !== null) {
     anchorHover = null; handleHover = null; segmentHover = null; resizeHover = null; rotateHover = null; sideActionHover = null; frameHover = null; lockHover = null; fillHover = null;
-    anchorIconHover = null; _anchorIconPositions = null;
+    anchorIconHover = null; _anchorIconPositions = null; _editNodeArcHover = null; _editNodeAnchorHover = null;
     updateCursor(); draw();
   }
 });
@@ -10390,23 +10682,6 @@ objCanvas.addEventListener('mousedown', e => {
         renderAnimList(); draw();
       } else {
         splitArcMode = null;
-        renderAnimList(); draw();
-      }
-      return;
-    }
-
-    // ── Promote node mode ──
-    if (promoteNodeMode !== null) {
-      e.preventDefault();
-      const _pnAh = queryAnchorHover(mathX, mathY);
-      const _pnLo = Math.min(promoteNodeMode.fromIdx, promoteNodeMode.toIdx);
-      const _pnHi = Math.max(promoteNodeMode.fromIdx, promoteNodeMode.toIdx);
-      if (_pnAh && _pnAh.anim.id === promoteNodeMode.curveId
-          && _pnAh.anchorIdx > _pnLo && _pnAh.anchorIdx < _pnHi) {
-        const _pnParent = animations.find(a => a.id === promoteNodeMode.animId);
-        if (_pnParent) splitChildCurveAtAnchor(_pnParent, promoteNodeMode.curveId, _pnAh.anchorIdx);
-      } else {
-        promoteNodeMode = null;
         renderAnimList(); draw();
       }
       return;
@@ -10709,23 +10984,6 @@ isolCanvas.addEventListener('mousedown', e => {
         renderAnimList(); draw();
       } else {
         splitArcMode = null;
-        renderAnimList(); draw();
-      }
-      return;
-    }
-
-    // ── Promote node mode ──
-    if (promoteNodeMode !== null) {
-      e.preventDefault();
-      const _pnAh = queryAnchorHover(mathX, mathY);
-      const _pnLo = Math.min(promoteNodeMode.fromIdx, promoteNodeMode.toIdx);
-      const _pnHi = Math.max(promoteNodeMode.fromIdx, promoteNodeMode.toIdx);
-      if (_pnAh && _pnAh.anim.id === promoteNodeMode.curveId
-          && _pnAh.anchorIdx > _pnLo && _pnAh.anchorIdx < _pnHi) {
-        const _pnParent = animations.find(a => a.id === promoteNodeMode.animId);
-        if (_pnParent) splitChildCurveAtAnchor(_pnParent, promoteNodeMode.curveId, _pnAh.anchorIdx);
-      } else {
-        promoteNodeMode = null;
         renderAnimList(); draw();
       }
       return;
@@ -11676,6 +11934,7 @@ function drawSegment(anim, segIdx, colorOverride = null, opacityScale = 1, thick
   if (!seg || !seg.compiled) return;
   const dpr = devicePixelRatio;
   const effectiveThickness = thicknessOverride !== null ? thicknessOverride : anim.thickness;
+  if (effectiveThickness === 0) return;
   const cw = zoomStrokeWidth(effectiveThickness);
   const color = colorOverride || anim.color;
   const opacity = absOpacity !== null ? absOpacity : animOutlineOpacity(anim) * opacityScale;
@@ -12433,7 +12692,7 @@ function sideActionButtonsForFrame(f) {
   return [{ kind: 'menu', x, y, w, h }];
 }
 
-function sideActionMenuItemsForFrame(f) {
+function sideActionMenuItemsForFrame(f, forSingleAnim = false) {
   if (!f || !sideActionMenuOpen) return [];
   const dpr = devicePixelRatio;
   const h = 22 * dpr;
@@ -12441,11 +12700,13 @@ function sideActionMenuItemsForFrame(f) {
   const w = 90 * dpr;
   const [menuBtn] = sideActionButtonsForFrame(f);
   if (!menuBtn) return [];
-  return [
+  const items = [
     { kind: 'duplicate', x: menuBtn.x, y: menuBtn.y + menuBtn.h + gap,              w, h },
     { kind: 'reflect',   x: menuBtn.x, y: menuBtn.y + menuBtn.h + gap + (h + gap),   w, h },
     { kind: 'rotate',    x: menuBtn.x, y: menuBtn.y + menuBtn.h + gap + (h + gap)*2, w, h },
   ];
+  if (forSingleAnim) items.push({ kind: 'editNodes', x: menuBtn.x, y: menuBtn.y + menuBtn.h + gap + (h + gap)*3, w, h });
+  return items;
 }
 
 function pointInRect(px, py, rect) {
@@ -12459,7 +12720,7 @@ function querySideActionButtonHover(cx, cy) {
     for (const btn of sideActionButtonsForFrame(f)) {
       if (pointInRect(cx, cy, btn)) return { anim, kind: btn.kind };
     }
-    for (const item of sideActionMenuItemsForFrame(f)) {
+    for (const item of sideActionMenuItemsForFrame(f, true)) {
       if (pointInRect(cx, cy, item)) return { anim, kind: item.kind };
     }
     return null;
@@ -12505,6 +12766,16 @@ function handleSideActionButtonPress(action) {
     toggleRotationModeFromSideAction(action);
     renderAnimList(); draw(); updateCursor();
     return true;
+  }
+  if (action.kind === 'editNodes') {
+    if (action.anim) {
+      clearRotationMode();
+      editNodesMode = !editNodesMode;
+      if (!editNodesMode) { _editNodeArcHover = null; _editNodeAnchorHover = null; }
+      draw(); updateCursor();
+      return true;
+    }
+    return false;
   }
   clearRotationMode();
   if (action.groupId != null) createGroupSideActionCopy(action.groupId, action.kind);
@@ -13076,6 +13347,34 @@ function buildGroupOrigStates(anims) {
 function applyGroupTranslation(drag, dx, dy) {
   for (const state of drag.origStates) {
     applyPointTransformFromState(state, pt => new Cx(pt.re + dx, pt.im + dy));
+  }
+}
+
+function buildOrigSplitAnchors(anim) {
+  if (!anim._topoSplitCurves) return null;
+  const m = new Map();
+  for (const [id, sc] of anim._topoSplitCurves) {
+    m.set(id, sc.anchors.map(a => a ? new Cx(a.re, a.im) : null));
+  }
+  return m;
+}
+
+function updateTopoSplitCurvesForTranslation(drag, dx, dy) {
+  const anim = drag.anim;
+  if (!anim?._topoSplitCurves) return;
+  if (drag.origSplitAnchors) {
+    for (const [id, origAnchors] of drag.origSplitAnchors) {
+      const sc = anim._topoSplitCurves.get(id);
+      if (!sc) continue;
+      for (let i = 0; i < origAnchors.length; i++) {
+        if (origAnchors[i]) sc.anchors[i] = new Cx(origAnchors[i].re + dx, origAnchors[i].im + dy);
+      }
+    }
+  }
+  for (const sc of anim._topoSplitCurves.values()) {
+    for (const seg of sc.segments) {
+      if (seg?.compiled) seg.compiled._sampleCache = null;
+    }
   }
 }
 
@@ -13968,7 +14267,7 @@ function drawSelectionSideActionButton(btn, active, showLabel = active) {
 
 function drawSelectionSideActionLabel(btn) {
   const dpr = devicePixelRatio;
-  const text = btn.kind === 'reflect' ? 'Reflect' : btn.kind === 'rotate' ? 'Rotate' : btn.kind === 'menu' ? 'Menu' : 'Duplicate';
+  const text = btn.kind === 'reflect' ? 'Reflect' : btn.kind === 'rotate' ? 'Rotate' : btn.kind === 'menu' ? 'Menu' : btn.kind === 'editNodes' ? 'Edit Nodes' : 'Duplicate';
   ctx.save();
   ctx.font = `${11 * dpr}px sans-serif`;
   ctx.textAlign = 'left';
@@ -13998,7 +14297,8 @@ function drawSideActionMenuItem(item, hovered) {
   const dpr = devicePixelRatio;
   const midX = item.x + item.w * 0.5;
   const midY = item.y + item.h * 0.5;
-  const text = item.kind === 'reflect' ? 'Reflect' : item.kind === 'rotate' ? 'Rotate' : 'Duplicate';
+  const text = item.kind === 'editNodes' ? (editNodesMode ? 'Exit Editing' : 'Edit Nodes') :
+    item.kind === 'reflect' ? 'Reflect' : item.kind === 'rotate' ? 'Rotate' : 'Duplicate';
   ctx.save();
   ctx.fillStyle = '#11111b';
   ctx.globalAlpha = hovered ? 0.92 : 0.82;
@@ -14023,7 +14323,7 @@ function drawSelectionSideActionButtons(anim) {
     const active = hovered || (btn.kind === 'rotate' && isRotationModeActiveForAnim(anim));
     drawSelectionSideActionButton(btn, active, hovered);
   }
-  for (const item of sideActionMenuItemsForFrame(f)) {
+  for (const item of sideActionMenuItemsForFrame(f, true)) {
     const hovered = sideActionHover?.anim === anim && sideActionHover?.kind === item.kind;
     drawSideActionMenuItem(item, hovered);
   }
@@ -14084,28 +14384,18 @@ function drawSelectionCrossbeams(anim, frame) {
   ctx.stroke();
 }
 
-function drawTopoArcHandles(curve, fromIdx, toIdx) {
+function drawTopoArcHandles(curve, fromIdx, toIdx, wrapAround = false) {
   const dpr = devicePixelRatio;
   const color = curve.color || '#89b4fa';
-  const _pnMode = promoteNodeMode?.curveId === curve.id;
-  const _pnLo = _pnMode ? Math.min(promoteNodeMode.fromIdx, promoteNodeMode.toIdx) : -1;
-  const _pnHi = _pnMode ? Math.max(promoteNodeMode.fromIdx, promoteNodeMode.toIdx) : -1;
-  // Anchor dots for each anchor in the arc range
-  for (let i = fromIdx; i <= toIdx; i++) {
+  const _drawDot = (i, isNode) => {
     const a = curve.anchors[i];
-    if (!a) continue;
+    if (!a) return;
     const isHov = anchorHover?.anim === curve && anchorHover?.anchorIdx === i;
-    const isPromotable = _pnMode && i > _pnLo && i < _pnHi;
-    const dotColor = isPromotable ? '#89dceb' : color;
-    const isNodeAnchor = (i === fromIdx || i === toIdx);
-    const baseR = isNodeAnchor ? 6 : 4;
-    drawAnchorDot(toCanvas(a.re, a.im), dotColor, (isHov ? 8 : isPromotable ? 7 : baseR) * dpr);
-  }
-  // Bézier handles for each segment in the arc range
-  const isPolyline = isPolylineAnim(curve);
-  for (let si = fromIdx; si < toIdx; si++) {
+    drawAnchorDot(toCanvas(a.re, a.im), color, (isHov ? 8 : isNode ? 6 : 4) * dpr);
+  };
+  const _drawSeg = si => {
     const seg = curve.segments[si];
-    if (!seg || isPolyline || !seg.h0 || !seg.h1) continue;
+    if (!seg || !seg.h0 || !seg.h1) return;
     for (const [side, anchorIdx] of [['h0', si], ['h1', si + 1]]) {
       const Acp = toCanvas(curve.anchors[anchorIdx].re, curve.anchors[anchorIdx].im);
       const hcp = toCanvas(seg[side].re, seg[side].im);
@@ -14117,6 +14407,19 @@ function drawTopoArcHandles(curve, fromIdx, toIdx) {
       const isHov = handleHover?.anim === curve && handleHover?.segIdx === si && handleHover?.side === side;
       drawHandleDot(hcp, color, (isHov ? 5 : 3.5) * dpr);
     }
+  };
+  const isPolyline = isPolylineAnim(curve);
+  if (wrapAround) {
+    const _nA = curve.anchors.length, _nS = curve.segments.length;
+    for (let i = fromIdx; i < _nA; i++) _drawDot(i, i === fromIdx);
+    for (let i = 0; i <= toIdx; i++) _drawDot(i, i === toIdx);
+    if (!isPolyline) {
+      for (let si = fromIdx; si < _nS; si++) _drawSeg(si);
+      for (let si = 0; si < toIdx; si++) _drawSeg(si);
+    }
+  } else {
+    for (let i = fromIdx; i <= toIdx; i++) _drawDot(i, i === fromIdx || i === toIdx);
+    if (!isPolyline) for (let si = fromIdx; si < toIdx; si++) _drawSeg(si);
   }
 }
 
@@ -14149,9 +14452,26 @@ function drawNonNodeAnchorDots(mainSel) {
   const { essentialPoints } = computeObjectTopologyData(mainSel);
   for (const _c of animCurves(mainSel)) {
     if (isPrimitiveAnim(_c) || isTextAnim(_c)) continue;
+    const _sc = mainSel._topoSplitCurves?.get(_c.id);
+    const _osm = _sc?._origSegForSplitSeg;
+    // Build set of original segment indices that have at least one visible split segment.
+    const _visOrigSegs = new Set();
+    if (_osm) {
+      for (let _ss = 0; _ss < _sc.segments.length; _ss++) {
+        if (_sc.segments[_ss]?.visible !== false) _visOrigSegs.add(_osm[_ss]);
+      }
+    }
     for (let _ai = 0; _ai < _c.anchors.length; _ai++) {
       const _a = _c.anchors[_ai];
       if (!_a) continue;
+      // Skip anchors whose adjacent original segments are all in deleted arcs.
+      if (_osm) {
+        const _nOS = _c.segments.length;
+        const _prevOrig = _ai > 0 ? _ai - 1 : (_c.closed ? _nOS - 1 : -1);
+        const _nextOrig = _ai < _nOS ? _ai : -1;
+        const _isOpenEnd = !_c.closed && (_ai === 0 || _ai >= _nOS);
+        if (!_isOpenEnd && !(_prevOrig >= 0 && _visOrigSegs.has(_prevOrig)) && !(_nextOrig >= 0 && _visOrigSegs.has(_nextOrig))) continue;
+      }
       const _isNode = essentialPoints.some(ep => Math.hypot(ep.pos.re - _a.re, ep.pos.im - _a.im) < 1e-4);
       if (_isNode) continue;
       drawAnchorDot(toCanvas(_a.re, _a.im), '#45475a', 3 * dpr);
@@ -14204,88 +14524,47 @@ function findAnchorIconAngle(mainSel, anchorCx, anchorCy) {
   return bestAngle;
 }
 
-// Draw the lock / promote / demote icon cluster near the hovered anchor.
-// Also updates _anchorIconPositions for mousemove hit-testing.
-function drawAnchorIconCluster(anchorCx, anchorCy, isLocked, canPromote, canDemote, mainSel) {
+// Draw the lock icon near the hovered anchor. Also updates _anchorIconPositions for mousemove hit-testing.
+function drawAnchorIconCluster(anchorCx, anchorCy, isLocked, mainSel) {
   const dpr = devicePixelRatio;
   const angle = findAnchorIconAngle(mainSel, anchorCx, anchorCy);
   const D = 28 * dpr;
-  const clCx = anchorCx + Math.cos(angle) * D, clCy = anchorCy + Math.sin(angle) * D;
-  const ICON_R = 8 * dpr, GAP = 4 * dpr;
-
-  const icons = ['lock'];
-  if (canPromote) icons.push('promote');
-  if (canDemote) icons.push('demote');
-
-  const perpAngle = angle + Math.PI / 2;
-  const step = ICON_R * 2 + GAP;
-  const positions = {};
-  icons.forEach((ic, i) => {
-    const off = (i - (icons.length - 1) / 2) * step;
-    positions[ic] = { cx: clCx + Math.cos(perpAngle) * off, cy: clCy + Math.sin(perpAngle) * off };
-  });
+  const icx = anchorCx + Math.cos(angle) * D, icy = anchorCy + Math.sin(angle) * D;
+  const ICON_R = 8 * dpr;
+  const isHov = anchorIconHover === 'lock';
 
   ctx.save();
-  for (const ic of icons) {
-    const { cx: icx, cy: icy } = positions[ic];
-    const isHov = anchorIconHover === ic;
-    ctx.beginPath();
-    ctx.arc(icx, icy, ICON_R, 0, Math.PI * 2);
-    ctx.fillStyle = isHov ? '#45475a' : '#313244';
-    ctx.fill();
-    ctx.strokeStyle = isHov ? '#cdd6f4' : '#7f849c';
-    ctx.lineWidth = 1.5 * dpr;
-    ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(icx, icy, ICON_R, 0, Math.PI * 2);
+  ctx.fillStyle = isHov ? '#45475a' : '#313244';
+  ctx.fill();
+  ctx.strokeStyle = isHov ? '#cdd6f4' : '#7f849c';
+  ctx.lineWidth = 1.5 * dpr;
+  ctx.stroke();
 
-    if (ic === 'lock') {
-      const col = isLocked ? '#ff8faa' : '#a6e3a1';
-      const sz = ICON_R;
-      const bw = sz * 1.1, bh = sz * 0.65;
-      const bodyTop = icy + sz * 0.05;
-      const shR = sz * 0.36, shCy = icy - sz * 0.42;
-      ctx.strokeStyle = col; ctx.fillStyle = col;
-      ctx.lineWidth = Math.max(1.5 * dpr, sz * 0.22); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-      // Shackle: left leg always connects to body; right leg connects (locked) or rises (unlocked).
-      ctx.beginPath();
-      ctx.moveTo(icx - shR, bodyTop);
-      ctx.lineTo(icx - shR, shCy);
-      ctx.arc(icx, shCy, shR, Math.PI, 0, false);
-      if (isLocked) {
-        ctx.lineTo(icx + shR, bodyTop);   // right leg down into body — clearly closed
-      } else {
-        ctx.lineTo(icx + shR, shCy - sz * 0.35);  // right leg rises up — clearly open
-      }
-      ctx.stroke();
-      // Body drawn over leg bottoms so legs appear to enter the body cleanly.
-      ctx.beginPath();
-      ctx.rect(icx - bw/2, bodyTop, bw, bh);
-      ctx.fill();
-    } else {
-      const col = '#89b4fa';
-      const sz = ICON_R * 0.72, hw = sz * 0.85, h = sz * 0.9;
-      ctx.fillStyle = col;
-      ctx.beginPath();
-      if (ic === 'promote') {
-        ctx.moveTo(icx, icy - h/2);
-        ctx.lineTo(icx + hw, icy + h/2);
-        ctx.lineTo(icx - hw, icy + h/2);
-      } else {
-        ctx.moveTo(icx, icy + h/2);
-        ctx.lineTo(icx + hw, icy - h/2);
-        ctx.lineTo(icx - hw, icy - h/2);
-      }
-      ctx.closePath();
-      ctx.fill();
-    }
+  const col = isLocked ? '#ff8faa' : '#a6e3a1';
+  const sz = ICON_R;
+  const bw = sz * 1.1, bh = sz * 0.65;
+  const bodyTop = icy + sz * 0.05;
+  const shR = sz * 0.36, shCy = icy - sz * 0.42;
+  ctx.strokeStyle = col; ctx.fillStyle = col;
+  ctx.lineWidth = Math.max(1.5 * dpr, sz * 0.22); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.beginPath();
+  ctx.moveTo(icx - shR, bodyTop);
+  ctx.lineTo(icx - shR, shCy);
+  ctx.arc(icx, shCy, shR, Math.PI, 0, false);
+  if (isLocked) {
+    ctx.lineTo(icx + shR, bodyTop);
+  } else {
+    ctx.lineTo(icx + shR, shCy - sz * 0.35);
   }
-
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.rect(icx - bw/2, bodyTop, bw, bh);
+  ctx.fill();
   ctx.restore();
 
-  _anchorIconPositions = { lock: null, promote: null, demote: null };
-  for (const ic of icons) {
-    const { cx, cy } = positions[ic];
-    _anchorIconPositions[ic] = { cx, cy, r: ICON_R + 2 * dpr };
-  }
+  _anchorIconPositions = { lock: { cx: icx, cy: icy, r: ICON_R + 2 * dpr } };
 }
 
 function drawTopoFeatureSelectionBounds(anim) {
@@ -14606,7 +14885,10 @@ function drawCommittedAnimation(anim, { deferOverlay = false } = {}) {
 
   if (anim.curves) {
     for (const c of anim.curves) {
-      const proxy = makeCurveProxy(anim, c);
+      // Use split curve when available so that deleted-arc segments (visible=false) are respected.
+      const splitC = anim._topoSplitCurves?.get(c.id);
+      const renderC = splitC ?? c;
+      const proxy = makeCurveProxy(anim, renderC);
       if (isPrimitiveAnim(proxy)) {
         drawPrimitive(proxy);
       } else if (isTextAnim(proxy)) {
@@ -14617,8 +14899,10 @@ function drawCommittedAnimation(anim, { deferOverlay = false } = {}) {
           const _fillProxy = animFillColor(proxy) ? proxy : { ...proxy, fillColor: anim.fillColor, fillStyle: anim.fillStyle, fillOpacity: anim.fillOpacity };
           drawCurveFill(_fillProxy, null, 1, []);
         }
-        for (let i = 0; i < proxy.segments.length; i++) {
-          const _as = getArcStyleForSegment(anim, c.id, i);
+        for (let i = 0; i < renderC.segments.length; i++) {
+          const _as = splitC
+            ? getArcStyleForSplitSegment(anim, c.id, i)
+            : getArcStyleForSegment(anim, c.id, i);
           const _outerSoft = _as?.outerSoftness ?? anim.outerSoftness ?? 0;
           const _innerSoft = _as?.innerSoftness ?? anim.innerSoftness ?? 0;
           if (_as && (_as.color || _as.thickness !== undefined || _as.opacity !== undefined)) {
@@ -14940,23 +15224,49 @@ function drawAnimations() {
         const { topoArcs: _drawArcs } = computeObjectTopologyData(mainSel);
         for (const _da of _drawArcs.filter(a => selectedArcKeys.has(a.label))) {
           const _daCurve = animCurves(mainSel).find(c => c.id === _da.curveId) ?? mainSel;
-          drawTopoArcHandles(_daCurve, _da.fromIdx, _da.toIdx);
+          drawTopoArcHandles(_daCurve, _da.fromIdx, _da.toIdx, _da.wrapAround);
         }
       }
-      // Anchor icon cluster (lock / promote / demote)
+      // Anchor icon cluster (lock)
       _anchorIconPositions = null;
-      if (anchorHover && !anchorDrag) {
+      if (anchorHover && !anchorDrag && !editNodesMode) {
         const _selCurveIds = new Set(animCurves(mainSel).map(c => c.id));
         if (_selCurveIds.has(anchorHover.anim.id)) {
           const _ahA = anchorHover.anim.anchors[anchorHover.anchorIdx];
           if (_ahA) {
             const [_ahCx, _ahCy] = toCanvas(_ahA.re, _ahA.im);
-            const { essentialPoints: _ahEps } = computeObjectTopologyData(mainSel);
-            const _isNode = _ahEps.some(ep => Math.hypot(ep.pos.re - _ahA.re, ep.pos.im - _ahA.im) < 1e-4);
             const _isLocked = isAnchorLocked(anchorHover.anim, anchorHover.anchorIdx);
-            const _isPromoted = !!(anchorHover.anim.promotedAnchors?.[anchorHover.anchorIdx]);
-            drawAnchorIconCluster(_ahCx, _ahCy, _isLocked, !_isNode, _isNode && _isPromoted, mainSel);
+            drawAnchorIconCluster(_ahCx, _ahCy, _isLocked, mainSel);
           }
+        }
+      }
+      // Edit-nodes mode: preview dot on arc (add) or red highlight on non-topo anchor (remove)
+      if (editNodesMode) {
+        const dpr = devicePixelRatio;
+        if (_editNodeArcHover) {
+          const [_ppx, _ppy] = toCanvas(_editNodeArcHover.mathPos.re, _editNodeArcHover.mathPos.im);
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(_ppx, _ppy, 5 * dpr, 0, Math.PI * 2);
+          ctx.fillStyle = '#89b4fa';
+          ctx.fill();
+          ctx.strokeStyle = '#cdd6f4';
+          ctx.lineWidth = 1.5 * dpr;
+          ctx.stroke();
+          ctx.restore();
+        }
+        if (_editNodeAnchorHover) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(_editNodeAnchorHover.cx, _editNodeAnchorHover.cy, 7 * dpr, 0, Math.PI * 2);
+          ctx.fillStyle = '#f38ba8';
+          ctx.globalAlpha = 0.35;
+          ctx.fill();
+          ctx.globalAlpha = 1;
+          ctx.strokeStyle = '#f38ba8';
+          ctx.lineWidth = 2 * dpr;
+          ctx.stroke();
+          ctx.restore();
         }
       }
       // Convert-to-Bézier preview: N dots on circle/ellipse
@@ -14989,26 +15299,6 @@ function drawAnimations() {
   drawSelectedGroupBounds();
   drawSelectedMultiSelectionBounds();
   drawContourSelectOverlay();
-
-  // Promote node mode: status banner
-  if (promoteNodeMode !== null) {
-    const _dpr = devicePixelRatio;
-    const _msg = 'Promote to node — click a highlighted anchor   •   Esc to cancel';
-    ctx.save();
-    ctx.font = `${11 * _dpr}px system-ui, sans-serif`;
-    const _mw = ctx.measureText(_msg).width;
-    const _bx = (canvas.width - _mw) / 2 - 10 * _dpr;
-    const _by = 10 * _dpr;
-    const _bw = _mw + 20 * _dpr;
-    const _bh = 20 * _dpr;
-    ctx.fillStyle = 'rgba(16,16,32,0.82)';
-    ctx.beginPath();
-    ctx.roundRect(_bx, _by, _bw, _bh, 4 * _dpr);
-    ctx.fill();
-    ctx.fillStyle = '#89dceb';
-    ctx.fillText(_msg, _bx + 10 * _dpr, _by + 14 * _dpr);
-    ctx.restore();
-  }
 
   // Rubber-band selection rectangle
   if (rubberBand) {
@@ -16210,7 +16500,7 @@ function appendRegionColorExpansion(parent, region, group) {
       }
     } else {
       const note = document.createElement('div');
-      note.style.cssText = 'padding: 16px 10px; font-size: 0.7rem; color: #6c7086; text-align: center; line-height: 1.6;';
+      note.style.cssText = 'padding: 16px 10px; font-size: 0.7rem; color: #7f849c; text-align: center; line-height: 1.6;';
       note.textContent = 'Switch to Gradient in the Style tab to enable a second color.';
       panel.appendChild(note);
     }
@@ -16623,7 +16913,7 @@ function appendColorExpansion(parent, anim) {
     outOpacity = appendSliderRow(panel, 'Opacity', 0, 100, 1, Math.round(animOutlineOpacity(anim) * 100),
       v => `${Math.round(v)}%`, v => { anim.outlineOpacity = clamp(parseFloat(v) / 100, 0, 1); saveProject(); },
       false, { colorTrack: opacitySliderTrack(outPreview) });
-    appendSliderRow(panel, 'Thickness', 1, 10, 1, anim.thickness ?? 2, v => `${Math.round(v)}`, v => {
+    appendSliderRow(panel, 'Thickness', 0, 10, 1, anim.thickness ?? 2, v => `${Math.round(v)}`, v => {
       anim.thickness = parseInt(v, 10); saveProject();
     }, false, { valAlign: 'center' });
 
@@ -16684,7 +16974,7 @@ function appendColorExpansion(parent, anim) {
         false, { colorTrack: opacitySliderTrack(c2Preview) });
     } else {
       const note = document.createElement('div');
-      note.style.cssText = 'padding: 16px 10px; font-size: 0.7rem; color: #6c7086; text-align: center; line-height: 1.6;';
+      note.style.cssText = 'padding: 16px 10px; font-size: 0.7rem; color: #7f849c; text-align: center; line-height: 1.6;';
       note.textContent = 'Switch to Gradient or Pattern in the Style tab to enable a second color.';
       panel.appendChild(note);
     }
@@ -16943,9 +17233,15 @@ function renderAnimThumbnail(anim, canvasEl, size = 48) {
         tctx.fillStyle = cFill; tctx.globalAlpha = c.fillOpacity ?? 0.3;
         try { tctx.fill('evenodd'); } catch (_) { tctx.fill(); }
       }
-      tctx.globalAlpha = 0.9;
-      for (const seg of (c.segments ?? [])) {
+      const _baseColor = anim.color || cColor;
+      const _baseOpacity = clamp(anim.outlineOpacity ?? 1, 0, 1);
+      const _cSegs = c.segments ?? [];
+      for (let _si = 0; _si < _cSegs.length; _si++) {
+        const seg = _cSegs[_si];
         if (!seg?.compiled || seg.visible === false) continue;
+        const _as = getArcStyleForSegment(anim, c.id, _si);
+        tctx.strokeStyle = _as?.color ?? _baseColor;
+        tctx.globalAlpha = _as?.opacity !== undefined ? clamp(_as.opacity, 0, 1) : _baseOpacity;
         tctx.beginPath(); let first = true;
         for (let i = 0; i <= 24; i++) {
           try { const pt = seg.compiled(0, i / 24, {}); if (!pt) continue; const [x,y] = T2(pt.re, pt.im); if (first) { tctx.moveTo(x,y); first = false; } else tctx.lineTo(x,y); } catch (_) {}
@@ -17908,20 +18204,232 @@ function _preserveRegionFill(anim, priorRegions) {
   anim.fillStyle   = _pf.fillStyle   ?? 'solid';
 }
 
+// De Casteljau split of cubic Bézier [p0,h0,h1,p1] at parameter t.
+function splitCubicAtT(p0, h0, h1, p1, t) {
+  const L = (a, b) => new Cx(a.re + (b.re - a.re) * t, a.im + (b.im - a.im) * t);
+  const q0 = L(p0, h0), q1 = L(h0, h1), q2 = L(h1, p1);
+  const r0 = L(q0, q1), r1 = L(q1, q2), mid = L(r0, r1);
+  return { leftH0: q0, leftH1: r0, mid, rightH0: r1, rightH1: q2 };
+}
+
+// Find intersections between two compiled Bézier segments by sampling in math space.
+// Returns [{tA, tB, point}] for crossings strictly inside both segments.
+function findCrossSegmentIntersections(compiledA, compiledB, N = 24) {
+  const sample = c => {
+    const pts = [];
+    for (let i = 0; i <= N; i++) {
+      const u = i / N;
+      try { const v = c(0, u, {}); if (v?.ok()) pts.push([u, v.re, v.im]); } catch (_) {}
+    }
+    return pts;
+  };
+  const pA = sample(compiledA), pB = sample(compiledB);
+  const hits = [];
+  for (let i = 0; i < pA.length - 1; i++) {
+    const [uA0, ax0, ay0] = pA[i], [uA1, ax1, ay1] = pA[i + 1];
+    const dax = ax1 - ax0, day = ay1 - ay0;
+    for (let j = 0; j < pB.length - 1; j++) {
+      const [uB0, bx0, by0] = pB[j], [uB1, bx1, by1] = pB[j + 1];
+      const dbx = bx1 - bx0, dby = by1 - by0;
+      const denom = dax * dby - day * dbx;
+      if (Math.abs(denom) < 1e-18) continue;
+      const dx = bx0 - ax0, dy = by0 - ay0;
+      const t = (dx * dby - dy * dbx) / denom, s = (dx * day - dy * dax) / denom;
+      if (t <= 0 || t >= 1 || s <= 0 || s >= 1) continue;
+      const uA = uA0 + t * (uA1 - uA0), uB = uB0 + s * (uB1 - uB0);
+      try {
+        const vA = compiledA(0, uA, {}), vB = compiledB(0, uB, {});
+        if (!vA?.ok() || !vB?.ok()) continue;
+        hits.push({ tA: uA, tB: uB, point: new Cx((vA.re + vB.re) / 2, (vA.im + vB.im) / 2) });
+      } catch (_) {}
+    }
+  }
+  const result = [];
+  for (const h of hits)
+    if (!result.some(r => Math.hypot(r.point.re - h.point.re, r.point.im - h.point.im) < 1e-4))
+      result.push(h);
+  return result;
+}
+
+// Split one curve's segments at the given t values (splitMap: Map<segIdx, [{t,point}]>).
+// Produces a new curve object with extra anchors at exact curve positions (sp.mid), plus
+// newSplitAnchors: [{segIdx, t, anchorIdx}] mapping each split to its post-split anchor index.
+function splitCurveAtTs(curve, splitMap) {
+  if (!splitMap?.size) return { splitCurve: curve, newSplitAnchors: [] };
+  const oa = curve.anchors, os = curve.segments, nA = oa.length, nS = os.length;
+  const newAnchors = [], newSegs = [], _origSegForSplitSeg = [], newSplitAnchors = [];
+  for (let si = 0; si < nS; si++) {
+    const seg = os[si], p0 = oa[si], p1 = si + 1 < nA ? oa[si + 1] : oa[0];
+    newAnchors.push(p0);
+    const splits = (splitMap.get(si) ?? []).filter(s => s.t > 0.005 && s.t < 0.995);
+    // Dynamic closure: reads curve.segments[si].compiled at draw time so drag
+    // (which replaces the segments array via applyPointTransformFromState) propagates.
+    const sub = (t0, t1) => {
+      const fn = (_t, u) => {
+        const live = curve.segments[si]?.compiled;
+        if (!live) return new Cx(NaN, NaN);
+        try { return live(0, t0 + u * (t1 - t0), {}); } catch (_) { return new Cx(NaN, NaN); }
+      };
+      fn.usesU = true; return fn;
+    };
+    if (!seg?.h0 || !p0 || !p1 || !splits.length) {
+      newSegs.push({ ...seg, compiled: sub(0, 1) });
+      _origSegForSplitSeg.push(si);
+      continue;
+    }
+    splits.sort((a, b) => a.t - b.t);
+    let curP0 = p0, curH0 = seg.h0, curH1 = seg.h1, tDone = 0;
+    for (const { t } of splits) {
+      const sp = splitCubicAtT(curP0, curH0, curH1, p1, (t - tDone) / (1 - tDone));
+      const newAnchorIdx = newAnchors.length;
+      newAnchors.push(new Cx(sp.mid.re, sp.mid.im));
+      newSplitAnchors.push({ segIdx: si, t, anchorIdx: newAnchorIdx });
+      newSegs.push({ h0: sp.leftH0, h1: sp.leftH1, eccentricity: seg.eccentricity, visible: seg.visible ?? true, compiled: sub(tDone, t), compiledRef: null });
+      _origSegForSplitSeg.push(si);
+      curP0 = sp.mid; curH0 = sp.rightH0; curH1 = sp.rightH1; tDone = t;
+    }
+    newSegs.push({ h0: curH0, h1: curH1, eccentricity: seg.eccentricity, visible: seg.visible ?? true, compiled: sub(tDone, 1), compiledRef: null });
+    _origSegForSplitSeg.push(si);
+  }
+  if (nS < nA) newAnchors.push(oa[nA - 1]);
+  return { splitCurve: { ...curve, anchors: newAnchors, segments: newSegs, _origSegForSplitSeg }, newSplitAnchors };
+}
+
+// For each pair of sub-curves in a merged object, find where segments cross and split them.
+// Returns { splitCurves, forceMerges } where each split anchor lands at sp.mid (exact curve
+// position) and forceMerges pairs up the corresponding split anchors across curves so the
+// DCEL union-find merges them without relying on spatial proximity.
+function splitRawCurvesAtIntersections(rawCurves) {
+  if (rawCurves.length < 2) return { splitCurves: rawCurves, forceMerges: [] };
+
+  // Phase 1: collect all crossings and plan splits.
+  const crossingRecords = [];
+  const splitPlan = new Map(); // curveId → Map(segIdx → [{t, point}])
+
+  for (let ai = 0; ai < rawCurves.length; ai++) {
+    const A = rawCurves[ai];
+    for (let bi = ai + 1; bi < rawCurves.length; bi++) {
+      const B = rawCurves[bi];
+      for (let sa = 0; sa < A.segments.length; sa++) {
+        if (!A.segments[sa]?.compiled) continue;
+        for (let sb = 0; sb < B.segments.length; sb++) {
+          if (!B.segments[sb]?.compiled) continue;
+          const hits = findCrossSegmentIntersections(A.segments[sa].compiled, B.segments[sb].compiled);
+          for (const { tA, tB, point } of hits) {
+            const nearA = tA <= 0.005 || tA >= 0.995;
+            const nearB = tB <= 0.005 || tB >= 0.995;
+            const nAl = A.anchors.length, nBl = B.anchors.length;
+            const anchorIdxA_orig = tA >= 0.5 ? (sa + 1 < nAl ? sa + 1 : 0) : sa;
+            const anchorIdxB_orig = tB >= 0.5 ? (sb + 1 < nBl ? sb + 1 : 0) : sb;
+            if (!nearA) {
+              if (!splitPlan.has(A.id)) splitPlan.set(A.id, new Map());
+              if (!splitPlan.get(A.id).has(sa)) splitPlan.get(A.id).set(sa, []);
+              splitPlan.get(A.id).get(sa).push({ t: tA, point });
+            }
+            if (!nearB) {
+              if (!splitPlan.has(B.id)) splitPlan.set(B.id, new Map());
+              if (!splitPlan.get(B.id).has(sb)) splitPlan.get(B.id).set(sb, []);
+              splitPlan.get(B.id).get(sb).push({ t: tB, point });
+            }
+            crossingRecords.push({ A, B, sa, sb, tA, tB, nearA, nearB, anchorIdxA_orig, anchorIdxB_orig });
+          }
+        }
+      }
+    }
+  }
+
+  // Phase 2: split each curve and collect the indices of newly inserted anchors.
+  const splitResults = new Map(); // curveId → { splitCurve, newSplitAnchors }
+  for (const c of rawCurves) splitResults.set(c.id, splitCurveAtTs(c, splitPlan.get(c.id)));
+
+  // Post-split index of an original anchor (before any new anchors were inserted).
+  const postSplitIdx = (curveId, origIdx) => {
+    const plan = splitPlan.get(curveId);
+    if (!plan) return origIdx;
+    let cum = 0;
+    for (let s = 0; s < origIdx; s++)
+      cum += (plan.get(s) ?? []).filter(sp => sp.t > 0.005 && sp.t < 0.995).length;
+    return origIdx + cum;
+  };
+
+  // Anchor index of a new split anchor at (segIdx, tVal) in the post-split curve.
+  const newSplitAnchorIdx = (curveId, segIdx, tVal) => {
+    const res = splitResults.get(curveId);
+    if (!res) return null;
+    const entry = res.newSplitAnchors.find(x => x.segIdx === segIdx && x.t === tVal);
+    return entry?.anchorIdx ?? null;
+  };
+
+  // Phase 3: build forceMerges — pair up corresponding split anchors across curves.
+  const forceMerges = [];
+  for (const { A, B, sa, sb, tA, tB, nearA, nearB, anchorIdxA_orig, anchorIdxB_orig } of crossingRecords) {
+    if (nearA && nearB) {
+      forceMerges.push({
+        idA: A.id, anchorIdxA: postSplitIdx(A.id, anchorIdxA_orig),
+        idB: B.id, anchorIdxB: postSplitIdx(B.id, anchorIdxB_orig),
+      });
+    } else if (nearA) {
+      const bIdx = newSplitAnchorIdx(B.id, sb, tB);
+      if (bIdx != null) forceMerges.push({
+        idA: A.id, anchorIdxA: postSplitIdx(A.id, anchorIdxA_orig),
+        idB: B.id, anchorIdxB: bIdx,
+      });
+    } else if (nearB) {
+      const aIdx = newSplitAnchorIdx(A.id, sa, tA);
+      if (aIdx != null) forceMerges.push({
+        idA: A.id, anchorIdxA: aIdx,
+        idB: B.id, anchorIdxB: postSplitIdx(B.id, anchorIdxB_orig),
+      });
+    } else {
+      const aIdx = newSplitAnchorIdx(A.id, sa, tA);
+      const bIdx = newSplitAnchorIdx(B.id, sb, tB);
+      if (aIdx != null && bIdx != null) forceMerges.push({
+        idA: A.id, anchorIdxA: aIdx,
+        idB: B.id, anchorIdxB: bIdx,
+      });
+    }
+  }
+
+  const splitCurves = rawCurves.map(c => splitResults.get(c.id).splitCurve);
+  return { splitCurves, forceMerges };
+}
+
 function detectObjectTopology(anim) {
   const priorRegions = anim.regions ?? [];
   anim.regions = [];
+  anim._topoSplitCurves = null;
   const rawCurves = animCurves(anim)
     .filter(a => !isTextAnim(a))
     .map(a => { if (isPrimitiveAnim(a)) { const p = primitiveToTopologyPath(a); if (p) recompileAnim(p); return p; } return a; })
     .filter(a => a && a.segments.length > 0);
   if (rawCurves.length < 1) { _preserveRegionFill(anim, priorRegions); return; }
+  // Split sub-curves at their mutual intersection points so the DCEL can form correct regions.
+  const { splitCurves: processedCurves, forceMerges } = splitRawCurvesAtIntersections(rawCurves);
+  anim._topoForceMerges = forceMerges;
   // For closed curves (segments.length >= anchors.length), always append a virtual copy of
   // anchors[0] so the closing segment runs forward (fromIdx < toIdx) like every other segment.
-  const curves = rawCurves.map(a => {
+  const curves = processedCurves.map(a => {
     if (a.segments.length < a.anchors.length || a.anchors.length < 2) return a;
     return { ...a, anchors: [...a.anchors, a.anchors[0]] };
   });
+  // Store WITH closing-anchor versions so computeObjectTopologyData and schematic drawing
+  // can access anchors[i+1] safely for the closing segment.
+  anim._topoSplitCurves = new Map(curves.map(c => [c.id, c]));
+
+  // Mark deleted arc segments as visible=false so the DCEL skips them and the stroke skips them.
+  if (anim.deletedArcs?.length) {
+    for (const d of anim.deletedArcs) {
+      const sc = anim._topoSplitCurves.get(d.curveId);
+      if (!sc) continue;
+      const nS = sc.segments.length;
+      for (let s = 0; s < nS; s++) {
+        if (!sc.segments[s]) continue;
+        const inRange = d.wrapAround ? (s >= d.fromIdx || s < d.toIdx)
+                                     : (s >= d.fromIdx && s < d.toIdx);
+        if (inRange) sc.segments[s] = { ...sc.segments[s], visible: false };
+      }
+    }
+  }
 
   // All anchor points are nodes. Register every anchor, then merge spatially coincident
   // anchors (across curves and within a curve's closing pair) via union-find.
@@ -17950,6 +18458,11 @@ function detectObjectTopology(anim) {
       }
     }
   }
+  for (const { idA, anchorIdxA, idB, anchorIdxB } of forceMerges) {
+    const ka = keyToNode.get(`${idA}:${anchorIdxA}`);
+    const kb = keyToNode.get(`${idB}:${anchorIdxB}`);
+    if (ka !== undefined && kb !== undefined) ufUnion(ka, kb);
+  }
   for (const [k, v] of keyToNode) keyToNode.set(k, ufFind(v));
   const uniqueNodes = new Set(keyToNode.values());
   if (uniqueNodes.size < 2) { _preserveRegionFill(anim, priorRegions); return; }
@@ -17959,6 +18472,7 @@ function detectObjectTopology(anim) {
   for (const a of curves) {
     for (let s = 0; s < a.segments.length; s++) {
       if (!a.segments[s]?.compiled) continue;
+      if (a.segments[s]?.visible === false) continue;
       const fromIdx = s, toIdx = s + 1;
       if (toIdx >= a.anchors.length) continue;
       const fromNid = keyToNode.get(`${a.id}:${fromIdx}`);
@@ -18180,11 +18694,20 @@ function isCornerAnchor(c, i) {
 }
 
 function computeObjectTopologyData(anim) {
-  const curves = animCurves(anim)
-    .filter(c => !isTextAnim(c))
-    .map(c => isPrimitiveAnim(c) ? primitiveToTopologyPath(c) : c)
-    .filter(Boolean);
+  const _splitMap = anim._topoSplitCurves;
+  const curves = _splitMap?.size
+    ? [..._splitMap.values()].filter(c => !isTextAnim(c))
+    : animCurves(anim)
+        .filter(c => !isTextAnim(c))
+        .map(c => isPrimitiveAnim(c) ? primitiveToTopologyPath(c) : c)
+        .filter(Boolean);
   if (!curves.length) return { essentialPoints: [], topoArcs: [] };
+
+  // Curves whose every segment is invisible (all arcs deleted) — exclude from node detection
+  // so their former intersection positions don't persist as phantom nodes.
+  const fullyCoveredIds = new Set(
+    curves.filter(c => c.segments.length > 0 && c.segments.every(s => !s || s.visible === false)).map(c => c.id)
+  );
 
   const EPSILON = 1e-6;
 
@@ -18206,6 +18729,11 @@ function computeObjectTopologyData(anim) {
       if (Math.hypot(pb.re - pa.re, pb.im - pa.im) < EPSILON) union(a, b);
     }
   }
+  for (const { idA, anchorIdxA, idB, anchorIdxB } of (anim._topoForceMerges ?? [])) {
+    const ia = pts.findIndex(p => p.c.id === idA && p.i === anchorIdxA);
+    const ib = pts.findIndex(p => p.c.id === idB && p.i === anchorIdxB);
+    if (ia >= 0 && ib >= 0) union(ia, ib);
+  }
 
   // Essential = open-curve endpoint OR interior junction OR user-promoted anchor.
   // Corner detection is removed; closed curves use anchor 0 as default when no other essential exists.
@@ -18213,6 +18741,17 @@ function computeObjectTopologyData(anim) {
   const _rootCurves = new Map();
   for (let j = 0; j < pts.length; j++) {
     const { c, i } = pts[j];
+    if (fullyCoveredIds.has(c.id)) continue;
+    // Skip anchors whose every adjacent split segment is invisible — they're interior to a
+    // deleted arc and should not contribute to intersection-node detection.
+    const nS = c.segments.length;
+    const prevIdx = i > 0 ? i - 1 : (c.closed ? nS - 1 : -1);
+    const prevSeg = prevIdx >= 0 ? c.segments[prevIdx] : null;
+    const nextSeg = i < nS ? c.segments[i] : null;
+    const prevVis = prevSeg != null && prevSeg.visible !== false;
+    const nextVis = nextSeg != null && nextSeg.visible !== false;
+    const isOpenEndpoint = !c.closed && (i === 0 || i >= nS);
+    if (!prevVis && !nextVis && !isOpenEndpoint) continue;
     const root = find(j);
     if (!c.closed && (i === 0 || i === c.anchors.length - 1)) endpointRoots.add(root);
     if (!_rootCurves.has(root)) _rootCurves.set(root, new Set());
@@ -18231,7 +18770,16 @@ function computeObjectTopologyData(anim) {
   }
   for (let j = 0; j < pts.length; j++) {
     const { c, i } = pts[j];
-    if (c.closed && i === 0 && !endpointRoots.has(find(j))) { endpointRoots.add(find(j)); _cwEss.add(c); }
+    if (c.closed && i === 0 && !endpointRoots.has(find(j))) {
+      // Fallback: only force anchor 0 as a node if this closed curve has no intersection nodes.
+      // If intersections already produced nodes on this curve, the start anchor is topologically
+      // arbitrary and should not split the curve into an extra arc.
+      let hasIntersectionNode = false;
+      for (let k = 1; k < c.anchors.length; k++) {
+        if (endpointRoots.has(find(j + k))) { hasIntersectionNode = true; break; }
+      }
+      if (!hasIntersectionNode) { endpointRoots.add(find(j)); _cwEss.add(c); }
+    }
   }
 
   const rootToNum = new Map();
@@ -18255,8 +18803,11 @@ function computeObjectTopologyData(anim) {
   essentialPoints.sort((a, b) => a.num - b.num);
 
   const topoArcs = [];
+  const _labelCounts = new Map();
+  const _uniqueLabel = base => { const n = _labelCounts.get(base) ?? 0; _labelCounts.set(base, n + 1); return n === 0 ? base : `${base}.${n}`; };
   let offset = 0;
   for (const c of curves) {
+    if (fullyCoveredIds.has(c.id)) { offset += c.anchors.length; continue; }
     const essIdxs = [];
     for (let i = 0; i < c.anchors.length; i++) {
       if (endpointRoots.has(find(offset + i))) essIdxs.push(i);
@@ -18267,7 +18818,18 @@ function computeObjectTopologyData(anim) {
         const fromNum = rootToNum.get(find(offset + fi));
         const toNum   = rootToNum.get(find(offset + ti));
         if (fromNum !== undefined && toNum !== undefined)
-          topoArcs.push({ label: `${nodeNumToLetter(fromNum)}-${nodeNumToLetter(toNum)}`, fromNum, toNum, curveId: c.id, fromIdx: fi, toIdx: ti });
+          topoArcs.push({ label: _uniqueLabel(`${nodeNumToLetter(fromNum)}-${nodeNumToLetter(toNum)}`), fromNum, toNum, curveId: c.id, fromIdx: fi, toIdx: ti });
+      }
+      // For closed curves: add a wrap-around arc from the last essential index back to the first.
+      // fromIdx > toIdx signals wrap-around; drawing code handles this as two sub-ranges.
+      if (c.closed) {
+        const fIdx = essIdxs[0], lIdx = essIdxs[essIdxs.length - 1];
+        if (lIdx > fIdx) {
+          const fromNum = rootToNum.get(find(offset + lIdx));
+          const toNum   = rootToNum.get(find(offset + fIdx));
+          if (fromNum !== undefined && toNum !== undefined)
+            topoArcs.push({ label: _uniqueLabel(`${nodeNumToLetter(fromNum)}-${nodeNumToLetter(toNum)}`), fromNum, toNum, curveId: c.id, fromIdx: lIdx, toIdx: fIdx, wrapAround: true });
+        }
       }
     } else if (essIdxs.length === 1 && c.closed) {
       // Single node on a closed curve: one looping arc back to itself
@@ -18275,17 +18837,27 @@ function computeObjectTopologyData(anim) {
       const fromNum = rootToNum.get(find(offset + fi));
       if (fromNum !== undefined) {
         const letter = nodeNumToLetter(fromNum);
-        topoArcs.push({ label: `${letter}-${letter}`, fromNum, toNum: fromNum, curveId: c.id, fromIdx: fi, toIdx: fi + c.anchors.length });
+        topoArcs.push({ label: _uniqueLabel(`${letter}-${letter}`), fromNum, toNum: fromNum, curveId: c.id, fromIdx: fi, toIdx: fi + c.anchors.length });
       }
     }
     offset += c.anchors.length;
   }
 
-  return { essentialPoints, topoArcs };
+  const filteredArcs = anim.deletedArcs?.length
+    ? topoArcs.filter(a => !anim.deletedArcs.some(
+        d => d.curveId === a.curveId && d.fromIdx === a.fromIdx && d.toIdx === a.toIdx))
+    : topoArcs;
+  const filteredEssentialPoints = filteredArcs.length < topoArcs.length
+    ? (() => {
+        const activeNums = new Set(filteredArcs.flatMap(a => [a.fromNum, a.toNum]));
+        return essentialPoints.filter(ep => activeNums.has(ep.num));
+      })()
+    : essentialPoints;
+  return { essentialPoints: filteredEssentialPoints, topoArcs: filteredArcs };
 }
 
 function arcStyleKey(curveId, fromIdx, toIdx) {
-  return `${curveId}:${Math.min(fromIdx, toIdx)}:${Math.max(fromIdx, toIdx)}`;
+  return `${curveId}:${fromIdx}:${toIdx}`;
 }
 
 function getArcStyle(anim, curveId, fromIdx, toIdx) {
@@ -18294,12 +18866,263 @@ function getArcStyle(anim, curveId, fromIdx, toIdx) {
 
 function getArcStyleForSegment(anim, curveId, segIdx) {
   if (!anim.arcStyles) return null;
+  const _osm = anim._topoSplitCurves?.get(curveId)?._origSegForSplitSeg;
   for (const [key, style] of Object.entries(anim.arcStyles)) {
     const parts = key.split(':');
-    if (parts[0] === String(curveId)) {
-      const lo = parseInt(parts[1]), hi = parseInt(parts[2]);
-      if (segIdx >= lo && segIdx < hi) return style;
+    if (parts[0] !== String(curveId)) continue;
+    const lo = parseInt(parts[1]), hi = parseInt(parts[2]);
+    if (_osm) {
+      // Arc range is in split-curve space; translate via _origSegForSplitSeg.
+      // lo > hi means wrap-around arc.
+      const _nS = _osm.length;
+      const _inRange = si => lo <= hi ? (si >= lo && si < hi) : (si >= lo || si < hi);
+      if (_osm.some((orig, si) => orig === segIdx && _inRange(si))) return style;
+    } else {
+      if (lo <= hi ? (segIdx >= lo && segIdx < hi) : (segIdx >= lo || segIdx < hi)) return style;
     }
+  }
+  return null;
+}
+
+// ── Add / remove node helpers ──────────────────────────────────────────────────
+
+// Returns the math-space point at the parametric midpoint of the arc (for stable icon placement).
+function arcMidpoint(anim, arc) {
+  const splitCurve = anim._topoSplitCurves?.get(arc.curveId);
+  const origCurve = animCurves(anim).find(c => c.id === arc.curveId) ?? null;
+  const curve = splitCurve || origCurve;
+  if (!curve) return null;
+  const anchors = curve.anchors, segs = curve.segments, nA = anchors.length;
+  const segList = [];
+  if (arc.wrapAround) {
+    for (let i = arc.fromIdx; i < nA; i++) segList.push(i);
+    const toN = arc.toIdx % nA;
+    for (let i = 0; i < toN; i++) segList.push(i);
+  } else {
+    const toI = Math.min(arc.toIdx, nA);
+    for (let i = arc.fromIdx; i < toI; i++) segList.push(i);
+  }
+  if (segList.length === 0) return anchors[arc.fromIdx] ?? null;
+  const midSi = segList[Math.floor(segList.length / 2)];
+  const seg = segs?.[midSi];
+  if (!seg?.compiled) return anchors[arc.fromIdx] ?? null;
+  try { const r = seg.compiled(0, 0.5, {}); return (r && isFinite(r.re) && isFinite(r.im)) ? r : (anchors[arc.fromIdx] ?? null); } catch { return anchors[arc.fromIdx] ?? null; }
+}
+
+// True if anchorIdx is strictly between the arc's topology endpoints (not a topo node itself).
+function isNonTopoAnchorOfArc(arc, anchorIdx, nA) {
+  const fi = arc.fromIdx;
+  const tiNorm = arc.toIdx % Math.max(1, nA);
+  if (arc.wrapAround) {
+    return anchorIdx !== fi && anchorIdx !== tiNorm;
+  }
+  // Normal arc (may be a single-loop: fi === tiNorm)
+  if (fi === tiNorm) return anchorIdx !== fi; // self-loop: every anchor except the node is non-topo
+  // fi < toIdx (no wrap): non-topo anchors are strictly between fi and tiNorm
+  return anchorIdx !== fi && anchorIdx !== tiNorm && anchorIdx > fi && anchorIdx < tiNorm;
+}
+
+// Find closest point on the selected arc to (mathX, mathY).
+// Returns { origSegIdx, t, mathPos, pxDist } or null.
+function closestPointOnArc(anim, arc, mathX, mathY) {
+  const [cpx, cpy] = toCanvas(mathX, mathY);
+  const origCurve = animCurves(anim).find(c => c.id === arc.curveId) ?? anim;
+  if (!origCurve?.segments?.length) return null;
+  const nS = origCurve.segments.length;
+
+  // Determine which original segment indices belong to this arc
+  let segIndices = [];
+  const splitCurve = anim._topoSplitCurves?.get(arc.curveId);
+  if (splitCurve?._origSegForSplitSeg) {
+    const osm = splitCurve._origSegForSplitSeg;
+    const snS = splitCurve.segments.length;
+    const inRange = si => arc.wrapAround ? (si >= arc.fromIdx || si < arc.toIdx)
+                                         : (si >= arc.fromIdx && si < arc.toIdx);
+    const origSegsInRange = new Set();
+    for (let si = 0; si < snS; si++) {
+      if (inRange(si) && splitCurve.segments[si]?.visible !== false) origSegsInRange.add(osm[si]);
+    }
+    segIndices = [...origSegsInRange];
+  } else {
+    if (arc.wrapAround) {
+      for (let si = arc.fromIdx; si < nS; si++) segIndices.push(si);
+      for (let si = 0; si < arc.toIdx; si++) segIndices.push(si);
+    } else {
+      const hi = Math.min(arc.toIdx, nS);
+      for (let si = arc.fromIdx; si < hi; si++) segIndices.push(si);
+    }
+  }
+
+  let best = null;
+  for (const si of segIndices) {
+    const seg = origCurve.segments[si];
+    if (!seg) continue;
+    const a0 = origCurve.anchors[si];
+    const a1 = origCurve.anchors[si + 1] ?? (origCurve.closed ? origCurve.anchors[0] : null);
+    if (!a0 || !a1) continue;
+    const p1 = seg.h0 ?? a0, p2 = seg.h1 ?? a1;
+    // Coarse sampling
+    const STEPS = 16;
+    let bestT = 0, bestDist = Infinity;
+    for (let k = 0; k <= STEPS; k++) {
+      const t = k / STEPS;
+      const u = 1 - t;
+      const rx = u*u*u*a0.re + 3*u*u*t*p1.re + 3*u*t*t*p2.re + t*t*t*a1.re;
+      const ry = u*u*u*a0.im + 3*u*u*t*p1.im + 3*u*t*t*p2.im + t*t*t*a1.im;
+      const [scx, scy] = toCanvas(rx, ry);
+      const d = Math.hypot(scx - cpx, scy - cpy);
+      if (d < bestDist) { bestDist = d; bestT = t; }
+    }
+    // Golden-section refinement
+    const phi = (Math.sqrt(5) - 1) / 2;
+    let lo = Math.max(0, bestT - 1/STEPS), hi = Math.min(1, bestT + 1/STEPS);
+    for (let iter = 0; iter < 20; iter++) {
+      const m1 = lo + (1 - phi) * (hi - lo), m2 = lo + phi * (hi - lo);
+      const evalDist = t2 => {
+        const u = 1 - t2;
+        const rx = u*u*u*a0.re + 3*u*u*t2*p1.re + 3*u*t2*t2*p2.re + t2*t2*t2*a1.re;
+        const ry = u*u*u*a0.im + 3*u*u*t2*p1.im + 3*u*t2*t2*p2.im + t2*t2*t2*a1.im;
+        const [scx, scy] = toCanvas(rx, ry);
+        return Math.hypot(scx - cpx, scy - cpy);
+      };
+      if (evalDist(m1) < evalDist(m2)) hi = m2; else lo = m1;
+    }
+    const fT = (lo + hi) / 2;
+    const u = 1 - fT;
+    const fx = u*u*u*a0.re + 3*u*u*fT*p1.re + 3*u*fT*fT*p2.re + fT*fT*fT*a1.re;
+    const fy = u*u*u*a0.im + 3*u*u*fT*p1.im + 3*u*fT*fT*p2.im + fT*fT*fT*a1.im;
+    const [fcx, fcy] = toCanvas(fx, fy);
+    const fDist = Math.hypot(fcx - cpx, fcy - cpy);
+    if (!best || fDist < best.pxDist) {
+      best = { origSegIdx: si, t: fT, mathPos: new Cx(fx, fy), pxDist: fDist };
+    }
+  }
+  return best;
+}
+
+// Split a single cubic Bézier segment at t. Returns { left, right } each [p0,p1,p2,p3] as Cx objects.
+function splitSegmentAt(a0, p1, p2, a1, t) {
+  const lerp = (a, b, u) => new Cx(a.re + (b.re - a.re) * u, a.im + (b.im - a.im) * u);
+  const p01 = lerp(a0, p1, t), p12 = lerp(p1, p2, t), p23 = lerp(p2, a1, t);
+  const p012 = lerp(p01, p12, t), p123 = lerp(p12, p23, t);
+  const mid  = lerp(p012, p123, t);
+  return { left: [a0, p01, p012, mid], right: [mid, p123, p23, a1] };
+}
+
+// Insert a new anchor on the arc at the position described by preview.
+function insertAnchorOnArc(anim, arc, preview) {
+  const origCurve = animCurves(anim).find(c => c.id === arc.curveId) ?? anim;
+  if (!origCurve) return;
+  const si = preview.origSegIdx, t = preview.t;
+  const seg = origCurve.segments[si];
+  if (!seg) return;
+  const a0 = origCurve.anchors[si];
+  const a1 = origCurve.anchors[si + 1] ?? (origCurve.closed ? origCurve.anchors[0] : null);
+  if (!a0 || !a1) return;
+  const p1 = seg.h0 ? cloneCx(seg.h0) : cloneCx(a0);
+  const p2 = seg.h1 ? cloneCx(seg.h1) : cloneCx(a1);
+  const { left, right } = splitSegmentAt(a0, p1, p2, a1, t);
+  // left = [a0, lh0, lh1, mid], right = [mid, rh0, rh1, a1]
+  seg.h0 = left[1]; seg.h1 = left[2];
+  const newSeg = { h0: right[1], h1: right[2] };
+  origCurve.anchors.splice(si + 1, 0, cloneCx(left[3]));
+  origCurve.segments.splice(si + 1, 0, newSeg);
+  // Shift arc indices that sit above the insertion point
+  const _shiftIdx = idx => idx > si ? idx + 1 : idx;
+  if (anim.arcStyles) {
+    const ns = {};
+    for (const [key, val] of Object.entries(anim.arcStyles)) {
+      const parts = key.split(':');
+      if (String(arc.curveId) === parts[0]) {
+        ns[arcStyleKey(parts[0], _shiftIdx(+parts[1]), _shiftIdx(+parts[2]))] = val;
+      } else ns[key] = val;
+    }
+    anim.arcStyles = ns;
+  }
+  if (anim.deletedArcs) {
+    for (const da of anim.deletedArcs) {
+      if (da.curveId === arc.curveId) {
+        if (da.fromIdx > si) da.fromIdx++;
+        if (da.toIdx > si) da.toIdx++;
+      }
+    }
+  }
+  if (origCurve.promotedAnchors) origCurve.promotedAnchors.splice(si + 1, 0, false);
+  if (anim.promotedAnchors && anim.promotedAnchors !== origCurve.promotedAnchors) anim.promotedAnchors.splice(si + 1, 0, false);
+  if (origCurve.anchorLocked) origCurve.anchorLocked.splice(si + 1, 0, undefined);
+  if (anim.anchorLocked && anim.anchorLocked !== origCurve.anchorLocked) anim.anchorLocked.splice(si + 1, 0, undefined);
+  recompileSegment(origCurve, si);
+  recompileSegment(origCurve, si + 1);
+  reselectArcAfterEdit(anim, arc);
+}
+
+// Remove a non-topology anchor from the arc, merging its two adjacent segments.
+function removeAnchorOnArc(anim, arc, anchorIdx) {
+  const origCurve = animCurves(anim).find(c => c.id === arc.curveId) ?? anim;
+  if (!origCurve) return;
+  const nS = origCurve.segments.length;
+  const prevSi = anchorIdx > 0 ? anchorIdx - 1 : (origCurve.closed ? nS - 1 : -1);
+  const nextSi = anchorIdx < nS ? anchorIdx : -1;
+  if (prevSi < 0 || nextSi < 0) return;
+  const prevSeg = origCurve.segments[prevSi], nextSeg = origCurve.segments[nextSi];
+  if (!prevSeg || !nextSeg) return;
+  // Merged segment: preserve endpoint tangents from the outermost handles
+  prevSeg.h0 = prevSeg.h0 ? cloneCx(prevSeg.h0) : null;
+  prevSeg.h1 = nextSeg.h1 ? cloneCx(nextSeg.h1) : null;
+  origCurve.anchors.splice(anchorIdx, 1);
+  origCurve.segments.splice(nextSi, 1);
+  // Shift any arc indices above the removed anchor
+  const _shiftIdx = idx => idx >= anchorIdx ? idx - 1 : idx;
+  if (anim.arcStyles) {
+    const ns = {};
+    for (const [key, val] of Object.entries(anim.arcStyles)) {
+      const parts = key.split(':');
+      if (String(arc.curveId) === parts[0]) {
+        const fi = _shiftIdx(+parts[1]), ti = _shiftIdx(+parts[2]);
+        if (fi !== ti) ns[arcStyleKey(parts[0], fi, ti)] = val;
+      } else ns[key] = val;
+    }
+    anim.arcStyles = ns;
+  }
+  if (anim.deletedArcs) {
+    for (const da of anim.deletedArcs) {
+      if (da.curveId === arc.curveId) {
+        if (da.fromIdx >= anchorIdx) da.fromIdx--;
+        if (da.toIdx > anchorIdx) da.toIdx--;
+      }
+    }
+    anim.deletedArcs = anim.deletedArcs.filter(da => da.curveId !== arc.curveId || da.fromIdx < da.toIdx);
+  }
+  if (origCurve.promotedAnchors) origCurve.promotedAnchors.splice(anchorIdx, 1);
+  if (anim.promotedAnchors && anim.promotedAnchors !== origCurve.promotedAnchors) anim.promotedAnchors.splice(anchorIdx, 1);
+  if (origCurve.anchorLocked) origCurve.anchorLocked.splice(anchorIdx, 1);
+  if (anim.anchorLocked && anim.anchorLocked !== origCurve.anchorLocked) anim.anchorLocked.splice(anchorIdx, 1);
+  recompileSegment(origCurve, prevSi);
+  reselectArcAfterEdit(anim, arc);
+}
+
+// After inserting or removing an anchor, rerun topology and re-latch drillObjectArc to the same arc.
+function reselectArcAfterEdit(anim, currentArc) {
+  detectObjectTopology(anim);
+  const { topoArcs } = computeObjectTopologyData(anim);
+  const matching = topoArcs.find(a => a.label === currentArc.label);
+  if (matching) {
+    drillObjectArc = { animId: anim.id, label: matching.label, curveId: matching.curveId,
+      fromIdx: matching.fromIdx, toIdx: matching.toIdx, wrapAround: !!matching.wrapAround };
+    selectedArcKeys = new Set([matching.label]);
+  } else {
+    drillObjectArc = null; selectedArcKeys = new Set();
+  }
+}
+
+function getArcStyleForSplitSegment(anim, curveId, splitSegIdx) {
+  if (!anim.arcStyles) return null;
+  for (const [key, style] of Object.entries(anim.arcStyles)) {
+    const parts = key.split(':');
+    if (parts[0] !== String(curveId)) continue;
+    const lo = parseInt(parts[1]), hi = parseInt(parts[2]);
+    if (lo <= hi ? (splitSegIdx >= lo && splitSegIdx < hi) : (splitSegIdx >= lo || splitSegIdx < hi))
+      return style;
   }
   return null;
 }
@@ -19832,7 +20655,7 @@ function appendGroupArcColorPicker(parent, anim) {
   root.className = 'color-expansion';
   root.addEventListener('mousedown', e => e.stopPropagation());
   root.addEventListener('click', e => e.stopPropagation());
-  appendSliderRow(root, 'Thickness', 1, 10, 1, anim.thickness ?? 2, v => `${Math.round(v)}`, v => {
+  appendSliderRow(root, 'Thickness', 0, 10, 1, anim.thickness ?? 2, v => `${Math.round(v)}`, v => {
     pushUndo();
     anim.thickness = parseInt(v, 10);
     saveProject(); draw();
@@ -20144,9 +20967,11 @@ function renderGroupDetail(detailEl, groupId) {
 function updateGroupObjectsButton() {
   const btn = document.getElementById('group-objects-btn');
   const mergeBtn = document.getElementById('merge-objects-btn');
+  const hintEl = document.getElementById('tool-hint');
   if (!btn) return;
   btn.className = '';
   btn.disabled = false;
+  if (hintEl) hintEl.style.display = 'none';
   const groupActive = isGroupSelectionActive();
   const objectDetailOpen = (selectedId != null || editModeAnimId != null) && !groupActive;
   const shouldShow = !groupActive && (groupSelectionMode || !objectDetailOpen);
@@ -20175,8 +21000,15 @@ function updateGroupObjectsButton() {
     return;
   }
 
-  btn.textContent = 'Group Objects';
-  if (animations.filter(a => !a.inPlacementMode).length < 2) btn.disabled = true;
+  btn.style.display = 'none';
+  if (hintEl) {
+    const toolHints = {
+      'select': 'Click on any object to select it. To select multiple objects, hold Ctrl, or click and drag a rectangle around all the objects to be selected.',
+      'arc-builder': 'Use the ← → arrow keys to adjust the bend as you draw.',
+    };
+    const hint = toolHints[activePlacementTool()];
+    if (hint) { hintEl.textContent = hint; hintEl.style.display = 'block'; }
+  }
 }
 
 function activeTrayGroupPath(detailAnim) {
@@ -20715,17 +21547,27 @@ function drawObjectSchematic(canvasEl, anim, opts = {}) {
   ctx.clearRect(0, 0, W, H);
 
   const visualPrimitives = [];
-  const curves = animCurves(anim)
-    .filter(c => !isTextAnim(c))
-    .map(c => {
-      if (isPrimitiveAnim(c)) {
-        const topo = primitiveToTopologyPath(c);
-        if (!topo) visualPrimitives.push(c);
-        return topo;
-      }
-      return c;
-    })
-    .filter(Boolean);
+  const _schSplitMap = anim._topoSplitCurves;
+  let curves;
+  if (_schSplitMap?.size) {
+    curves = [..._schSplitMap.values()].filter(c => !isTextAnim(c));
+    // Still need visual primitives for any unconvertible primitives not in split map
+    for (const c of animCurves(anim)) {
+      if (isPrimitiveAnim(c) && !_schSplitMap.has(c.id)) visualPrimitives.push(c);
+    }
+  } else {
+    curves = animCurves(anim)
+      .filter(c => !isTextAnim(c))
+      .map(c => {
+        if (isPrimitiveAnim(c)) {
+          const topo = primitiveToTopologyPath(c);
+          if (!topo) visualPrimitives.push(c);
+          return topo;
+        }
+        return c;
+      })
+      .filter(Boolean);
+  }
   if (!curves.length && !visualPrimitives.length) return;
 
   let minRe = Infinity, maxRe = -Infinity, minIm = Infinity, maxIm = -Infinity;
@@ -20760,7 +21602,7 @@ function drawObjectSchematic(canvasEl, anim, opts = {}) {
   const toC = pt => ({ x: offX + (pt.re - minRe) * sc, y: H - (offY + (pt.im - minIm) * sc) });
 
   const { essentialPoints, topoArcs } = computeObjectTopologyData(anim);
-  const curvesMap = new Map(curves.map(c => [c.id, c]));
+  const curvesMap = _schSplitMap?.size ? _schSplitMap : new Map(curves.map(c => [c.id, c]));
 
   const selArcLabels = opts.selectedArcLabels ?? new Set();
   const hovArcLabel  = opts.hoveredArcLabel ?? null;
@@ -20791,13 +21633,18 @@ function drawObjectSchematic(canvasEl, anim, opts = {}) {
   // 2. Curve strokes (dimmed when any arc or region is highlighted)
   for (const c of curves) {
     const isPolyline = isPolylineAnim(c);
-    ctx.strokeStyle = (c.color || anim.color || '#89b4fa') + (hasHighlight ? '44' : 'bb');
-    ctx.lineWidth = 1.5 * dpr;
     ctx.lineJoin = 'round'; ctx.lineCap = 'round';
     for (let i = 0; i < c.segments.length; i++) {
       const seg = c.segments[i];
       const p0 = c.anchors[i], p1 = c.anchors[i + 1];
       if (!p0 || !p1) continue;
+      if (seg?.visible === false) continue;
+      const _as = getArcStyleForSegment(anim, c.id, i);
+      const _segThick = _as?.thickness !== undefined ? _as.thickness : (anim.thickness ?? 2);
+      const _isDash = _segThick === 0;
+      ctx.strokeStyle = '#9090a0' + (hasHighlight ? '44' : 'bb');
+      ctx.lineWidth = 1.5 * dpr;
+      ctx.setLineDash(_isDash ? [4 * dpr, 4 * dpr] : []);
       const { x: ax, y: ay } = toC(p0), { x: bx, y: by } = toC(p1);
       ctx.beginPath(); ctx.moveTo(ax, ay);
       if (!isPolyline && seg?.h0 && seg?.h1) {
@@ -20806,11 +21653,12 @@ function drawObjectSchematic(canvasEl, anim, opts = {}) {
       } else ctx.lineTo(bx, by);
       ctx.stroke();
     }
+    ctx.setLineDash([]);
   }
   for (const c of visualPrimitives) {
     const p0 = c.anchors[0], p1 = c.anchors[1];
     if (!p0 || !p1) continue;
-    ctx.strokeStyle = (c.color || anim.color || '#89b4fa') + (hasHighlight ? '44' : 'bb');
+    ctx.strokeStyle = '#9090a0' + (hasHighlight ? '44' : 'bb');
     ctx.lineWidth = 1.5 * dpr;
     ctx.lineJoin = 'round'; ctx.lineCap = 'round';
     ctx.beginPath();
@@ -20838,15 +21686,23 @@ function drawObjectSchematic(canvasEl, anim, opts = {}) {
     ctx.lineWidth = (isSel ? 2.5 : 2) * dpr;
     ctx.lineJoin = 'round'; ctx.lineCap = 'round';
     ctx.beginPath();
-    for (let i = arc.fromIdx; i < arc.toIdx; i++) {
+    let _hlStarted = false;
+    const _drawHlSeg = i => {
       const p0 = c.anchors[i], p1 = c.anchors[i + 1], seg = c.segments[i];
-      if (!p0 || !p1) continue;
+      if (!p0 || !p1) return;
       const { x: ax, y: ay } = toC(p0), { x: bx, y: by } = toC(p1);
-      if (i === arc.fromIdx) ctx.moveTo(ax, ay); else ctx.lineTo(ax, ay);
+      if (!_hlStarted) { ctx.moveTo(ax, ay); _hlStarted = true; } else ctx.lineTo(ax, ay);
       if (!isPolyline && seg?.h0 && seg?.h1) {
         const { x: cx0, y: cy0 } = toC(seg.h0), { x: cx1, y: cy1 } = toC(seg.h1);
         ctx.bezierCurveTo(cx0, cy0, cx1, cy1, bx, by);
       } else ctx.lineTo(bx, by);
+    };
+    if (arc.wrapAround) {
+      const _arcM = c.anchors.length - 1;
+      for (let i = arc.fromIdx; i < _arcM; i++) _drawHlSeg(i);
+      for (let i = 0; i < arc.toIdx; i++) _drawHlSeg(i);
+    } else {
+      for (let i = arc.fromIdx; i < arc.toIdx; i++) _drawHlSeg(i);
     }
     ctx.stroke();
     ctx.restore();
@@ -20861,7 +21717,7 @@ function drawObjectSchematic(canvasEl, anim, opts = {}) {
       const isHov = ep.num === hovNodeNum;
       ctx.beginPath();
       ctx.arc(x, y, isHov ? _dotR + 1.5 * dpr : _dotR, 0, Math.PI * 2);
-      ctx.fillStyle = isHov ? '#89b4fa' : '#6c7086';
+      ctx.fillStyle = isHov ? '#89b4fa' : '#e0e0e0';
       ctx.fill();
     }
     ctx.restore();
@@ -20915,7 +21771,10 @@ function hitTestRegionCentroid(canvasEl, anim, cx, cy) {
 function _schemBB(canvasEl, anim) {
   const dpr = window.devicePixelRatio || 1;
   const W = canvasEl.width, H = canvasEl.height;
-  const curves = animCurves(anim).filter(c => !isPrimitiveAnim(c) && !isTextAnim(c));
+  const _bbSplitMap = anim._topoSplitCurves;
+  const curves = _bbSplitMap?.size
+    ? [..._bbSplitMap.values()].filter(c => !isTextAnim(c))
+    : animCurves(anim).filter(c => !isPrimitiveAnim(c) && !isTextAnim(c));
   if (!curves.length) return null;
   let minRe = Infinity, maxRe = -Infinity, minIm = Infinity, maxIm = -Infinity;
   for (const c of curves) {
@@ -20945,8 +21804,11 @@ function hitTestNodeBadge(canvasEl, anim, cx, cy) {
 function hitTestSchematicArc(canvasEl, anim, cx, cy) {
   const dpr = window.devicePixelRatio || 1;
   const W = canvasEl.width, H = canvasEl.height;
-  const curves = animCurves(anim).filter(c => !isTextAnim(c))
-    .map(c => isPrimitiveAnim(c) ? primitiveToTopologyPath(c) : c).filter(Boolean);
+  const _shtSplitMap = anim._topoSplitCurves;
+  const curves = _shtSplitMap?.size
+    ? [..._shtSplitMap.values()].filter(c => !isTextAnim(c))
+    : animCurves(anim).filter(c => !isTextAnim(c))
+        .map(c => isPrimitiveAnim(c) ? primitiveToTopologyPath(c) : c).filter(Boolean);
   if (!curves.length) return null;
   let minRe = Infinity, maxRe = -Infinity, minIm = Infinity, maxIm = -Infinity;
   for (const c of curves) for (const a of c.anchors) { minRe = Math.min(minRe, a.re); maxRe = Math.max(maxRe, a.re); minIm = Math.min(minIm, a.im); maxIm = Math.max(maxIm, a.im); }
@@ -20956,7 +21818,7 @@ function hitTestSchematicArc(canvasEl, anim, cx, cy) {
   const offX = (W - (maxRe - minRe) * sc) / 2, offY = (H - (maxIm - minIm) * sc) / 2;
   const toC = pt => ({ x: offX + (pt.re - minRe) * sc, y: H - (offY + (pt.im - minIm) * sc) });
   const { topoArcs } = computeObjectTopologyData(anim);
-  const curvesMap = new Map(curves.map(c => [c.id, c]));
+  const curvesMap = _shtSplitMap?.size ? _shtSplitMap : new Map(curves.map(c => [c.id, c]));
   const ctx = canvasEl.getContext('2d');
   ctx.save();
   ctx.lineWidth = 12 * dpr;
@@ -20966,13 +21828,20 @@ function hitTestSchematicArc(canvasEl, anim, cx, cy) {
     const isPolyline = isPolylineAnim(c);
     const path = new Path2D();
     let started = false;
-    for (let i = arc.fromIdx; i < arc.toIdx; i++) {
+    const _htSeg = i => {
       const p0 = c.anchors[i], p1 = c.anchors[i + 1], seg = c.segments[i];
-      if (!p0 || !p1) continue;
+      if (!p0 || !p1) return;
       const { x: ax, y: ay } = toC(p0), { x: bx, y: by } = toC(p1);
       if (!started) { path.moveTo(ax, ay); started = true; } else path.lineTo(ax, ay);
       if (!isPolyline && seg?.h0 && seg?.h1) { const { x: cx0, y: cy0 } = toC(seg.h0), { x: cx1, y: cy1 } = toC(seg.h1); path.bezierCurveTo(cx0, cy0, cx1, cy1, bx, by); }
       else path.lineTo(bx, by);
+    };
+    if (arc.wrapAround) {
+      const _htM = c.anchors.length - 1;
+      for (let i = arc.fromIdx; i < _htM; i++) _htSeg(i);
+      for (let i = 0; i < arc.toIdx; i++) _htSeg(i);
+    } else {
+      for (let i = arc.fromIdx; i < arc.toIdx; i++) _htSeg(i);
     }
     if (started && ctx.isPointInStroke(path, cx, cy)) { ctx.restore(); return arc.label; }
   }
@@ -20983,8 +21852,11 @@ function hitTestSchematicArc(canvasEl, anim, cx, cy) {
 function hitTestSchematicRegion(canvasEl, anim, cx, cy) {
   const dpr = window.devicePixelRatio || 1;
   const W = canvasEl.width, H = canvasEl.height;
-  const curves = animCurves(anim).filter(c => !isTextAnim(c))
-    .map(c => isPrimitiveAnim(c) ? primitiveToTopologyPath(c) : c).filter(Boolean);
+  const _shrSplitMap = anim._topoSplitCurves;
+  const curves = _shrSplitMap?.size
+    ? [..._shrSplitMap.values()].filter(c => !isTextAnim(c))
+    : animCurves(anim).filter(c => !isTextAnim(c))
+        .map(c => isPrimitiveAnim(c) ? primitiveToTopologyPath(c) : c).filter(Boolean);
   if (!curves.length) return null;
   let minRe = Infinity, maxRe = -Infinity, minIm = Infinity, maxIm = -Infinity;
   for (const c of curves) for (const a of c.anchors) { minRe = Math.min(minRe, a.re); maxRe = Math.max(maxRe, a.re); minIm = Math.min(minIm, a.im); maxIm = Math.max(maxIm, a.im); }
@@ -20993,7 +21865,7 @@ function hitTestSchematicRegion(canvasEl, anim, cx, cy) {
   const sc = Math.min((W - PAD * 2) / Math.max(maxRe - minRe, 1e-6), (H - PAD * 2) / Math.max(maxIm - minIm, 1e-6));
   const offX = (W - (maxRe - minRe) * sc) / 2, offY = (H - (maxIm - minIm) * sc) / 2;
   const toC = pt => ({ x: offX + (pt.re - minRe) * sc, y: H - (offY + (pt.im - minIm) * sc) });
-  const curvesMap = new Map(curves.map(c => [c.id, c]));
+  const curvesMap = _shrSplitMap?.size ? _shrSplitMap : new Map(curves.map(c => [c.id, c]));
   const ctx = canvasEl.getContext('2d');
   for (const region of (anim.regions ?? [])) {
     const path = buildSchematicRegionPath(region, curvesMap, toC);
@@ -21733,7 +22605,7 @@ function renderAnimListLegacy() {
         const { topoArcs } = computeObjectTopologyData(anim);
         if (topoArcs.length > 0) {
           const _fa = topoArcs[0];
-          drillObjectArc = { animId: anim.id, label: _fa.label, curveId: _fa.curveId, fromIdx: _fa.fromIdx, toIdx: _fa.toIdx };
+          drillObjectArc = { animId: anim.id, label: _fa.label, curveId: _fa.curveId, fromIdx: _fa.fromIdx, toIdx: _fa.toIdx, wrapAround: !!_fa.wrapAround };
           selectedArcKeys = new Set([_fa.label]); objectDetailTab = 'outline';
         }
         saveProject(); renderAnimList(); draw();
@@ -21832,7 +22704,7 @@ function renderAnimListLegacy() {
           v => `${Math.round(v)}%`, v => { anim.outlineOpacity = clamp(parseFloat(v) / 100, 0, 1); saveProject(); draw(); },
           false, { colorTrack: opacitySliderTrack(_arcColorPreview) });
       } else {
-        appendSliderRow(_ctrlDiv, 'Thickness', 1, 10, 1, anim.thickness ?? 2,
+        appendSliderRow(_ctrlDiv, 'Thickness', 0, 10, 1, anim.thickness ?? 2,
           v => `${Math.round(v)}`, v => { anim.thickness = parseInt(v, 10); saveProject(); draw(); },
           false, { valAlign: 'center' });
       }
@@ -21865,7 +22737,7 @@ function renderAnimListLegacy() {
             v => `${Math.round(v)}%`, v => { anim.outlineOpacity = clamp(parseFloat(v) / 100, 0, 1); saveProject(); draw(); },
             false, { colorTrack: opacitySliderTrack(_gColorPreview) });
         } else {
-          appendSliderRow(_arcCtrlDiv, 'Thickness', 1, 10, 1, anim.thickness ?? 2,
+          appendSliderRow(_arcCtrlDiv, 'Thickness', 0, 10, 1, anim.thickness ?? 2,
             v => `${Math.round(v)}`, v => { anim.thickness = parseInt(v, 10); saveProject(); draw(); },
             false, { valAlign: 'center' });
           const _gSoftWrap = document.createElement('div');
@@ -21930,7 +22802,7 @@ function renderAnimListLegacy() {
             false, { colorTrack: opacitySliderTrack(_arcColorPreview), mixed: _mixedOp });
         } else {
           // Style sub-tab
-          appendSliderRow(_arcCtrlDiv, 'Thickness', 1, 10, 1, _initArcThick,
+          appendSliderRow(_arcCtrlDiv, 'Thickness', 0, 10, 1, _initArcThick,
             v => `${Math.round(v)}`, v => { _applyArc({ thickness: parseInt(v, 10) }); },
             false, { valAlign: 'center', mixed: _mixedTh });
 
@@ -22043,10 +22915,17 @@ function renderAnimListLegacy() {
       if (regionFillSubTab === 1) {
         // Color 1
         if (!_activeReg.fillColor) {
-          const _dc = normalizeColorString(globalSettings.defaultColor);
-          const _dh = _dc ? colorToHsl(_dc).h : 0;
-          _activeReg.fillColor = hslToHex(_dh, 100, 50);
-          if (!isFinite(_activeReg.fillOpacity) || _activeReg.fillOpacity <= 0) _activeReg.fillOpacity = 1;
+          // Prefer an existing sibling region's color so the default isn't jarring
+          const _sib = _regions.find(r => r !== _activeReg && r.fillColor);
+          if (_sib) {
+            _activeReg.fillColor = _sib.fillColor;
+            if (!isFinite(_activeReg.fillOpacity) || _activeReg.fillOpacity <= 0) _activeReg.fillOpacity = _sib.fillOpacity ?? 0.5;
+          } else {
+            const _dc = normalizeColorString(globalSettings.defaultColor);
+            const _dh = _dc ? colorToHsl(_dc).h : 0;
+            _activeReg.fillColor = hslToHex(_dh, 100, 50);
+            if (!isFinite(_activeReg.fillOpacity) || _activeReg.fillOpacity <= 0) _activeReg.fillOpacity = 1;
+          }
           saveProject();
         }
         let _c1Prev = normalizeColorString(_activeReg.fillColor) || _activeReg.fillColor;
