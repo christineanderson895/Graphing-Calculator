@@ -10142,9 +10142,7 @@ window.addEventListener('mousemove', e => {
             }
           }
           // Dead zone: suppress add-preview when cursor is within DEAD px of any existing anchor
-          // (non-topo anchors: DEAD=12px; topology junction nodes: HIT=6px — intersection positions
-          // can shift when a removed node changes the merged segment shape, so a smaller radius
-          // avoids blocking positions that were only recently vacated)
+          // (covers both topology nodes via essentialPoints and non-topo anchors via original curves)
           if (_editNodeArcHover) {
             let _nearNode = false;
             for (const _ep of _enEss) {
@@ -14909,7 +14907,7 @@ function drawCommittedAnimation(anim, { deferOverlay = false } = {}) {
           const _innerSoft = _as?.innerSoftness ?? anim.innerSoftness ?? 0;
           if (_as && (_as.color || _as.thickness !== undefined || _as.opacity !== undefined)) {
             drawSegment(proxy, i, _as.color ?? null, 1, _as.thickness ?? null,
-              _as.opacity !== undefined ? _as.opacity * _globalCanvasDimFactor : null, _outerSoft, _innerSoft);
+              _as.opacity !== undefined ? _as.opacity * clamp(anim.outlineOpacity ?? 1, 0, 1) * _globalCanvasDimFactor : null, _outerSoft, _innerSoft);
           } else {
             drawSegment(proxy, i, null, 1, null, null, _outerSoft, _innerSoft);
           }
@@ -14950,7 +14948,7 @@ function drawCommittedAnimation(anim, { deferOverlay = false } = {}) {
     const _innerSoft = _as?.innerSoftness ?? anim.innerSoftness ?? 0;
     if (_as && (_as.color || _as.thickness !== undefined || _as.opacity !== undefined)) {
       drawSegment(anim, i, _as.color ?? null, 1, _as.thickness ?? null,
-        _as.opacity !== undefined ? _as.opacity * _globalCanvasDimFactor : null, _outerSoft, _innerSoft);
+        _as.opacity !== undefined ? _as.opacity * clamp(anim.outlineOpacity ?? 1, 0, 1) * _globalCanvasDimFactor : null, _outerSoft, _innerSoft);
     } else {
       drawSegment(anim, i, null, 1, null, null, _outerSoft, _innerSoft);
     }
@@ -17243,7 +17241,7 @@ function renderAnimThumbnail(anim, canvasEl, size = 48) {
         if (!seg?.compiled || seg.visible === false) continue;
         const _as = getArcStyleForSegment(anim, c.id, _si);
         tctx.strokeStyle = _as?.color ?? _baseColor;
-        tctx.globalAlpha = _as?.opacity !== undefined ? clamp(_as.opacity, 0, 1) : _baseOpacity;
+        tctx.globalAlpha = _as?.opacity !== undefined ? clamp(_as.opacity, 0, 1) * _baseOpacity : _baseOpacity;
         tctx.beginPath(); let first = true;
         for (let i = 0; i <= 24; i++) {
           try { const pt = seg.compiled(0, i / 24, {}); if (!pt) continue; const [x,y] = T2(pt.re, pt.im); if (first) { tctx.moveTo(x,y); first = false; } else tctx.lineTo(x,y); } catch (_) {}
