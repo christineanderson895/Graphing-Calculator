@@ -4537,6 +4537,12 @@ function restoreSnapshot(snap) {
     return anim;
   });
   animations = animations.filter(a => !a.inPlacementMode);
+  // Second pass: retry topology detection for any closed curves whose regions ended up empty
+  // after the first pass. The first pass runs inside .map() before the animations array is
+  // fully established; a second attempt with the completed array consistently succeeds.
+  for (const a of animations) {
+    if (!a.regions.length && canFillAnim(a) && !isPrimitiveAnim(a)) detectObjectTopology(a);
+  }
   cleanupSingletonGroups();
   if (snapSelectedId !== null && animations.some(a => a.id === snapSelectedId)) selectedId = snapSelectedId;
   if (snapEditModeId !== null && animations.some(a => a.id === snapEditModeId)) editModeAnimId = snapEditModeId;
@@ -18395,7 +18401,11 @@ function splitRawCurvesAtIntersections(rawCurves) {
 }
 
 function detectObjectTopology(anim) {
-  const priorRegions = anim.regions ?? [];
+  const _rawPrior = anim.regions ?? [];
+  // If regions were already cleared by a prior call that failed, fall back to the
+  // stash saved by that prior call so fill colors survive a second detection attempt.
+  const priorRegions = _rawPrior.length > 0 ? _rawPrior : (anim._savedPriorRegions ?? []);
+  if (priorRegions.length > 0) anim._savedPriorRegions = priorRegions;
   anim.regions = [];
   anim._topoSplitCurves = null;
   const rawCurves = animCurves(anim)
@@ -18546,7 +18556,7 @@ function detectObjectTopology(anim) {
       else { for (let s = sMax-1; s >= sMin; s--) { const sg = a.segments[s]; if (sg?.compiled) [...sampleCompiledAdaptive(sg.compiled)].reverse().forEach(accum); } }
     }
     area /= 2;
-    if (area >= 0 || Math.abs(area) < 100) continue;
+    if (area >= 0 || Math.abs(area) < 4) continue;
     anim.regions.push(makeDetectedRegion(regionId, face, priorRegions[regionId]));
     regionId++;
   }
@@ -19273,7 +19283,7 @@ function detectRegionsForGroup(groupId) {
       else { for (let s = sMax-1; s >= sMin; s--) { const sg = anim.segments[s]; if (sg?.compiled) [...sampleCompiledAdaptive(sg.compiled)].reverse().forEach(accum); } }
     }
     area /= 2;
-    if (area >= 0 || Math.abs(area) < 100) continue; // discard outer face (positive) and degenerate faces
+    if (area >= 0 || Math.abs(area) < 4) continue; // discard outer face (positive) and degenerate faces
     grp.regions.push(makeDetectedRegion(regionId, face, priorRegions[regionId]));
     regionId++;
   }
@@ -22653,6 +22663,10 @@ function renderAnimListLegacy() {
   _dtContent.addEventListener('click', e => e.stopPropagation());
   detailEl.appendChild(_dtContent);
 
+  if (objectDetailTab === 'fill' && !anim.regions?.length && canFillAnim(anim) && !isPrimitiveAnim(anim)) {
+    detectObjectTopology(anim);
+    saveProject();
+  }
   const _regions = anim.regions ?? [];
 
   if (objectDetailTab === 'outline') {
