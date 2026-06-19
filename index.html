@@ -7319,6 +7319,7 @@ function hitTestObjectRegion(anim, cx, cy) {
   if (!anim?.regions?.length || !isAnimEffectivelyVisible(anim) || anim.inPlacementMode) return null;
   const curvesMap = buildTopologyCurvesMap(anim);
   for (const region of anim.regions) {
+    if (!region.fillColor || (region.fillOpacity ?? 0) <= 0) continue;
     const p = buildRegionPath(region, curvesMap);
     const fillRule = region.holeBoundaries?.length ? 'evenodd' : 'nonzero';
     if (ctx.isPointInPath(p, cx, cy, fillRule)) return region.id;
@@ -7458,6 +7459,7 @@ function autoSelectFillRegions(anim) {
 
 function fillHitCandidate(anim, cx, cy) {
   if (hitTestObjectRegion(anim, cx, cy) !== null) return true;
+  if (anim.regions?.length) return false;
   if (anim.curves?.length) {
     for (const c of anim.curves) {
       if (isTextAnim(c)) continue;
@@ -12667,7 +12669,7 @@ function rotationWheelForFrame(f) {
   if (!f) return null;
   const cx = f.x + f.w * 0.5;
   const cy = f.y + f.h * 0.5;
-  const r = Math.max(0, Math.min(f.w, f.h) * 0.25);
+  const r = Math.max(0, Math.min(f.w, f.h) * 0.375);
   return { cx, cy, r, frame: f };
 }
 
@@ -16284,7 +16286,7 @@ function _appendAllRegionColor(parent, anim) {
 }
 
 function appendDirectionWheel(container, getAngle, onChange) {
-  const SIZE = 58;
+  const SIZE = 116;
   const dpr = window.devicePixelRatio || 1;
   const canvas = document.createElement('canvas');
   canvas.width = Math.round(SIZE * dpr);
@@ -18118,6 +18120,8 @@ function makeDetectedRegion(id, boundary, prior = null) {
     fillStyle: prior?.fillStyle ?? 'solid',
     gradientToColor: prior?.gradientToColor ?? null,
     gradientToOpacity: prior?.gradientToOpacity ?? 0,
+    gradientStart: prior?.gradientStart,
+    gradientEnd: prior?.gradientEnd,
     gradientAngle: prior?.gradientAngle,
     patternType: prior?.patternType,
     patternAngle: prior?.patternAngle,
@@ -18569,23 +18573,12 @@ function detectObjectTopology(anim) {
       anim.regions[0].fillOpacity = anim.fillOpacity ?? 0;
       anim.regions[0].fillStyle = anim.fillStyle ?? 'solid';
     }
-    // When merging objects for the first time, migrate fills from sub-curves to regions.
-    // animCurves preserves fillColor on each entry; rawCurves may have primitives converted.
+    // When merging objects for the first time, auto-assign a distinct cycling color to every region.
     if (priorRegions.length === 0 && anim.curves) {
-      const _srcById = new Map(animCurves(anim).map(c => [c.id, c]));
       for (const region of anim.regions) {
-        if (region.fillColor) continue;
-        for (const edge of region.boundary) {
-          const _c = _srcById.get(edge.animId);
-          if (_c?.fillColor) {
-            region.fillColor = _c.fillColor;
-            region.fillOpacity = _c.fillOpacity ?? 0.5;
-            region.fillStyle = _c.fillStyle ?? 'solid';
-            region.gradientToColor = _c.gradientToColor ?? null;
-            region.gradientToOpacity = _c.gradientToOpacity ?? null;
-            break;
-          }
-        }
+        region.fillColor = DEFAULT_COLORS[animColorIdx++ % DEFAULT_COLORS.length];
+        region.fillOpacity = 1;
+        region.fillStyle = 'solid';
       }
     }
     // Only clear sub-curve fills for merged objects (anim.curves). For simple curves,
