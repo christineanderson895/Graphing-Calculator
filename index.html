@@ -4855,7 +4855,6 @@ function ctrlClickSelectId(id) {
   if (!id) return;
   finishCanvasTextEdit(false);
   const _prev = selectedId ?? editModeAnimId ?? selectedGroupId ?? null;
-  console.warn('[ctrlClickSelectId] id:', id, '_prev:', _prev, 'multiSelectedIds before:', [...multiSelectedIds]);
   clearObjectSelectionState();
   clearGroupMode();
   clearSelectionHovers();
@@ -5043,7 +5042,6 @@ function isGroupSelectionActive() {
 }
 
 function clearMultiSelection() {
-  if (multiSelectedIds.size) console.warn('[clearMultiSelection] clearing', multiSelectedIds.size, 'items', new Error().stack);
   multiSelectedIds = new Set();
   multiSelectionGuideShear = null;
 }
@@ -5321,113 +5319,65 @@ function mergeObjects(ids) {
   if (objectHasLinkableCurves(merged)) linkObjectCurves(merged);
   snapMergedCorners(merged);
   detectObjectTopology(merged);
-  console.warn('[diag merge] after detectObjectTopology: regions=', merged.regions.length, 'subcurve fills:', merged.curves.map(c => c.id + ':' + c.fillColor + '@' + c.fillOpacity)); // DIAGNOSTIC
-  // Migrate fills from source regions to merged regions using geometric matching:
-  // compute each source region's centroid (average of sampled boundary points in
-  // canvas coords), then find which merged region contains that point.
-  // This is robust to DCEL reordering — region indices can shift when new topology
-  // inserts faces in the middle, but spatial identity is stable.
+  // Migrate fills from sources to merged regions: sample each region's interior centroid,
+  // find which source(s) contain it, and assign the fill from the sole owner.
+  // Intersection regions (centroid inside 2+ sources) are left unfilled.
   if (merged.regions.length > 0) {
-    const _cmap = buildTopologyCurvesMap(merged);
-    for (const _src of sources) {
-      console.warn('[diag merge] source', _src.id, 'fillColor=', _src.fillColor, 'regions=', _src.regions?.map(r => r.fillColor)); // DIAGNOSTIC
-      for (const _sr of (_src.regions ?? [])) {
-        if (!_sr.fillColor) continue;
-        let _sx = 0, _sy = 0, _sc = 0;
-        for (const _e of _sr.boundary) {
-          const _cv = _cmap.get(_e.animId);
-          if (!_cv) continue;
-          const _s0 = Math.min(_e.startIdx, _e.endIdx), _s1 = Math.max(_e.startIdx, _e.endIdx);
-          for (let _s = _s0; _s < _s1; _s++) {
-            const _seg = _cv.segments[_s];
-            if (!_seg?.compiled) continue;
-            for (const _pt of sampleCompiledAdaptive(_seg.compiled)) { _sx += _pt[0]; _sy += _pt[1]; _sc++; }
-          }
-        }
-        if (!_sc) continue;
-        const _rid = hitTestObjectRegion(merged, _sx / _sc, _sy / _sc);
-        if (_rid === null) continue;
-        const _mr = merged.regions.find(r => r.id === _rid);
-        if (!_mr || _mr.fillColor) continue;
-        _mr.fillColor = _sr.fillColor;
-        _mr.fillOpacity = _sr.fillOpacity ?? 0;
-        _mr.fillStyle = _sr.fillStyle ?? 'solid';
-        _mr.gradientToColor = _sr.gradientToColor ?? null;
-        _mr.gradientToOpacity = _sr.gradientToOpacity ?? null;
-        _mr.gradientAngle = _sr.gradientAngle;
-        _mr.patternType = _sr.patternType;
-        _mr.patternAngle = _sr.patternAngle;
-        _mr.patternSpacing = _sr.patternSpacing;
+    const _migrSplitMap = merged._topoSplitCurves ?? new Map();
+    // Test whether a canvas-space point lies inside a source object.
+    const _ptInSrc = (px, py, _src) => {
+      // Primitive circle/ellipse: geometric containment via _circleArc on the split curve.
+      const _ca = _migrSplitMap.get(_src.id)?._circleArc;
+      if (_ca && (!_ca.rotation || Math.abs(_ca.rotation) < 1e-9)) {
+        const [_ccx, _ccy] = toCanvas(_ca.center.re, _ca.center.im);
+        const _rx = _ca.rx * scale, _ry = _ca.ry * scale;
+        if (Math.abs(_rx - _ry) < 1)
+          return (px - _ccx) ** 2 + (py - _ccy) ** 2 <= _rx * _rx;
+        return ((px - _ccx) / _rx) ** 2 + ((py - _ccy) / _ry) ** 2 <= 1;
       }
+      // Freeform single curve: collect canvas-space sample points and ray-cast.
+      // Ray-casting avoids ctx.isPointInPath which depends on the current canvas transform.
+      const _segs = _src.segments ?? [];
+      const _frmPts = [];
+      for (let _si = 0; _si < _segs.length; _si++) {
+        const _sg = _segs[_si];
+        if (!_sg?.compiled) continue;
+        for (const _pt of sampleCompiledAdaptive(_sg.compiled)) {
+          if (_pt) _frmPts.push(_pt);
+        }
+      }
+      if (_frmPts.length < 3) return false;
+      let _inside = false;
+      for (let _i = 0, _j = _frmPts.length - 1; _i < _frmPts.length; _j = _i++) {
+        const [_xi, _yi] = _frmPts[_i], [_xj, _yj] = _frmPts[_j];
+        if ((_yi > py) !== (_yj > py) && px < (_xj - _xi) * (py - _yi) / (_yj - _yi) + _xi)
+          _inside = !_inside;
+      }
+      return _inside;
+    };
+    for (const _mr of merged.regions) {
+      if (_mr.fillColor) continue;
+      const _cent = _sampleRegionCentroid(_mr, _migrSplitMap);
+      if (!_cent) continue;
+      const [_cpx, _cpy] = _cent;
+      const _hits = sources.filter(_src => _ptInSrc(_cpx, _cpy, _src));
+      if (_hits.length !== 1) continue;
+      const _hsrc = _hits[0];
+      // For converted freeforms, the fill lives in regions[0]; for primitives it's on fillColor directly.
+      const _hr = _hsrc.regions?.[0];
+      const _srcFill = _hr?.fillColor ?? _hsrc.fillColor;
+      if (!_srcFill) continue;
+      _mr.fillColor = _srcFill;
+      _mr.fillOpacity = _hr?.fillOpacity ?? _hsrc.fillOpacity ?? 0.5;
+      _mr.fillStyle = _hr?.fillStyle ?? _hsrc.fillStyle ?? 'solid';
+      _mr.gradientToColor = _hr?.gradientToColor ?? _hsrc.gradientToColor ?? null;
+      _mr.gradientToOpacity = _hr?.gradientToOpacity ?? _hsrc.gradientToOpacity ?? null;
+      _mr.gradientAngle = _hr?.gradientAngle ?? _hsrc.gradientAngle;
+      _mr.patternType = _hr?.patternType ?? _hsrc.patternType;
+      _mr.patternAngle = _hr?.patternAngle ?? _hsrc.patternAngle;
+      _mr.patternSpacing = _hr?.patternSpacing ?? _hsrc.patternSpacing;
     }
   }
-  // Fallback for simple (non-pre-merged) sources that carry fillColor directly rather
-  // than in a regions array. For each region still without fill, compute its centroid
-  // and geometrically test which sources contain it; the topmost (highest z-order) wins.
-  if (merged.regions.some(r => !r.fillColor)) {
-    const _simpleSrcs = sources.filter(s => !s.curves && s.fillColor);
-    if (_simpleSrcs.length > 0) {
-      const _cmap2 = merged._topoSplitCurves;
-      for (const _mr of merged.regions) {
-        if (_mr.fillColor) continue;
-        // Sample boundary edges to get centroid in canvas coords, then convert to math coords.
-        let _bx = 0, _by = 0, _bc = 0;
-        for (const _e of _mr.boundary) {
-          const _cv = _cmap2?.get(_e.animId);
-          if (!_cv) continue;
-          const _s0 = Math.min(_e.startIdx, _e.endIdx), _s1 = Math.max(_e.startIdx, _e.endIdx);
-          for (let _s = _s0; _s < _s1; _s++) {
-            const _seg = _cv.segments[_s];
-            if (!_seg?.compiled) continue;
-            for (const _pt of sampleCompiledAdaptive(_seg.compiled)) { _bx += _pt[0]; _by += _pt[1]; _bc++; }
-          }
-        }
-        if (!_bc) continue;
-        const [_mx, _my] = toMath(_bx / _bc, _by / _bc);
-        // Collect all sources that geometrically contain this centroid.
-        // Only migrate fill if exactly one source owns this region; overlap regions
-        // (centroid inside 2+ sources) are left unassigned for the user to set.
-        let _bestZ = -1, _bestSrc = null, _matchCount = 0;
-        for (const _src of _simpleSrcs) {
-          let _inside = false;
-          const _kind = animKind(_src);
-          if (_kind === 'circle') {
-            const _c = _src.anchors?.[0], _rp = _src.anchors?.[1];
-            if (_c && _rp) _inside = Math.hypot(_mx - _c.re, _my - _c.im) <= Math.hypot(_rp.re - _c.re, _rp.im - _c.im);
-          } else if (_kind === 'ellipse') {
-            const _c = _src.anchors?.[0], _rp = _src.anchors?.[1];
-            if (_c && _rp) {
-              const _rx = Math.abs(_rp.re - _c.re), _ry = Math.abs(_rp.im - _c.im);
-              const _rot = _src.rotation ?? 0;
-              const _cos = Math.cos(-_rot), _sin = Math.sin(-_rot);
-              const _dx = _mx - _c.re, _dy = _my - _c.im;
-              const _lx = _cos * _dx - _sin * _dy, _ly = _sin * _dx + _cos * _dy;
-              _inside = _rx > 0 && _ry > 0 && (_lx / _rx) ** 2 + (_ly / _ry) ** 2 <= 1;
-            }
-          } else {
-            // Freeform: fall back to boundary-animId heuristic (at least one arc from this source).
-            _inside = _mr.boundary.some(_e => _e.animId === _src.id);
-          }
-          if (_inside) {
-            _matchCount++;
-            const _z = _srcZOrder.get(_src.id) ?? -1;
-            if (_z > _bestZ) { _bestZ = _z; _bestSrc = _src; }
-          }
-        }
-        if (_matchCount !== 1 || !_bestSrc) continue;
-        _mr.fillColor        = _bestSrc.fillColor;
-        _mr.fillOpacity      = _bestSrc.fillOpacity ?? 0.5;
-        _mr.fillStyle        = _bestSrc.fillStyle ?? 'solid';
-        _mr.gradientToColor  = _bestSrc.gradientToColor ?? null;
-        _mr.gradientToOpacity = _bestSrc.gradientToOpacity ?? null;
-        _mr.gradientAngle    = _bestSrc.gradientAngle;
-        _mr.patternType      = _bestSrc.patternType;
-        _mr.patternAngle     = _bestSrc.patternAngle;
-        _mr.patternSpacing   = _bestSrc.patternSpacing;
-      }
-    }
-  }
-  console.warn('[diag merge] final region fills:', merged.regions.map((r,i) => i + ':' + r.fillColor + '@' + (r.fillOpacity??'?'))); // DIAGNOSTIC
   renderAnimList(); draw(); saveProject();
 }
 
@@ -5570,6 +5520,10 @@ function makeCurveProxy(parentAnim, c) {
     gradientFromArcs: c.gradientFromArcs instanceof Set ? c.gradientFromArcs : new Set(c.gradientFromArcs ?? []),
     gradientToArcs: c.gradientToArcs instanceof Set ? c.gradientToArcs : new Set(c.gradientToArcs ?? []),
     activeSegments: c.activeSegments instanceof Set ? c.activeSegments : new Set(c.activeSegments ?? []),
+    // When the parent has regions, suppress per-curve fills — region fills own all fill rendering.
+    // Without this, primitive child curves draw their full-circle fill on top of region fills,
+    // causing double-draw (crescents appear at ~51% opacity instead of the intended ~30%).
+    fillColor: parentAnim.regions?.length ? null : c.fillColor,
   };
 }
 
@@ -5740,7 +5694,6 @@ function deleteSubCurve(anim, curveId) {
     renderAnimList(); draw();
     return;
   }
-  anim._topoSplitCurves = null;
   detectObjectTopology(anim);
   renderAnimList(); draw();
 }
@@ -5755,7 +5708,6 @@ function deleteTopoArc(anim, drillArc) {
   anim.deletedArcs.push({ curveId, fromIdx, toIdx, wrapAround: !!wrapAround });
   drillObjectArc = null;
   selectedArcKeys = new Set();
-  anim._topoSplitCurves = null;
   detectObjectTopology(anim);
   renderAnimList(); draw();
 }
@@ -5772,7 +5724,6 @@ function deleteSelectedTopoArcs(anim) {
   }
   drillObjectArc = null;
   selectedArcKeys = new Set();
-  anim._topoSplitCurves = null;
   detectObjectTopology(anim);
   renderAnimList(); draw();
 }
@@ -6137,7 +6088,7 @@ function enterEditMode(anim, activeSegs) {
   clearGroupMode();
   const keepGuide = selectedId === anim.id || editModeAnimId === anim.id;
   clearSelectionShearGuides(keepGuide ? anim : null);
-  if (!keepGuide) { selectedObjectNode = null; drillObjectArc = null; selectedRegionIds = new Set(); }
+  if (!keepGuide || isPrimitiveAnim(anim)) { selectedObjectNode = null; drillObjectArc = null; selectedArcKeys = new Set(); selectedRegionIds = new Set(); }
   editModeAnimId = anim.id;
   selectedId = anim.id;
   tilesDrillPath = objectGroupId(anim) != null ? groupPathFromRoot(objectGroupId(anim)) : [];
@@ -6249,7 +6200,6 @@ function finalizePrimitivePlacement(anim) {
     detectObjectTopology(anim);
   }
   enterEditMode(anim, new Set());
-  exitEditMode();
   selectedShapeKind = SHAPE_TOOL_KINDS.includes(_primKind) ? _primKind : selectedShapeKind;
   currentTool = 'select';
   updateToolPanel();
@@ -6371,6 +6321,7 @@ function addAnimation(kind = 'freeform') {
   const anim = {
     id: Date.now() + Math.random(),
     letter, color, kind,
+    groupId: null,
     name: null,
     fillColor: null,
     outlineOpacity: 1,
@@ -7058,34 +7009,15 @@ function createSideActionCopy(src, kind) {
   }
 
   const segIdx = activeArcIndex(src);
-  console.warn('[diag] createSideActionCopy: src.deletedArcs=', JSON.stringify(src.deletedArcs), 'curves=', src.curves?.map(c=>c.id)); // DIAGNOSTIC
   const anim = segIdx !== null
     ? makeTransformedArcAnimation(src, segIdx, transformPoint)
     : makeTransformedAnimation(src, transformPoint, rotation);
   if (kind === 'reflect' && isTextAnim(anim)) anim.textScaleX = -(anim.textScaleX || 1);
-  console.warn('[diag] duplicate created: anim.deletedArcs=', JSON.stringify(anim.deletedArcs), 'curves=', anim.curves?.map(c=>c.id)); // DIAGNOSTIC
   animations.push(anim);
   recompileAnim(anim);
   if (anim.curves) for (const c of anim.curves) recompileAnim(c);
   detectObjectTopology(anim);
-  // DIAGNOSTIC: verify compiled closures on the duplicate's split curves
-  if (anim.curves && anim._topoSplitCurves) {
-    console.warn('[diag dup] _topoSplitCurves size=', anim._topoSplitCurves.size, 'regions=', anim.regions?.length);
-    for (const c of anim.curves) {
-      const sc = anim._topoSplitCurves.get(c.id);
-      if (!sc) { console.warn('[diag dup] sub-curve', c.id, '→ NO split curve found!'); continue; }
-      console.warn('[diag dup] sub-curve', c.id, '→ splitCurve segments=', sc.segments.length, 'anchors=', sc.anchors.length);
-      for (let si = 0; si < Math.min(sc.segments.length, 3); si++) {
-        const seg = sc.segments[si];
-        if (!seg?.compiled) { console.warn('[diag dup]   seg', si, '→ compiled=null!'); continue; }
-        const v0 = seg.compiled(0, 0, {}), v1 = seg.compiled(0, 0.5, {}), v2 = seg.compiled(0, 1, {});
-        console.warn('[diag dup]   seg', si, '→ u=0:', v0?.re?.toFixed(2), v0?.im?.toFixed(2),
-          '| u=0.5:', v1?.re?.toFixed(2), v1?.im?.toFixed(2),
-          '| u=1:', v2?.re?.toFixed(2), v2?.im?.toFixed(2),
-          '| ok:', v0?.ok?.(), v1?.ok?.(), v2?.ok?.());
-      }
-    }
-  }
+
 
   editModeAnimId = null;
   drillObjectArc = null;
@@ -7729,6 +7661,7 @@ function nearestTopologyNodeHit(anim, cx, cy, thresholdPx) {
 }
 
 function selectTopologyArc(parentAnim, arc) {
+  if (isPrimitiveAnim(parentAnim)) return;
   selectedObjectNode = null;
   selectedRegionIds = new Set();
   objectDetailTab = 'outline';
@@ -8844,17 +8777,14 @@ canvas.addEventListener('mousedown', e => {
 
   // ── Ctrl+click multi-selection ──
   if ((e.ctrlKey || e.metaKey) && !groupSelectionMode) {
-    console.warn('[ctrl-click] block entered; ctrlKey:', e.ctrlKey, 'metaKey:', e.metaKey);
     const _ctrlFill = queryFillHit(cx, cy);
     let _ctrlId = null;
     if (_ctrlFill) {
       _ctrlId = outermostGroupId(_ctrlFill) ?? _ctrlFill.id;
-      console.warn('[ctrl-click] fill hit id:', _ctrlId);
     } else {
       const _ctrlCurve = hitTestCurve(cx, cy);
       if (_ctrlCurve) {
         _ctrlId = outermostGroupId(_ctrlCurve.anim) ?? _ctrlCurve.anim.id;
-        console.warn('[ctrl-click] curve hit id:', _ctrlId);
       } else {
         const _ctrlRegionGid = queryGroupByRegionHit(cx, cy);
         if (_ctrlRegionGid !== null) {
@@ -8865,16 +8795,12 @@ canvas.addEventListener('mousedown', e => {
             _gid = _g.parentGroupId;
           }
           _ctrlId = _gid;
-          console.warn('[ctrl-click] region hit id:', _ctrlId);
-        } else {
-          console.warn('[ctrl-click] no hit at', cx, cy);
         }
       }
     }
     if (_ctrlId !== null) {
       e.preventDefault();
       ctrlClickSelectId(_ctrlId);
-      console.warn('[ctrl-click] after ctrlClickSelectId: multiSelectedIds.size=', multiSelectedIds.size, 'selectedId=', selectedId);
       renderAnimList(); draw(); updateCursor();
     }
     return;
@@ -10292,6 +10218,8 @@ window.addEventListener('mousemove', e => {
   if (frameDrag) {
     if (frameDrag.groupId != null || frameDrag.multi || frameDrag.mergedCurves) {
       const dx = softSnap(mathX - frameDrag.startMathX), dy = softSnap(mathY - frameDrag.startMathY);
+      if (!frameDrag.hasMoved && Math.hypot(mathX - frameDrag.startMathX, mathY - frameDrag.startMathY) * scale > 3)
+        frameDrag.hasMoved = true;
       applyGroupTranslation(frameDrag, dx, dy);
       if (frameDrag.mergedCurves) updateTopoSplitCurvesForTranslation(frameDrag, dx, dy);
       draw(); return;
@@ -10868,7 +10796,7 @@ window.addEventListener('mouseup', e => {
         if (desc.length === 0) continue;
         if (desc.every(a => hitIds.has(a.id) || selectedObjectCanvasBounds(a) == null)) promotedGroupIds.add(g.id);
       }
-      const ungroupedHits = hits.filter(a => a.groupId === null);
+      const ungroupedHits = hits.filter(a => a.groupId == null);
       // Collect animations that are in hitIds but not reachable from any promoted group
       // and not ungrouped — these are "orphaned" (groupId points to a broken/unreachable chain).
       const coveredByPromoted = new Set();
@@ -12822,8 +12750,9 @@ function selectedTopoArcsCanvasBounds(anim) {
   const { topoArcs } = computeObjectTopologyData(anim);
   let bounds = null;
   for (const arc of topoArcs.filter(a => selectedArcKeys.has(a.label))) {
-    // Use split curve (correct index space for fromIdx/toIdx); fall back to original curve
-    const curve = anim._topoSplitCurves?.get(arc.curveId)
+    // Merged objects: use split curve (arc index space matches _topoSplitCurves).
+    // Standalone freeforms: use original curve — split curve anchors/compiled go stale after drag.
+    const curve = (anim.curves ? anim._topoSplitCurves?.get(arc.curveId) : null)
       ?? animCurves(anim).find(c => c.id === arc.curveId);
     if (!curve) continue;
     const { fromIdx, toIdx, wrapAround } = arc;
@@ -13892,27 +13821,32 @@ function buildOrigSplitAnchors(anim) {
   if (!anim._topoSplitCurves) return null;
   const m = new Map();
   for (const [id, sc] of anim._topoSplitCurves) {
-    m.set(id, sc.anchors.map(a => a ? new Cx(a.re, a.im) : null));
+    m.set(id, {
+      anchors: sc.anchors.map(a => a ? new Cx(a.re, a.im) : null),
+      segs: sc.segments.map(s => s?.h0 && s?.h1 ? { h0: new Cx(s.h0.re, s.h0.im), h1: new Cx(s.h1.re, s.h1.im) } : null),
+      ca: sc._circleArc ? new Cx(sc._circleArc.center.re, sc._circleArc.center.im) : null,
+    });
   }
   return m;
 }
 
 function updateTopoSplitCurvesForTranslation(drag, dx, dy) {
   const anim = drag.anim;
-  if (!anim?._topoSplitCurves) return;
-  if (drag.origSplitAnchors) {
-    for (const [id, origAnchors] of drag.origSplitAnchors) {
-      const sc = anim._topoSplitCurves.get(id);
-      if (!sc) continue;
-      for (let i = 0; i < origAnchors.length; i++) {
-        if (origAnchors[i]) sc.anchors[i] = new Cx(origAnchors[i].re + dx, origAnchors[i].im + dy);
+  if (!anim?._topoSplitCurves || !drag.origSplitAnchors) return;
+  for (const [id, { anchors: origAnchors, segs: origSegs, ca: origCa }] of drag.origSplitAnchors) {
+    const sc = anim._topoSplitCurves.get(id);
+    if (!sc) continue;
+    for (let i = 0; i < origAnchors.length; i++) {
+      if (origAnchors[i]) sc.anchors[i] = new Cx(origAnchors[i].re + dx, origAnchors[i].im + dy);
+    }
+    if (origSegs) {
+      for (let j = 0; j < origSegs.length; j++) {
+        const s = sc.segments[j], o = origSegs[j];
+        if (s && o) { s.h0 = new Cx(o.h0.re + dx, o.h0.im + dy); s.h1 = new Cx(o.h1.re + dx, o.h1.im + dy); }
       }
     }
-  }
-  for (const sc of anim._topoSplitCurves.values()) {
-    for (const seg of sc.segments) {
-      if (seg?.compiled) seg.compiled._sampleCache = null;
-    }
+    if (origCa && sc._circleArc) sc._circleArc = { ...sc._circleArc, center: new Cx(origCa.re + dx, origCa.im + dy) };
+    recompileAnim(sc);
   }
 }
 
@@ -14175,13 +14109,12 @@ function convertCircleEllipseToPath(anim, n) {
   };
   const tangentAt = angle => rotateMathVector(new Cx(-rx * Math.sin(angle), ry * Math.cos(angle)), rot);
   const anchors = [];
-  for (let k = 0; k <= n; k++) anchors.push(pointAt(Math.PI / 2 + k * step));
-  anchors[n] = cloneCx(anchors[0]);
+  for (let k = 0; k < n; k++) anchors.push(pointAt(Math.PI / 2 + k * step));
   const segments = [];
   for (let k = 0; k < n; k++) {
     const a0 = Math.PI / 2 + k * step, a1 = a0 + step;
     const t0 = tangentAt(a0), t1 = tangentAt(a1);
-    const s = anchors[k], e = anchors[k + 1];
+    const s = anchors[k], e = anchors[(k + 1) % n];
     segments.push(makeSeg(new Cx(s.re + t0.re * h, s.im + t0.im * h), new Cx(e.re - t1.re * h, e.im - t1.im * h)));
   }
   anim.kind = 'freeform';
@@ -14941,10 +14874,11 @@ function drawSelectionCrossbeams(anim, frame) {
 function drawTopoArcHandles(curve, fromIdx, toIdx, wrapAround = false) {
   const dpr = devicePixelRatio;
   const color = curve.color || '#89b4fa';
+  const _cid = curve.id;
   const _drawDot = (i, isNode) => {
     const a = curve.anchors[i];
     if (!a) return;
-    const isHov = anchorHover?.anim === curve && anchorHover?.anchorIdx === i;
+    const isHov = anchorHover?.anim?.id === _cid && anchorHover?.anchorIdx === i;
     drawAnchorDot(toCanvas(a.re, a.im), color, (isHov ? 8 : isNode ? 6 : 4) * dpr);
   };
   const _drawSeg = si => {
@@ -14958,7 +14892,7 @@ function drawTopoArcHandles(curve, fromIdx, toIdx, wrapAround = false) {
       ctx.lineWidth = 1.2 * dpr; ctx.setLineDash([3*dpr, 3*dpr]);
       ctx.beginPath(); ctx.moveTo(Acp[0], Acp[1]); ctx.lineTo(hcp[0], hcp[1]); ctx.stroke();
       ctx.setLineDash([]); ctx.restore();
-      const isHov = handleHover?.anim === curve && handleHover?.segIdx === si && handleHover?.side === side;
+      const isHov = handleHover?.anim?.id === _cid && handleHover?.segIdx === si && handleHover?.side === side;
       drawHandleDot(hcp, color, (isHov ? 5 : 3.5) * dpr);
     }
   };
@@ -14981,6 +14915,7 @@ function drawNodeDots(anim) {
   if (isTextAnim(anim)) return;
   const { essentialPoints } = computeObjectTopologyData(anim);
   if (!essentialPoints.length) return;
+  if (anim.deletedArcs?.length) console.log('[drawNodeDots] deletedArcs present, essentialPoints:', essentialPoints.map(ep => `(${ep.pos.re.toFixed(3)},${ep.pos.im.toFixed(3)})`));
   const dpr = devicePixelRatio;
   const curves = animCurves(anim);
   for (const ep of essentialPoints) {
@@ -15027,7 +14962,7 @@ function drawNonNodeAnchorDots(mainSel) {
         if (!_isOpenEnd && !(_prevOrig >= 0 && _visOrigSegs.has(_prevOrig)) && !(_nextOrig >= 0 && _visOrigSegs.has(_nextOrig))) continue;
       }
       const _isNode = essentialPoints.some(ep => Math.hypot(ep.pos.re - _a.re, ep.pos.im - _a.im) < 1e-4);
-      if (_isNode) continue;
+      if (_isNode && mainSel.curves) continue;
       drawAnchorDot(toCanvas(_a.re, _a.im), '#45475a', 3 * dpr);
     }
   }
@@ -15415,19 +15350,27 @@ function drawCommittedAnimation(anim, { deferOverlay = false } = {}) {
   const inEditMode = (editModeAnimId === anim.id);
   // Skip region fills during a merged-object drag — region paths use stale compiled closures
   // and would render at the pre-drag position. They are redrawn correctly after mouseup.
-  if (!frameDrag?.mergedCurves || frameDrag.anim !== anim) drawObjectRegionFillsForAnim(anim);
+  if (!frameDrag?.mergedCurves || frameDrag.anim !== anim || !frameDrag.hasMoved || !!frameDrag.origSplitAnchors) drawObjectRegionFillsForAnim(anim);
 
   if (anim.curves) {
     // During a merged-object frameDrag, _topoSplitCurves closures are stale (baked at the
     // pre-drag position). Skip split-curve rendering so primitives draw at the live dragged
     // position instead of ghosting at the old one.
-    const _skipSplitForDrag = frameDrag?.mergedCurves && frameDrag.anim === anim;
+    // Skip split-curve rendering only when actually mid-drag AND no origSplitAnchors to keep
+    // the split curves live. origSplitAnchors (primitives) updates split curves in real time,
+    // so they stay valid during the drag and must be used to honour visible=false on deleted arcs.
+    const _skipSplitForDrag = frameDrag?.mergedCurves && frameDrag.anim === anim && frameDrag.hasMoved && !frameDrag.origSplitAnchors;
     for (const c of anim.curves) {
       // Use split curve when available so that deleted-arc segments (visible=false) are respected.
-      const splitC = _skipSplitForDrag ? null : (anim._topoSplitCurves?.get(c.id));
+      // Primitives with no deleted arcs are drawn from the original curve (split topology path
+      // has kind='freeform' and would apply Bézier approximation instead of exact arcs).
+      // When a primitive has deleted arcs, use the split curve so invisible segments are skipped.
+      const _primHasDeletedArcs = isPrimitiveAnim(c) && anim.deletedArcs?.some(d => d.curveId === c.id);
+      const _skipSplit = _skipSplitForDrag || (isPrimitiveAnim(c) && !_primHasDeletedArcs);
+      const splitC = _skipSplit ? null : (anim._topoSplitCurves?.get(c.id));
       const renderC = splitC ?? c;
       const proxy = makeCurveProxy(anim, renderC);
-      if (isPrimitiveAnim(proxy)) {
+      if (isPrimitiveAnim(c) && !splitC) {
         drawPrimitive(proxy);
       } else if (isTextAnim(proxy)) {
         drawTextAnim(proxy);
@@ -15759,7 +15702,23 @@ function drawAnimations() {
       const _inEditMode = editModeAnimId === mainSel.id;
       if (_inEditMode) drawNonNodeAnchorDots(mainSel);
       const _arcEditActive = editNodesMode || drillObjectArc?.animId === mainSel.id;
-      if (mainSel.curves || _arcEditActive) drawNodeDots(mainSel);
+      if (mainSel.curves) drawNodeDots(mainSel);
+      // Bézier handles for all selected arcs
+      if (drillObjectArc?.animId === mainSel.id && selectedArcKeys.size > 0) {
+        const { topoArcs: _allArcs } = computeObjectTopologyData(mainSel);
+        const _arcsToShow = _allArcs.filter(a => selectedArcKeys.has(a.label));
+        for (const _arc of _arcsToShow) {
+          let _handleCurve;
+          if (mainSel.curves) {
+            _handleCurve = mainSel._topoSplitCurves?.get(_arc.curveId) ?? null;
+          } else {
+            _handleCurve = (mainSel.closed && mainSel.segments.length >= mainSel.anchors.length)
+              ? { ...mainSel, anchors: [...mainSel.anchors, mainSel.anchors[0]] }
+              : mainSel;
+          }
+          if (_handleCurve) drawTopoArcHandles(_handleCurve, _arc.fromIdx, _arc.toIdx, !!_arc.wrapAround);
+        }
+      }
       // Anchor icon cluster (lock)
       _anchorIconPositions = null;
       if (anchorHover && !anchorDrag && !editNodesMode) {
@@ -19064,32 +19023,18 @@ function splitRawCurvesAtIntersections(rawCurves) {
 
   const splitCurves = rawCurves.map(c => splitResults.get(c.id).splitCurve);
 
-  // DIAGNOSTIC — remove once starburst is fixed
-  if (rawCurves.length > 1) {
-    console.group('%c[topo diag] splitRawCurves', 'color:cyan');
-    console.warn('curves:', rawCurves.map(c => `id=${c.id} (${c.anchors.length}a ${c.segments.length}s)`));
-    console.warn('crossingRecords:', crossingRecords.length);
-    for (const r of crossingRecords) {
-      const label = `id=${r.A.id} sa=${r.sa} tA=${r.tA.toFixed(3)}(nearA=${r.nearA}) x id=${r.B.id} sb=${r.sb} tB=${r.tB.toFixed(3)}(nearB=${r.nearB})`;
-      console.warn(' ', label);
-    }
-    console.warn('forceMerges:', forceMerges.length);
-    for (const fm of forceMerges) console.warn(`  id=${fm.idA}[${fm.anchorIdxA}] -- id=${fm.idB}[${fm.anchorIdxB}]`);
-    const splitCount = [...splitResults.values()].reduce((n, r) => n + r.newSplitAnchors.length, 0);
-    console.warn('total split anchors created:', splitCount);
-    console.groupEnd();
-  }
+
 
   return { splitCurves, forceMerges };
 }
 
 function detectObjectTopology(anim) {
-  console.warn('%c[topo diag] detectObjectTopology called', 'color:lime', anim.id, 'curves:', animCurves(anim).length); // DIAGNOSTIC
   const _rawPrior = anim.regions ?? [];
   // If regions were already cleared by a prior call that failed, fall back to the
   // stash saved by that prior call so fill colors survive a second detection attempt.
   const priorRegions = _rawPrior.length > 0 ? _rawPrior : (anim._savedPriorRegions ?? []);
   if (priorRegions.length > 0) anim._savedPriorRegions = priorRegions;
+  const oldCurvesMap = anim._topoSplitCurves?.size ? new Map(anim._topoSplitCurves) : null;
   anim.regions = [];
   anim._topoSplitCurves = null;
   const rawCurves = animCurves(anim)
@@ -19112,22 +19057,17 @@ function detectObjectTopology(anim) {
 
   // Mark deleted arc segments as visible=false so the DCEL skips them and the stroke skips them.
   if (anim.deletedArcs?.length) {
-    console.warn('[diag] detectObjectTopology: applying', anim.deletedArcs.length, 'deletedArcs'); // DIAGNOSTIC
     for (const d of anim.deletedArcs) {
       const sc = anim._topoSplitCurves.get(d.curveId);
-      if (!sc) { console.warn('[diag]   curveId', d.curveId, 'NOT FOUND in _topoSplitCurves'); continue; } // DIAGNOSTIC
+      if (!sc) continue;
       const nS = sc.segments.length;
-      let markedCount = 0; // DIAGNOSTIC
       for (let s = 0; s < nS; s++) {
         if (!sc.segments[s]) continue;
         const inRange = d.wrapAround ? (s >= d.fromIdx || s < d.toIdx)
                                      : (s >= d.fromIdx && s < d.toIdx);
-        if (inRange) { sc.segments[s] = { ...sc.segments[s], visible: false }; markedCount++; } // DIAGNOSTIC
+        if (inRange) sc.segments[s] = { ...sc.segments[s], visible: false };
       }
-      console.warn('[diag]   curveId', d.curveId, '→ marked', markedCount, 'of', nS, 'segments invisible (from', d.fromIdx, 'to', d.toIdx, 'wrap:', d.wrapAround, ')'); // DIAGNOSTIC
     }
-  } else {
-    console.warn('[diag] detectObjectTopology: NO deletedArcs on anim', anim.id); // DIAGNOSTIC
   }
 
   // All anchor points are nodes. Register every anchor, then merge spatially coincident
@@ -19230,8 +19170,7 @@ function detectObjectTopology(anim) {
     } while (he !== startHE);
     if (he === startHE && face.length >= 2) faces.push(face);
   }
-  if (!faces.length) { console.warn('[diag dcel] NO FACES found — halfEdges after collapse:', activeHalfEdges.length); _preserveRegionFill(anim, priorRegions); return; } // DIAGNOSTIC
-  console.warn('[diag dcel] faces found:', faces.length, 'halfEdges after collapse:', activeHalfEdges.length); // DIAGNOSTIC
+  if (!faces.length) { _preserveRegionFill(anim, priorRegions); return; }
 
   let regionId = 0;
   for (const face of faces) {
@@ -19246,12 +19185,44 @@ function detectObjectTopology(anim) {
       else { for (let s = sMax-1; s >= sMin; s--) { const sg = a.segments[s]; if (sg?.compiled) [...sampleCompiledAdaptive(sg.compiled)].reverse().forEach(accum); } }
     }
     area /= 2;
-    console.warn('[diag dcel] face', faces.indexOf(face), 'edges:', face.length, 'area:', area.toFixed(1), area >= 0 ? '(SKIPPED: exterior)' : Math.abs(area) < 4 ? '(SKIPPED: too small)' : '(KEPT)'); // DIAGNOSTIC
     if (area >= 0 || Math.abs(area) < 4) continue;
-    anim.regions.push(makeDetectedRegion(regionId, face, priorRegions[regionId]));
+    anim.regions.push(makeDetectedRegion(regionId, face, oldCurvesMap ? null : priorRegions[regionId]));
     regionId++;
   }
   assignRegionHoles(anim.regions, curvesMap);
+  // Spatially migrate fills: for each prior filled region, test its centroid (from the old
+  // topology) against each new region path. Reversed direction (old→new) is more robust than
+  // new→old because the old crescent centroid is cleanly inside its old region, whereas the
+  // centroid of a merged new region may land in a previously-unfilled sub-region.
+  // Falls back to index-based (via makeDetectedRegion above) when oldCurvesMap is unavailable
+  // (e.g. undo/redo where _topoSplitCurves was not serialized).
+  if (priorRegions.length > 0 && oldCurvesMap) {
+    const _newPaths = anim.regions.map(nr => buildRegionPath(nr, curvesMap));
+    for (let _pi = 0; _pi < priorRegions.length; _pi++) {
+      const _pr = priorRegions[_pi];
+      if (!_pr.fillColor) continue;
+      const _prCent = _sampleRegionCentroid(_pr, oldCurvesMap);
+      if (!_prCent) continue;
+      for (let _ni = 0; _ni < anim.regions.length; _ni++) {
+        const nr = anim.regions[_ni];
+        if (nr.fillColor) continue; // already claimed
+        if (ctx.isPointInPath(_newPaths[_ni], _prCent[0], _prCent[1])) {
+          nr.fillColor = _pr.fillColor;
+          nr.fillOpacity = _pr.fillOpacity;
+          nr.fillStyle = _pr.fillStyle;
+          nr.gradientToColor = _pr.gradientToColor;
+          nr.gradientToOpacity = _pr.gradientToOpacity;
+          nr.gradientAngle = _pr.gradientAngle;
+          nr.gradientStart = _pr.gradientStart;
+          nr.gradientEnd = _pr.gradientEnd;
+          nr.patternType = _pr.patternType;
+          nr.patternAngle = _pr.patternAngle;
+          nr.patternSpacing = _pr.patternSpacing;
+          break;
+        }
+      }
+    }
+  }
   if (anim.regions.length > 0) {
     // If this is first-time detection (no prior regions) but the anim had a direct fill,
     // migrate it to the first region before clearing — otherwise the fill is lost forever.
@@ -22365,22 +22336,6 @@ function drawObjectSchematic(canvasEl, anim, opts = {}) {
   const offY = (H - rangeIm * sc) / 2;
   const toC = pt => ({ x: offX + (pt.re - minRe) * sc, y: H - (offY + (pt.im - minIm) * sc) });
 
-  // DIAGNOSTIC: log schematic state for closed standalone freeform paths
-  if (anim.closed && !_useSchSplitMap && !anim.curves && curves.length === 1) {
-    const c0 = curves[0];
-    console.warn('[schDiag] BB:', { minRe: minRe.toFixed(1), maxRe: maxRe.toFixed(1), minIm: minIm.toFixed(1), maxIm: maxIm.toFixed(1) }, 'sc:', sc.toFixed(3), 'W:', W, 'H:', H);
-    console.warn('[schDiag] anchors:', c0.anchors.length, 'segs:', c0.segments.length);
-    for (let _di = 0; _di < Math.min(c0.anchors.length, 4); _di++) {
-      const _a = c0.anchors[_di];
-      const _s = c0.segments[_di];
-      const _p = _a ? toC(_a) : null;
-      const _h0p = _s?.h0 ? toC(_s.h0) : null;
-      const _h1p = _s?.h1 ? toC(_s.h1) : null;
-      console.warn(`[schDiag] anchor[${_di}]: re=${_a?.re?.toFixed(1)} im=${_a?.im?.toFixed(1)} → screen(${_p?.x?.toFixed(0)},${_p?.y?.toFixed(0)})  h0=(${_h0p?.x?.toFixed(0)},${_h0p?.y?.toFixed(0)}) h1=(${_h1p?.x?.toFixed(0)},${_h1p?.y?.toFixed(0)})`);
-    }
-    console.warn('[schDiag] last anchor:', (() => { const _a = c0.anchors[c0.anchors.length-1]; const _p = _a ? toC(_a) : null; return `re=${_a?.re?.toFixed(1)} im=${_a?.im?.toFixed(1)} → screen(${_p?.x?.toFixed(0)},${_p?.y?.toFixed(0)})`; })());
-    console.warn('[schDiag] h0/h1 types:', typeof c0.segments[0]?.h0, 'h0.re:', c0.segments[0]?.h0?.re?.toFixed(1), 'h0.im:', c0.segments[0]?.h0?.im?.toFixed(1));
-  }
 
   const { essentialPoints, topoArcs } = computeObjectTopologyData(anim);
   const curvesMap = _useSchSplitMap ? _schSplitMap : new Map(curves.map(c => [c.id, c]));
@@ -22523,8 +22478,10 @@ function drawObjectSchematic(canvasEl, anim, opts = {}) {
     ctx.restore();
   }
 
-  // 4. Node dots (small, no labels) — hidden for standalone primitives unless an arc is active
-  const _showSchematicNodes = !isPrimitiveAnim(anim) || anim.curves || hasHighlight || hovNodeNum >= 0;
+  // 4. Node dots (small, no labels) — only for merged objects; standalone freeforms have one
+  // arbitrary node (anchor 0) that is not meaningful in the schematic, and its position comes
+  // from stale _topoSplitCurves after drag, so it appears outside the circle.
+  const _showSchematicNodes = !!anim.curves || hovNodeNum >= 0;
   if (_showSchematicNodes) {
     const _dotR = 3 * dpr;
     ctx.save();
