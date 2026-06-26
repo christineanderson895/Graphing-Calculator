@@ -5282,6 +5282,7 @@ function mergeObjects(ids) {
         textShearX: src.textShearX ?? 0, textShearY: src.textShearY ?? 0,
         visible: src.visible, thickness: src.thickness,
         activeSegments: new Set(),
+        ...(src._circleArc ? { _circleArc: src._circleArc } : {}),
       });
     }
   }
@@ -5355,18 +5356,75 @@ function mergeObjects(ids) {
       }
       return _inside;
     };
+    console.log('[merge-fill] sources:', sources.map(_s => `id=${_s.id.toFixed(0)} fill=${_s.regions?.[0]?.fillColor ?? _s.fillColor ?? 'none'} segs=${_s.segments?.length}`));
+    console.log('[merge-fill] splitMap ids:', [..._migrSplitMap.keys()].map(k => k.toFixed(0)));
+    console.log('[merge-fill] regions:', merged.regions.length, 'src count:', sources.length);
     for (const _mr of merged.regions) {
       if (_mr.fillColor) continue;
+      // Centroid check: fast path that works when the perimeter centroid falls cleanly inside
+      // exactly one source (non-overlapping regions, or large crescents).
       const _cent = _sampleRegionCentroid(_mr, _migrSplitMap);
-      if (!_cent) continue;
-      const [_cpx, _cpy] = _cent;
-      const _hits = sources.filter(_src => _ptInSrc(_cpx, _cpy, _src));
-      if (_hits.length !== 1) continue;
-      const _hsrc = _hits[0];
-      // For converted freeforms, the fill lives in regions[0]; for primitives it's on fillColor directly.
-      const _hr = _hsrc.regions?.[0];
-      const _srcFill = _hr?.fillColor ?? _hsrc.fillColor;
-      if (!_srcFill) continue;
+      let _hits = _cent ? sources.filter(_src => _ptInSrc(_cent[0], _cent[1], _src)) : [];
+      const _centHits = _hits.length;
+      // Arc-count fallback: when the perimeter centroid falls inside 0 or 2+ sources (e.g.
+      // high-overlap crescents whose centroid sits in the intersection zone), use boundary
+      // segment ownership instead. The source contributing the strict majority (>50%) of
+      // boundary segments owns the region. If no source has a majority, the region sits at the
+      // intersection of multiple sources and is left unfilled.
+      // This approach is robust to DCEL traversal direction — the traversal can go the "long
+      // way" around a circle arc but the dominant-arc owner is still correct either way.
+      let _bndLog = 'no-fallback';
+      if (_hits.length !== 1) {
+        const _arcCounts = new Map(sources.map(_s => [_s.id, 0]));
+        for (const _edge of _mr.boundary) {
+          if (_arcCounts.has(_edge.animId))
+            _arcCounts.set(_edge.animId, _arcCounts.get(_edge.animId) + 1);
+        }
+        const _arcTotal = [..._arcCounts.values()].reduce((a, b) => a + b, 0);
+        let _arcOwner = null;
+        for (const [_sid, _cnt] of _arcCounts) {
+          if (_cnt * 2 > _arcTotal) { _arcOwner = sources.find(_s => _s.id === _sid); break; }
+        }
+        if (_arcOwner) { _hits = [_arcOwner]; _bndLog = `arcCount:hit(src=${_arcOwner.id.toFixed(0)})`; }
+        else {
+          // Arc counts tied (e.g. two circles split at symmetric anchor indices → equal arc lengths).
+          // Exterior-segment fallback: for each source's boundary edges, sample the midpoint of the
+          // middle segment and check if it lies OUTSIDE all other sources. The crescent of circle A
+          // is bounded by A's outer arc (exterior to B → exterior count > 0) and B's inner arc
+          // (inside A → exterior count = 0), so A wins. The lens region has both sources' inner
+          // arcs all inside the other → extTotal = 0 → tie → correctly gets no fill.
+          const _extCounts = new Map(sources.map(_s => [_s.id, 0]));
+          for (const _edge of _mr.boundary) {
+            const _eid = _edge.animId;
+            if (!_extCounts.has(_eid)) continue;
+            const _esc = _migrSplitMap.get(_eid);
+            if (!_esc) continue;
+            const _lo = Math.min(_edge.startIdx, _edge.endIdx);
+            const _hi = Math.max(_edge.startIdx, _edge.endIdx);
+            if (_lo >= _hi) continue;
+            const _msi = Math.floor((_lo + _hi - 1) / 2);
+            const _mpts = sampleCompiledAdaptive(_esc.segments[_msi]?.compiled);
+            const _mp = _mpts[Math.floor(_mpts.length / 2)];
+            if (!_mp) continue;
+            if (!sources.some(_os => _os.id !== _eid && _ptInSrc(_mp[0], _mp[1], _os)))
+              _extCounts.set(_eid, _extCounts.get(_eid) + 1);
+          }
+          const _extTotal = [..._extCounts.values()].reduce((a, b) => a + b, 0);
+          _arcOwner = null;
+          if (_extTotal > 0) {
+            for (const [_sid, _cnt] of _extCounts) {
+              if (_cnt * 2 > _extTotal) { _arcOwner = sources.find(_s => _s.id === _sid); break; }
+            }
+          }
+          if (_arcOwner) { _hits = [_arcOwner]; _bndLog = `extCount:hit(src=${_arcOwner.id.toFixed(0)})`; }
+          else _bndLog = 'extCount:tie';
+        }
+      }
+      const _hsrc = _hits.length === 1 ? _hits[0] : null;
+      const _hr = _hsrc?.regions?.[0];
+      const _srcFill = _hr?.fillColor ?? _hsrc?.fillColor;
+      console.log(`[merge-fill] region bnd=${_mr.boundary.map(e=>e.animId.toFixed(0)).join(',')} | centHits=${_centHits} | ${_bndLog} → fill=${_srcFill??'none'}`);
+      if (!_hsrc || !_srcFill) continue;
       _mr.fillColor = _srcFill;
       _mr.fillOpacity = _hr?.fillOpacity ?? _hsrc.fillOpacity ?? 0.5;
       _mr.fillStyle = _hr?.fillStyle ?? _hsrc.fillStyle ?? 'solid';
@@ -10883,7 +10941,8 @@ window.addEventListener('mouseup', e => {
       // Recompute split curves and region fills after moving a merged object.
       // During drag, _topoSplitCurves holds stale compiled closures; rebuilding
       // here keeps the fill aligned with the outline after release.
-      if (_fdMergedAnim) detectObjectTopology(_fdMergedAnim);
+      // skipSpatialMigration: a translation doesn't change topology — ordinal mapping is correct.
+      if (_fdMergedAnim) detectObjectTopology(_fdMergedAnim, { skipSpatialMigration: true });
     }
     renderAnimList(); draw(); updateCursor(); return;
   }
@@ -14124,6 +14183,10 @@ function convertCircleEllipseToPath(anim, n) {
   anim.segments = segments;
   anim.anchorLocked = anchors.map(() => false);
   anim.promotedAnchors = anchors.map(() => false);
+  // Preserve circle geometry so splitRawCurvesAtIntersections can use analytical
+  // circle-circle intersection (Phase 1a) instead of the Bézier sampler which
+  // produces phantom crossings for closely-placed approximated circles.
+  anim._circleArc = { center: new Cx(center.re, center.im), rx, ry, rotation: rot, n };
   recompileAnim(anim);
   detectObjectTopology(anim);
   return true;
@@ -14915,7 +14978,6 @@ function drawNodeDots(anim) {
   if (isTextAnim(anim)) return;
   const { essentialPoints } = computeObjectTopologyData(anim);
   if (!essentialPoints.length) return;
-  if (anim.deletedArcs?.length) console.log('[drawNodeDots] deletedArcs present, essentialPoints:', essentialPoints.map(ep => `(${ep.pos.re.toFixed(3)},${ep.pos.im.toFixed(3)})`));
   const dpr = devicePixelRatio;
   const curves = animCurves(anim);
   for (const ep of essentialPoints) {
@@ -18826,6 +18888,25 @@ function splitCurveAtTs(curve, splitMap) {
   return { splitCurve: { ...curve, anchors: newAnchors, segments: newSegs, _origSegForSplitSeg }, newSplitAnchors };
 }
 
+// For a closed Bézier freeform that looks like a circle (all anchors ≈ equidistant from
+// centroid), infer a _circleArc descriptor from the actual anchor positions.
+// Returns null if the curve is not circle-shaped or has too few anchors.
+function inferCircleArcFromAnchors(curve) {
+  const n = curve.anchors.length;
+  if (!curve.closed || n < 3 || curve.segments.length !== n) return null;
+  let cx = 0, cy = 0;
+  for (const a of curve.anchors) { cx += a.re; cy += a.im; }
+  cx /= n; cy /= n;
+  let rSum = 0;
+  for (const a of curve.anchors) rSum += Math.hypot(a.re - cx, a.im - cy);
+  const rAvg = rSum / n;
+  if (rAvg < 1e-9) return null;
+  for (const a of curve.anchors) {
+    if (Math.abs(Math.hypot(a.re - cx, a.im - cy) - rAvg) / rAvg > 0.05) return null;
+  }
+  return { center: new Cx(cx, cy), rx: rAvg, ry: rAvg, rotation: 0, n };
+}
+
 // Analytical circle-circle intersection in math coordinates.
 // Returns 0, 1, or 2 Cx intersection points.
 function circleCircleIntersections(meta1, meta2) {
@@ -18833,10 +18914,29 @@ function circleCircleIntersections(meta1, meta2) {
   const cx2 = meta2.center.re, cy2 = meta2.center.im, r2 = meta2.rx;
   const dx = cx2 - cx1, dy = cy2 - cy1;
   const d = Math.hypot(dx, dy);
-  if (d < 1e-12 || d > r1 + r2 + 1e-9 || d < Math.abs(r1 - r2) - 1e-9) return [];
+  // Proportional tolerance so tiny floating-point variance in inferred radii doesn't
+  // falsely classify one circle as containing the other.
+  const rTol = 1e-4 * (r1 + r2);
+  if (d === 0) {
+    // Exactly coincident circles — use top/bottom as canonical intersection points for equal radii.
+    if (Math.abs(r1 - r2) > rTol) return [];
+    const r = (r1 + r2) * 0.5, cx = (cx1 + cx2) * 0.5, cy = (cy1 + cy2) * 0.5;
+    return [new Cx(cx, cy + r), new Cx(cx, cy - r)];
+  }
+  if (d > r1 + r2 + rTol || d < Math.abs(r1 - r2) - rTol) return [];
   const a = (r1 * r1 - r2 * r2 + d * d) / (2 * d);
-  const h2 = r1 * r1 - a * a;
-  if (h2 < 0) return [];
+  let h2 = r1 * r1 - a * a;
+  if (h2 < 0) {
+    // h2 < 0 occurs due to floating-point cancellation when d is very small and r1 ≈ r2.
+    // Fall back to the symmetric equal-radius formula (midpoint of the two centers).
+    if (Math.abs(r1 - r2) > rTol) return [];
+    const r = (r1 + r2) * 0.5;
+    h2 = Math.max(0, r * r - (d * 0.5) * (d * 0.5));
+    const h = Math.sqrt(h2);
+    const mx = (cx1 + cx2) * 0.5, my = (cy1 + cy2) * 0.5;
+    if (h < 1e-9) return [new Cx(mx, my)];
+    return [new Cx(mx + h * dy / d, my - h * dx / d), new Cx(mx - h * dy / d, my + h * dx / d)];
+  }
   const h = Math.sqrt(h2);
   const mx = cx1 + a * dx / d, my = cy1 + a * dy / d;
   if (h < 1e-9) return [new Cx(mx, my)];
@@ -18869,34 +18969,67 @@ function splitRawCurvesAtIntersections(rawCurves) {
   const crossingRecords = [];
   const splitPlan = new Map(); // curveId → Map(segIdx → [{t, point, exactPoint?}])
   const analyticPairs = new Set(); // "ai,bi" strings for pairs handled analytically
+  // Snap overrides: positions for anchors that should be moved to exact intersection points.
+  // Applied to a temporary copy when creating split curves — originals are never mutated.
+  const snapOverrides = new Map(); // curveId → Map(anchorIdx → Cx)
+  const _addSnap = (curve, anchorIdx, pt) => {
+    if (!snapOverrides.has(curve.id)) snapOverrides.set(curve.id, new Map());
+    snapOverrides.get(curve.id).set(anchorIdx, new Cx(pt.re, pt.im));
+  };
 
   // Phase 1a: analytical intersections for circle-circle pairs (exact geometry).
+  // When the intersection is near a segment boundary (t < 0.05 or t > 0.95), snap the
+  // existing anchor to the exact intersection point rather than inserting a new split
+  // anchor. A new anchor at t=0.01 would create a tiny sub-segment whose DCEL face
+  // has non-negligible area (height = circle-center offset) and survives the area filter,
+  // producing spurious regions for close-overlap circles. Snapping the existing anchor
+  // avoids new sub-segments entirely; both circles' snapped anchors land at the same
+  // exactPoint, so departure angles computed by getEdgeDepartureAngle are consistent.
+  const SNAP_T = 0.05;
   for (let ai = 0; ai < rawCurves.length; ai++) {
     const A = rawCurves[ai];
-    if (!A._circleArc || Math.abs(A._circleArc.rx - A._circleArc.ry) > 1e-9) continue;
+    const A_ca = inferCircleArcFromAnchors(A) ?? A._circleArc;
+    if (!A_ca || Math.abs(A_ca.rx - A_ca.ry) > 1e-9) continue;
     for (let bi = ai + 1; bi < rawCurves.length; bi++) {
       const B = rawCurves[bi];
-      if (!B._circleArc || Math.abs(B._circleArc.rx - B._circleArc.ry) > 1e-9) continue;
+      const B_ca = inferCircleArcFromAnchors(B) ?? B._circleArc;
+      if (!B_ca || Math.abs(B_ca.rx - B_ca.ry) > 1e-9) continue;
       analyticPairs.add(`${ai},${bi}`);
-      const pts = circleCircleIntersections(A._circleArc, B._circleArc);
+      const pts = circleCircleIntersections(A_ca, B_ca);
       const nAl = A.anchors.length, nBl = B.anchors.length;
       for (const pt of pts) {
-        const { segIdx: sa, t: tA } = circleAngleAndSegment(A._circleArc, pt, 12);
-        const { segIdx: sb, t: tB } = circleAngleAndSegment(B._circleArc, pt, 12);
-        const nearA = tA <= 0.005 || tA >= 0.995;
-        const nearB = tB <= 0.005 || tB >= 0.995;
-        const anchorIdxA_orig = tA >= 0.5 ? (sa + 1 < nAl ? sa + 1 : 0) : sa;
-        const anchorIdxB_orig = tB >= 0.5 ? (sb + 1 < nBl ? sb + 1 : 0) : sb;
-        if (!nearA) {
+        const { segIdx: sa, t: tA } = circleAngleAndSegment(A_ca, pt, A_ca.n || nAl);
+        const { segIdx: sb, t: tB } = circleAngleAndSegment(B_ca, pt, B_ca.n || nBl);
+
+        let nearA = false, anchorIdxA_orig = 0;
+        if (tA < SNAP_T) {
+          _addSnap(A, sa, pt);
+          nearA = true; anchorIdxA_orig = sa;
+        } else if (tA > 1 - SNAP_T) {
+          const ai2 = (sa + 1) % nAl;
+          _addSnap(A, ai2, pt);
+          nearA = true; anchorIdxA_orig = ai2;
+        } else {
           if (!splitPlan.has(A.id)) splitPlan.set(A.id, new Map());
           if (!splitPlan.get(A.id).has(sa)) splitPlan.get(A.id).set(sa, []);
           splitPlan.get(A.id).get(sa).push({ t: tA, point: pt, exactPoint: pt });
         }
-        if (!nearB) {
+
+        let nearB = false, anchorIdxB_orig = 0;
+        if (tB < SNAP_T) {
+          _addSnap(B, sb, pt);
+          nearB = true; anchorIdxB_orig = sb;
+        } else if (tB > 1 - SNAP_T) {
+          const bi2 = (sb + 1) % nBl;
+          _addSnap(B, bi2, pt);
+          nearB = true; anchorIdxB_orig = bi2;
+        } else {
           if (!splitPlan.has(B.id)) splitPlan.set(B.id, new Map());
           if (!splitPlan.get(B.id).has(sb)) splitPlan.get(B.id).set(sb, []);
           splitPlan.get(B.id).get(sb).push({ t: tB, point: pt, exactPoint: pt });
         }
+
+        console.log(`[phase1a] pt=(${pt.re.toFixed(3)},${pt.im.toFixed(3)}) | A sa=${sa} tA=${tA.toFixed(4)} nearA=${nearA} aIdx=${anchorIdxA_orig} A_inferred=${!A._circleArc} | B sb=${sb} tB=${tB.toFixed(4)} nearB=${nearB} bIdx=${anchorIdxB_orig} B_inferred=${!B._circleArc}`);
         crossingRecords.push({ A, B, sa, sb, tA, tB, nearA, nearB, anchorIdxA_orig, anchorIdxB_orig });
       }
     }
@@ -18931,14 +19064,15 @@ function splitRawCurvesAtIntersections(rawCurves) {
         }
       }
 
-      // Global dedup across segment pairs: cluster hits within 0.1 math units (≈6 px at
-      // scale=60). For each cluster keep the hit whose t values are furthest from segment
-      // boundaries — that hit is the most reliable split point and avoids near-boundary
-      // mis-classification of nearA/nearB.
+      // Global dedup across segment pairs: cluster hits within 0.5 math units. The previous
+      // threshold of 0.1 was too tight — two adjacent A-segments detecting the same crossing
+      // produce hit points ~0.15 math units apart and both survived dedup, creating phantom
+      // splits. 0.5 math units ≈ 30px at scale=60, safe for any realistic overlap depth.
+      // For each cluster keep the hit whose t values are furthest from segment boundaries.
       const dedupedHits = [];
       for (const hit of pairHits) {
         const existing = dedupedHits.find(h =>
-          Math.hypot(h.point.re - hit.point.re, h.point.im - hit.point.im) < 0.1
+          Math.hypot(h.point.re - hit.point.re, h.point.im - hit.point.im) < 0.5
         );
         if (existing) {
           const hitScore = Math.min(hit.tA, 1 - hit.tA) + Math.min(hit.tB, 1 - hit.tB);
@@ -18952,17 +19086,29 @@ function splitRawCurvesAtIntersections(rawCurves) {
       // Sanity cap: two smooth curves can't have more than ~4–6 genuine crossings.
       if (dedupedHits.length > 10) continue;
 
+
       // Commit.
+      if (dedupedHits.length > 0) console.log(`[phase1b] pair A=${A.id?.toFixed(0)} B=${B.id?.toFixed(0)} dedupedHits=${dedupedHits.length}:`, dedupedHits.map(h => `pt=(${h.point.re.toFixed(3)},${h.point.im.toFixed(3)}) sa=${h.sa} tA=${h.tA.toFixed(4)} nearA=${h.nearA} sb=${h.sb} tB=${h.tB.toFixed(4)} nearB=${h.nearB}`));
+      // Use `exactPoint: point` for all split entries so both split anchors at the same
+      // intersection land at the same position. Without this, A's anchor is at A's Bézier(tA)
+      // and B's is at B's Bézier(tB) — slightly different positions that cause inconsistent
+      // departure angles in getEdgeDepartureAngle, producing spurious thin DCEL faces.
+      // For near-boundary hits (nearX = true), snap the existing anchor to `point` instead
+      // of inserting a new split anchor, for the same reason.
       for (const { sa, sb, tA, tB, nearA, nearB, anchorIdxA_orig, anchorIdxB_orig, point } of dedupedHits) {
-        if (!nearA) {
+        if (nearA) {
+          _addSnap(A, anchorIdxA_orig, point);
+        } else {
           if (!splitPlan.has(A.id)) splitPlan.set(A.id, new Map());
           if (!splitPlan.get(A.id).has(sa)) splitPlan.get(A.id).set(sa, []);
-          splitPlan.get(A.id).get(sa).push({ t: tA, point });
+          splitPlan.get(A.id).get(sa).push({ t: tA, point, exactPoint: point });
         }
-        if (!nearB) {
+        if (nearB) {
+          _addSnap(B, anchorIdxB_orig, point);
+        } else {
           if (!splitPlan.has(B.id)) splitPlan.set(B.id, new Map());
           if (!splitPlan.get(B.id).has(sb)) splitPlan.get(B.id).set(sb, []);
-          splitPlan.get(B.id).get(sb).push({ t: tB, point });
+          splitPlan.get(B.id).get(sb).push({ t: tB, point, exactPoint: point });
         }
         crossingRecords.push({ A, B, sa, sb, tA, tB, nearA, nearB, anchorIdxA_orig, anchorIdxB_orig });
       }
@@ -18970,8 +19116,34 @@ function splitRawCurvesAtIntersections(rawCurves) {
   }
 
   // Phase 2: split each curve and collect the indices of newly inserted anchors.
+  // Apply any snap overrides to a temporary copy so original child curve anchors stay clean.
   const splitResults = new Map(); // curveId → { splitCurve, newSplitAnchors }
-  for (const c of rawCurves) splitResults.set(c.id, splitCurveAtTs(c, splitPlan.get(c.id)));
+  for (const c of rawCurves) {
+    const overrides = snapOverrides.get(c.id);
+    let cForSplit = c;
+    if (overrides?.size) {
+      const newAnchors = [...c.anchors];
+      for (const [idx, snapPt] of overrides) newAnchors[idx] = snapPt;
+      // Shallow-copy each segment so recompileAnim writes to new segment objects,
+      // not to c.segments[i] — otherwise the original child curve's compiled functions
+      // get overwritten and inferCircleArcFromAnchors / Phase1b fail on subsequent calls.
+      cForSplit = { ...c, anchors: newAnchors, segments: c.segments.map(s => s ? { ...s } : s) };
+      recompileAnim(cForSplit);
+    }
+    // If this curve has a _circleArc, update its center to the CURRENT anchor positions.
+    // addRegionBoundaryToPathLike uses _circleArc.center to draw fill arcs via ctx.arc —
+    // without this, the arc draws at the pre-drag position even after the child curve
+    // has been translated, because _circleArc.center is set once at convertCircleEllipseToPath
+    // and never updated on the original child curve during drag.
+    if (c._circleArc) {
+      const inferred = inferCircleArcFromAnchors(c);
+      if (inferred) {
+        const updatedCa = { ...c._circleArc, center: inferred.center, rx: inferred.rx, ry: inferred.ry };
+        cForSplit = cForSplit === c ? { ...c, _circleArc: updatedCa } : { ...cForSplit, _circleArc: updatedCa };
+      }
+    }
+    splitResults.set(c.id, splitCurveAtTs(cForSplit, splitPlan.get(c.id)));
+  }
 
   // Post-split index of an original anchor (before any new anchors were inserted).
   const postSplitIdx = (curveId, origIdx) => {
@@ -19025,10 +19197,11 @@ function splitRawCurvesAtIntersections(rawCurves) {
 
 
 
+  console.log(`[splitResult] curves: ${splitCurves.map(c=>`id=${c.id?.toFixed(0)} anchors=${c.anchors.length} segs=${c.segments.length}`).join(' | ')} | forceMerges: ${forceMerges.length}:`, forceMerges.map(fm=>`A=${fm.idA?.toFixed(0)}[${fm.anchorIdxA}] B=${fm.idB?.toFixed(0)}[${fm.anchorIdxB}]`));
   return { splitCurves, forceMerges };
 }
 
-function detectObjectTopology(anim) {
+function detectObjectTopology(anim, { skipSpatialMigration = false } = {}) {
   const _rawPrior = anim.regions ?? [];
   // If regions were already cleared by a prior call that failed, fall back to the
   // stash saved by that prior call so fill colors survive a second detection attempt.
@@ -19037,6 +19210,7 @@ function detectObjectTopology(anim) {
   const oldCurvesMap = anim._topoSplitCurves?.size ? new Map(anim._topoSplitCurves) : null;
   anim.regions = [];
   anim._topoSplitCurves = null;
+  anim._diagTopoLogged = false;
   const rawCurves = animCurves(anim)
     .filter(a => !isTextAnim(a))
     .map(a => { if (isPrimitiveAnim(a)) { const p = primitiveToTopologyPath(a); if (p) recompileAnim(p); return p; } return a; })
@@ -19071,7 +19245,13 @@ function detectObjectTopology(anim) {
   }
 
   // All anchor points are nodes. Register every anchor, then merge spatially coincident
-  // anchors (across curves and within a curve's closing pair) via union-find.
+  // anchors within the SAME curve via union-find (needed so the virtual closing anchor
+  // at index n is identified with anchor[0]).  Cross-curve connectivity is handled
+  // exclusively by forceMerges below — using a spatial threshold for cross-curve pairs
+  // incorrectly merges corresponding anchors of two nearly-identical closed curves
+  // (e.g. nearly-concentric circles whose evenly-spaced anchors land within any fixed
+  // epsilon), collapsing all their nodes and producing degenerate deg-4 DCEL nodes with
+  // duplicate departure angles.
   const EPSILON = 1e-6;
   const keyToNode = new Map();
   const nodePositions = [];
@@ -19087,13 +19267,10 @@ function detectObjectTopology(anim) {
   for (const a of curves) {
     for (let i = 0; i < a.anchors.length; i++) {
       const pi = a.anchors[i], ki = keyToNode.get(`${a.id}:${i}`);
-      for (const b of curves) {
-        const j0 = (b === a) ? i + 1 : 0;
-        for (let j = j0; j < b.anchors.length; j++) {
-          const pj = b.anchors[j];
-          if (Math.hypot(pj.re - pi.re, pj.im - pi.im) < EPSILON)
-            ufUnion(ki, keyToNode.get(`${b.id}:${j}`));
-        }
+      for (let j = i + 1; j < a.anchors.length; j++) {
+        const pj = a.anchors[j];
+        if (Math.hypot(pj.re - pi.re, pj.im - pi.im) < EPSILON)
+          ufUnion(ki, keyToNode.get(`${a.id}:${j}`));
       }
     }
   }
@@ -19147,6 +19324,9 @@ function detectObjectTopology(anim) {
   }
   for (const edges of outgoing.values()) edges.sort((a, b) => a.depAngle - b.depAngle);
 
+  // [dcel-debug]
+  { const iNodes = []; for (const [nid, edges] of outgoing) { if (edges.length !== 2) iNodes.push(`nid=${nid} deg=${edges.length} angles=[${edges.map(e=>e.depAngle.toFixed(4)).join(',')}] from=[${edges.map(e=>`${e.animId?.toFixed(0).slice(-4)}:${e.fromIdx}→${e.toIdx}`).join(',')}]`); } console.log(`[dcel-debug] uniqueNodes=${uniqueNodes.size} half=${halfEdges.length} active=${activeHalfEdges.length} intersectionNodes(deg≠2):`, iNodes); }
+
   const nextHE = he => {
     const nid = keyToNode.get(`${he.animId}:${he.toIdx}`);
     if (nid === undefined) return null;
@@ -19186,7 +19366,7 @@ function detectObjectTopology(anim) {
     }
     area /= 2;
     if (area >= 0 || Math.abs(area) < 4) continue;
-    anim.regions.push(makeDetectedRegion(regionId, face, oldCurvesMap ? null : priorRegions[regionId]));
+    anim.regions.push(makeDetectedRegion(regionId, face, (oldCurvesMap && !skipSpatialMigration) ? null : priorRegions[regionId]));
     regionId++;
   }
   assignRegionHoles(anim.regions, curvesMap);
@@ -19196,13 +19376,15 @@ function detectObjectTopology(anim) {
   // centroid of a merged new region may land in a previously-unfilled sub-region.
   // Falls back to index-based (via makeDetectedRegion above) when oldCurvesMap is unavailable
   // (e.g. undo/redo where _topoSplitCurves was not serialized).
-  if (priorRegions.length > 0 && oldCurvesMap) {
+  if (!skipSpatialMigration && priorRegions.length > 0 && oldCurvesMap) {
     const _newPaths = anim.regions.map(nr => buildRegionPath(nr, curvesMap));
+    const _migLog = [];
     for (let _pi = 0; _pi < priorRegions.length; _pi++) {
       const _pr = priorRegions[_pi];
       if (!_pr.fillColor) continue;
       const _prCent = _sampleRegionCentroid(_pr, oldCurvesMap);
-      if (!_prCent) continue;
+      if (!_prCent) { _migLog.push(`prior[${_pi}] fill=${_pr.fillColor} → NO CENTROID`); continue; }
+      let _matched = -1;
       for (let _ni = 0; _ni < anim.regions.length; _ni++) {
         const nr = anim.regions[_ni];
         if (nr.fillColor) continue; // already claimed
@@ -19218,10 +19400,13 @@ function detectObjectTopology(anim) {
           nr.patternType = _pr.patternType;
           nr.patternAngle = _pr.patternAngle;
           nr.patternSpacing = _pr.patternSpacing;
-          break;
+          _matched = _ni; break;
         }
       }
+      _migLog.push(`prior[${_pi}] fill=${_pr.fillColor} cent=(${_prCent[0].toFixed(1)},${_prCent[1].toFixed(1)}) → new[${_matched}]`);
     }
+    if (_migLog.length) console.log('[spatial-migr]', _migLog.join(' | '), '| xform:', ctx.getTransform?.().a?.toFixed(2));
+    console.log('[spatial-migr] final fills:', anim.regions.map((r,i) => `[${i}]${r.fillColor??'none'}`).join(' '));
   }
   if (anim.regions.length > 0) {
     // If this is first-time detection (no prior regions) but the anim had a direct fill,
@@ -19517,6 +19702,12 @@ function computeObjectTopologyData(anim) {
         return essentialPoints.filter(ep => activeNums.has(ep.num));
       })()
     : essentialPoints;
+  if (anim.deletedArcs?.length && !anim._diagTopoLogged) {
+    anim._diagTopoLogged = true;
+    const _nRemoved = topoArcs.length - filteredArcs.length;
+    if (_nRemoved > anim.deletedArcs.length)
+      console.warn('[topo] filteredArcs removed', _nRemoved, 'arcs but only', anim.deletedArcs.length, 'are in deletedArcs — possible index mismatch. allArcs:', topoArcs.map(a => `${a.label}(c=${a.curveId},fi=${a.fromIdx},ti=${a.toIdx})`).join(' | '), 'deleted:', JSON.stringify(anim.deletedArcs.map(d => ({ c: d.curveId, fi: d.fromIdx, ti: d.toIdx }))));
+  }
   return { essentialPoints: filteredEssentialPoints, topoArcs: filteredArcs };
 }
 
@@ -19717,6 +19908,7 @@ function insertAnchorOnArc(anim, arc, preview) {
   if (anim.anchorLocked && anim.anchorLocked !== origCurve.anchorLocked) anim.anchorLocked.splice(si + 1, 0, undefined);
   recompileSegment(origCurve, si);
   recompileSegment(origCurve, si + 1);
+  delete origCurve._circleArc; // segment count changed; no longer a uniform circle
   reselectArcAfterEdit(anim, arc);
 }
 
@@ -19762,6 +19954,7 @@ function removeAnchorOnArc(anim, arc, anchorIdx) {
   if (origCurve.anchorLocked) origCurve.anchorLocked.splice(anchorIdx, 1);
   if (anim.anchorLocked && anim.anchorLocked !== origCurve.anchorLocked) anim.anchorLocked.splice(anchorIdx, 1);
   recompileSegment(origCurve, prevSi);
+  delete origCurve._circleArc; // segment count changed; no longer a uniform circle
   reselectArcAfterEdit(anim, arc);
 }
 
@@ -19828,6 +20021,7 @@ function detectRegionsForGroup(groupId) {
   });
 
   const EPSILON = 1e-6;
+  const EPSILON_CROSS = 1e-12;
   const keyToNode = new Map();
   const nodePositions = [];
   const ufParent = [];
@@ -19844,9 +20038,10 @@ function detectRegionsForGroup(groupId) {
       const pi = a.anchors[i], ki = keyToNode.get(`${a.id}:${i}`);
       for (const b of curves) {
         const j0 = (b === a) ? i + 1 : 0;
+        const eps = (b === a) ? EPSILON : EPSILON_CROSS;
         for (let j = j0; j < b.anchors.length; j++) {
           const pj = b.anchors[j];
-          if (Math.hypot(pj.re - pi.re, pj.im - pi.im) < EPSILON)
+          if (Math.hypot(pj.re - pi.re, pj.im - pi.im) < eps)
             ufUnion(ki, keyToNode.get(`${b.id}:${j}`));
         }
       }
