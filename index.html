@@ -2404,7 +2404,7 @@ function splitSegmentAtT(anim, segIdx, t) {
   const rightSeg = { h0: T_, h1: R,  eccentricity: seg.eccentricity, visible: seg.visible ?? true, compiled: null, compiledRef: null };
   anim.segments.splice(segIdx, 1, leftSeg, rightSeg);
   if (!anim.anchorLocked) anim.anchorLocked = [];
-  anim.anchorLocked.splice(segIdx + 1, 0, true);
+  anim.anchorLocked.splice(segIdx + 1, 0, false);
   if (!anim.anchorLabels) anim.anchorLabels = [];
   anim.anchorLabels.splice(segIdx + 1, 0, null);
   anim.activeSegments = new Set();
@@ -2425,7 +2425,7 @@ function splitAnchorPoint(anim, anchorIdx) {
   anim.anchors.splice(anchorIdx + 1, 0, new Cx(pos.re, pos.im));
   anim.segments.splice(anchorIdx, 0, null);
   if (!anim.anchorLocked) anim.anchorLocked = [];
-  anim.anchorLocked.splice(anchorIdx + 1, 0, true);
+  anim.anchorLocked.splice(anchorIdx + 1, 0, false);
   if (!anim.anchorLabels) anim.anchorLabels = [];
   anim.anchorLabels[anchorIdx] = label + '⁻';
   anim.anchorLabels.splice(anchorIdx + 1, 0, label + '⁺');
@@ -6576,7 +6576,7 @@ function commitFreeformPenStroke() {
   const anim = animations[animations.length - 1];
   anim.anchors = mathPts;
   anim.segments = segs;
-  anim.anchorLocked = mathPts.map(() => true);
+  anim.anchorLocked = mathPts.map(() => false);
   anim.freeformPen = true;
   anim.inPlacementMode = false;
   recompileAnim(anim);
@@ -8619,7 +8619,7 @@ function placementClickHandler(anim, snapped, mathX, mathY) {
   if (n === 0) {
     // First click: place the first real anchor and start tracking the first arc path.
     pushUndo();
-    anch.push(snapped); anim.anchorLocked.push(true);
+    anch.push(snapped); anim.anchorLocked.push(false);
     resetFreeformPlacementPathTracking();
     renderAnimList(); draw(); return;
   }
@@ -8635,7 +8635,7 @@ function placementClickHandler(anim, snapped, mathX, mathY) {
     const aPos = anim.extensionInsertAt;
     const sPos = anim.extensionForward ? aPos - 1 : aPos;
     pushUndo();
-    anch.splice(aPos, 0, target); anim.anchorLocked.splice(aPos, 0, true);
+    anch.splice(aPos, 0, target); anim.anchorLocked.splice(aPos, 0, false);
     segs.splice(sPos, 0, seg);
     if (anim.extensionForward) anim.extensionInsertAt++;
     anim.tContinuation = built.nextTangent;
@@ -8670,7 +8670,7 @@ function placementClickHandler(anim, snapped, mathX, mathY) {
   );
 
   pushUndo();
-  anch.push(target); anim.anchorLocked.push(true);
+  anch.push(target); anim.anchorLocked.push(false);
   segs.push(newSeg);
   recompileAnim(anim);
   resetFreeformPlacementPathTracking();
@@ -18917,13 +18917,7 @@ function circleCircleIntersections(meta1, meta2) {
   // Proportional tolerance so tiny floating-point variance in inferred radii doesn't
   // falsely classify one circle as containing the other.
   const rTol = 1e-4 * (r1 + r2);
-  if (d === 0) {
-    // Exactly coincident circles — use top/bottom as canonical intersection points for equal radii.
-    if (Math.abs(r1 - r2) > rTol) return [];
-    const r = (r1 + r2) * 0.5, cx = (cx1 + cx2) * 0.5, cy = (cy1 + cy2) * 0.5;
-    return [new Cx(cx, cy + r), new Cx(cx, cy - r)];
-  }
-  if (d > r1 + r2 + rTol || d < Math.abs(r1 - r2) - rTol) return [];
+  if (d < 1e-9 || d > r1 + r2 + rTol || d < Math.abs(r1 - r2) - rTol) return [];
   const a = (r1 * r1 - r2 * r2 + d * d) / (2 * d);
   let h2 = r1 * r1 - a * a;
   if (h2 < 0) {
