@@ -16802,6 +16802,132 @@ function appendRangeSliderRow(parent, labelText, startVal, endVal, onChange) {
   return { iStart, iEnd };
 }
 
+function appendGradientBlendBar(parent, c1Knobs, c2Knobs, color1, color2, onChange) {
+  // Layout: canvas is transparent outside the bar rect so knobs sit on its edges
+  const CANVAS_W = 155, CANVAS_H = 36;
+  const KNOB_R = 5;   // fill radius matching #cba6f7 thumb
+  const PAD = 8;      // vertical space for knob glow to breathe
+  const BAR_TOP = PAD;             // y-center of Color1 knobs, top of bar rect
+  const BAR_BOT = CANVAS_H - PAD; // y-center of Color2 knobs, bottom of bar rect
+  const ACCENT = '#ffffff';
+  const HPAD = KNOB_R + 4;  // horizontal padding so edge knobs aren't clipped
+  const barX = p => HPAD + p * (CANVAS_W - 2 * HPAD);  // pos (0-1) → canvas x
+
+  const row = document.createElement('div');
+  row.className = 'tree-slider-row';
+  row.style.padding = '2px 8px 2px 0';
+  const label = document.createElement('label');
+  label.textContent = 'Blend';
+
+  const canvasWrap = document.createElement('div');
+  canvasWrap.style.cssText = 'flex:1;min-width:0;height:' + CANVAS_H + 'px;';
+  const canvas = document.createElement('canvas');
+  canvas.width = CANVAS_W;
+  canvas.height = CANVAS_H;
+  canvas.style.cssText = 'display:block;cursor:default;';
+  canvasWrap.appendChild(canvas);
+
+  let k1 = [...c1Knobs], k2 = [...c2Knobs];
+
+  function drawBar() {
+    const bctx = canvas.getContext('2d');
+    bctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+
+    // Bar rectangle (inner only — canvas is transparent above/below it)
+    const barH = BAR_BOT - BAR_TOP;
+    const barW = CANVAS_W - 2 * HPAD;
+    const bg = bctx.createLinearGradient(0, BAR_TOP, 0, BAR_BOT);
+    bg.addColorStop(0, color1 || 'rgba(128,128,128,0.5)');
+    bg.addColorStop(1, color2 || 'rgba(128,128,128,0)');
+    bctx.fillStyle = bg;
+    bctx.fillRect(HPAD, BAR_TOP, barW, barH);
+    bctx.strokeStyle = '#6c7086';
+    bctx.lineWidth = 1;
+    bctx.strokeRect(HPAD + 0.5, BAR_TOP + 0.5, barW - 1, barH - 1);
+
+    // Sort all knobs by position
+    const all = [
+      ...k1.map((p, i) => ({ pos: p, color: 0, idx: i })),
+      ...k2.map((p, i) => ({ pos: p, color: 1, idx: i })),
+    ].sort((a, b) => a.pos - b.pos || a.color - b.color);
+
+    // Build path: left bar edge → each knob → right bar edge
+    const firstColor = all[0]?.color ?? 0;
+    const lastColor = all[all.length - 1]?.color ?? 1;
+    const pts = [{ x: HPAD, y: firstColor === 0 ? BAR_TOP : BAR_BOT }];
+    for (const k of all) pts.push({ x: barX(k.pos), y: k.color === 0 ? BAR_TOP : BAR_BOT });
+    pts.push({ x: CANVAS_W - HPAD, y: lastColor === 0 ? BAR_TOP : BAR_BOT });
+
+    // Highlighted path
+    bctx.beginPath();
+    bctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) bctx.lineTo(pts[i].x, pts[i].y);
+    bctx.strokeStyle = ACCENT;
+    bctx.lineWidth = 2;
+    bctx.stroke();
+
+    // Knobs — white fill, #11111b border, white outer glow
+    for (const k of all) {
+      const cx = barX(k.pos), cy = k.color === 0 ? BAR_TOP : BAR_BOT;
+      // Outer glow ring
+      bctx.beginPath();
+      bctx.arc(cx, cy, KNOB_R + 3, 0, Math.PI * 2);
+      bctx.strokeStyle = 'rgba(255,255,255,0.35)';
+      bctx.lineWidth = 1;
+      bctx.stroke();
+      // Main knob
+      bctx.beginPath();
+      bctx.arc(cx, cy, KNOB_R, 0, Math.PI * 2);
+      bctx.fillStyle = ACCENT;
+      bctx.fill();
+      bctx.strokeStyle = '#11111b';
+      bctx.lineWidth = 2;
+      bctx.stroke();
+    }
+  }
+
+  function hitKnob(x, y) {
+    const pts = [
+      ...k1.map((p, i) => ({ px: barX(p), py: BAR_TOP, color: 0, idx: i })),
+      ...k2.map((p, i) => ({ px: barX(p), py: BAR_BOT, color: 1, idx: i })),
+    ];
+    let best = null, bestD = KNOB_R + 8;
+    for (const pt of pts) {
+      const d = Math.hypot(x - pt.px, y - pt.py);
+      if (d < bestD) { bestD = d; best = pt; }
+    }
+    return best;
+  }
+
+  canvas.addEventListener('mousedown', e => {
+    const rect = canvas.getBoundingClientRect();
+    const hit = hitKnob(e.clientX - rect.left, e.clientY - rect.top);
+    if (!hit) return;
+    pushUndo();
+    e.preventDefault();
+    const onMove = ev => {
+      const r2 = canvas.getBoundingClientRect();
+      const pos = Math.max(0, Math.min(1, (ev.clientX - r2.left - HPAD) / (CANVAS_W - 2 * HPAD)));
+      if (hit.color === 0) k1[hit.idx] = pos; else k2[hit.idx] = pos;
+      drawBar();
+      onChange([...k1], [...k2]);
+      saveProject(); draw();
+    };
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  });
+
+  row.append(label, canvasWrap);
+  parent.appendChild(row);
+  drawBar();
+
+  return { drawBar };
+}
+
 function _appendAllRegionColor(parent, anim) {
   const regions = anim.regions ?? [];
   const root = document.createElement('div');
@@ -18708,6 +18834,8 @@ function makeDetectedRegion(id, boundary, prior = null) {
     gradientToOpacity: prior?.gradientToOpacity ?? 0,
     gradientStart: prior?.gradientStart,
     gradientEnd: prior?.gradientEnd,
+    gradC1Knobs: prior?.gradC1Knobs,
+    gradC2Knobs: prior?.gradC2Knobs,
     gradientAngle: prior?.gradientAngle,
     patternType: prior?.patternType,
     patternAngle: prior?.patternAngle,
@@ -19403,6 +19531,8 @@ function detectObjectTopology(anim, { skipSpatialMigration = false } = {}) {
           nr.gradientAngle = _pr.gradientAngle;
           nr.gradientStart = _pr.gradientStart;
           nr.gradientEnd = _pr.gradientEnd;
+          nr.gradC1Knobs = _pr.gradC1Knobs;
+          nr.gradC2Knobs = _pr.gradC2Knobs;
           nr.patternType = _pr.patternType;
           nr.patternAngle = _pr.patternAngle;
           nr.patternSpacing = _pr.patternSpacing;
@@ -20517,7 +20647,38 @@ function sampleBoundaryEdges(edges, curvesMap, N) {
   return result;
 }
 
-function drawTwoBoundaryBlend(ctx, pts1, pts2, color1, opacity1, color2, opacity2, gradStart = 0, gradEnd = 1) {
+function getGradKnobs(region) {
+  if (Array.isArray(region.gradC1Knobs)) {
+    return { c1: region.gradC1Knobs, c2: region.gradC2Knobs ?? [1, 1] };
+  }
+  const s = region.gradientStart ?? 0;
+  const e = region.gradientEnd ?? 1;
+  return { c1: [0, s], c2: [e, 1] };
+}
+
+function gradKnobsToStops(c1Knobs, c2Knobs) {
+  const all = [
+    ...c1Knobs.map(p => ({ pos: Math.max(0, Math.min(1, p)), t: 0 })),
+    ...c2Knobs.map(p => ({ pos: Math.max(0, Math.min(1, p)), t: 1 })),
+  ].sort((a, b) => a.pos - b.pos || a.t - b.t);
+  const firstT = all[0]?.t ?? 0;
+  const lastT = all[all.length - 1]?.t ?? 1;
+  return [{ pos: 0, t: firstT }, ...all, { pos: 1, t: lastT }];
+}
+
+function blendAtPos(stops, pos) {
+  for (let i = 1; i < stops.length; i++) {
+    if (pos <= stops[i].pos) {
+      const { pos: p0, t: t0 } = stops[i - 1];
+      const { pos: p1, t: t1 } = stops[i];
+      if (p1 <= p0) return t0;
+      return t0 + (t1 - t0) * (pos - p0) / (p1 - p0);
+    }
+  }
+  return stops[stops.length - 1].t;
+}
+
+function drawTwoBoundaryBlend(ctx, pts1, pts2, color1, opacity1, color2, opacity2, gradStops = null) {
   const N = Math.min(pts1.length, pts2.length);
   if (N < 2) return;
   const c1 = parseColorToRgb(color1), c2 = parseColorToRgb(color2);
@@ -20553,8 +20714,8 @@ function drawTwoBoundaryBlend(ctx, pts1, pts2, color1, opacity1, color2, opacity
     const tm = (t0 + t1) / 2;
     // frac: 0 = at boundary 1, 1 = at boundary 2 (regardless of which is geometrically outer)
     const frac = b1IsOuter ? tm : 1 - tm;
-    const tc = frac <= gradStart ? 0 : frac >= gradEnd ? 1
-      : gradEnd > gradStart ? (frac - gradStart) / (gradEnd - gradStart) : 0.5;
+    const _gStops = gradStops ?? [{ pos: 0, t: 0 }, { pos: 1, t: 1 }];
+    const tc = blendAtPos(_gStops, frac);
     const r = Math.round(c1.r + (c2.r - c1.r) * tc);
     const g = Math.round(c1.g + (c2.g - c1.g) * tc);
     const b = Math.round(c1.b + (c2.b - c1.b) * tc);
@@ -20579,7 +20740,7 @@ function drawTwoBoundaryBlend(ctx, pts1, pts2, color1, opacity1, color2, opacity
   ctx.drawImage(offscreen, 0, 0);
 }
 
-function drawRadialGradientBlend(ctx, region, curvesMap, color1, opacity1, color2, opacity2, gradStart = 0, gradEnd = 1) {
+function drawRadialGradientBlend(ctx, region, curvesMap, color1, opacity1, color2, opacity2, gradStops = null) {
   const c1 = parseColorToRgb(color1), c2 = parseColorToRgb(color2);
   if (!c1 || !c2) return;
   const pts = sampleBoundaryEdges(region.boundary, curvesMap, 200);
@@ -20589,15 +20750,15 @@ function drawRadialGradientBlend(ctx, region, curvesMap, color1, opacity1, color
   cx /= pts.length; cy /= pts.length;
   const r = pts.reduce((s, [x, y]) => s + Math.hypot(x - cx, y - cy), 0) / pts.length;
   if (r <= 0) return;
-  const s = Math.max(0, Math.min(1, gradStart));
-  const e = Math.max(s, Math.min(1, gradEnd));
-  const rgba1 = `rgba(${c1.r},${c1.g},${c1.b},${opacity1})`;
-  const rgba2 = `rgba(${c2.r},${c2.g},${c2.b},${opacity2})`;
+  const _gStops = gradStops ?? [{ pos: 0, t: 0 }, { pos: 1, t: 1 }];
   const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-  grad.addColorStop(0, rgba1);
-  if (s > 0.005) grad.addColorStop(s, rgba1);
-  if (e < 0.995) grad.addColorStop(e, rgba2);
-  grad.addColorStop(1, rgba2);
+  for (const { pos, t } of _gStops) {
+    const cr = Math.round(c1.r + (c2.r - c1.r) * t);
+    const cg = Math.round(c1.g + (c2.g - c1.g) * t);
+    const cb = Math.round(c1.b + (c2.b - c1.b) * t);
+    const ca = opacity1 + (opacity2 - opacity1) * t;
+    grad.addColorStop(pos, `rgba(${cr},${cg},${cb},${ca})`);
+  }
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
 }
@@ -20784,12 +20945,14 @@ function drawGroupRegionFills() {
         const pts1 = sampleBoundaryEdges(b1, curvesMap, 300);
         const pts2 = sampleBoundaryEdges(b2, curvesMap, 300);
         clipToRegionPath(ctx, region, curvesMap);
+        const { c1: _gk1a, c2: _gk2a } = getGradKnobs(region);
         drawTwoBoundaryBlend(ctx, pts1, pts2, region.fillColor, opacity,
-          region.gradientToColor || region.fillColor, region.gradientToOpacity ?? 0, region.gradientStart ?? 0, region.gradientEnd ?? 1);
+          region.gradientToColor || region.fillColor, region.gradientToOpacity ?? 0, gradKnobsToStops(_gk1a, _gk2a));
       } else if (region.fillStyle === 'radial-gradient') {
         clipToRegionPath(ctx, region, curvesMap);
+        const { c1: _gk1b, c2: _gk2b } = getGradKnobs(region);
         drawRadialGradientBlend(ctx, region, curvesMap, region.fillColor, opacity,
-          region.gradientToColor || region.fillColor, region.gradientToOpacity ?? 0, region.gradientStart ?? 0, region.gradientEnd ?? 1);
+          region.gradientToColor || region.fillColor, region.gradientToOpacity ?? 0, gradKnobsToStops(_gk1b, _gk2b));
       } else if (region.fillStyle === 'pattern') {
         drawRegionPattern(ctx, region, curvesMap, opacity);
       } else {
@@ -20801,13 +20964,17 @@ function drawGroupRegionFills() {
           const c2 = parseColorToRgb(region.gradientToColor || region.fillColor);
           if (bounds && c1 && c2) {
             const { x1, y1, x2, y2 } = makeLinearGradientAxis(bounds, region.gradientAngle ?? Math.PI / 4);
-            const _gs = region.gradientStart ?? 0, _ge = Math.max(region.gradientStart ?? 0, region.gradientEnd ?? 1);
-            const _ra1 = rgbaCss(c1, opacity), _ra2 = rgbaCss(c2, region.gradientToOpacity ?? 0);
+            const { c1: _lgk1, c2: _lgk2 } = getGradKnobs(region);
+            const _lgStops = gradKnobsToStops(_lgk1, _lgk2);
+            const _lgOp2 = region.gradientToOpacity ?? 0;
             const grad = ctx.createLinearGradient(x1, y1, x2, y2);
-            grad.addColorStop(0, _ra1);
-            if (_gs > 0.005) grad.addColorStop(_gs, _ra1);
-            if (_ge < 0.995) grad.addColorStop(_ge, _ra2);
-            grad.addColorStop(1, _ra2);
+            for (const { pos, t } of _lgStops) {
+              const _cr = Math.round(c1.r + (c2.r - c1.r) * t);
+              const _cg = Math.round(c1.g + (c2.g - c1.g) * t);
+              const _cb = Math.round(c1.b + (c2.b - c1.b) * t);
+              const _ca = opacity + (_lgOp2 - opacity) * t;
+              grad.addColorStop(pos, `rgba(${_cr},${_cg},${_cb},${_ca})`);
+            }
             ctx.fillStyle = grad; ctx.globalAlpha = 1;
           } else { ctx.fillStyle = region.fillColor; ctx.globalAlpha = opacity; }
         } else { ctx.fillStyle = region.fillColor; ctx.globalAlpha = opacity; }
@@ -20851,10 +21018,12 @@ function drawObjectRegionFillsForAnim(anim) {
       const pts1 = sampleBoundaryEdges(b1, curvesMap, 300);
       const pts2 = sampleBoundaryEdges(b2, curvesMap, 300);
       clipToRegionPath(ctx, region, curvesMap);
-      drawTwoBoundaryBlend(ctx, pts1, pts2, _rFill, opacity, _rGradTo || _rFill, _rGradToOp, region.gradientStart ?? 0, region.gradientEnd ?? 1);
+      const { c1: _gk1c, c2: _gk2c } = getGradKnobs(region);
+      drawTwoBoundaryBlend(ctx, pts1, pts2, _rFill, opacity, _rGradTo || _rFill, _rGradToOp, gradKnobsToStops(_gk1c, _gk2c));
     } else if (_rStyle === 'radial-gradient') {
       clipToRegionPath(ctx, region, curvesMap);
-      drawRadialGradientBlend(ctx, region, curvesMap, _rFill, opacity, _rGradTo || _rFill, _rGradToOp, region.gradientStart ?? 0, region.gradientEnd ?? 1);
+      const { c1: _gk1d, c2: _gk2d } = getGradKnobs(region);
+      drawRadialGradientBlend(ctx, region, curvesMap, _rFill, opacity, _rGradTo || _rFill, _rGradToOp, gradKnobsToStops(_gk1d, _gk2d));
     } else if (_rStyle === 'pattern') {
       drawRegionPattern(ctx, region, curvesMap, opacity);
     } else {
@@ -20866,13 +21035,16 @@ function drawObjectRegionFillsForAnim(anim) {
         const c2 = parseColorToRgb(_rGradTo || _rFill);
         if (bounds && c1 && c2) {
           const { x1, y1, x2, y2 } = makeLinearGradientAxis(bounds, region.gradientAngle ?? Math.PI / 4);
-          const _gs = region.gradientStart ?? 0, _ge = Math.max(region.gradientStart ?? 0, region.gradientEnd ?? 1);
-          const _ra1 = rgbaCss(c1, opacity), _ra2 = rgbaCss(c2, _rGradToOp);
+          const { c1: _lgk1b, c2: _lgk2b } = getGradKnobs(region);
+          const _lgStopsB = gradKnobsToStops(_lgk1b, _lgk2b);
           const grad = ctx.createLinearGradient(x1, y1, x2, y2);
-          grad.addColorStop(0, _ra1);
-          if (_gs > 0.005) grad.addColorStop(_gs, _ra1);
-          if (_ge < 0.995) grad.addColorStop(_ge, _ra2);
-          grad.addColorStop(1, _ra2);
+          for (const { pos, t } of _lgStopsB) {
+            const _cr = Math.round(c1.r + (c2.r - c1.r) * t);
+            const _cg = Math.round(c1.g + (c2.g - c1.g) * t);
+            const _cb = Math.round(c1.b + (c2.b - c1.b) * t);
+            const _ca = opacity + (_rGradToOp - opacity) * t;
+            grad.addColorStop(pos, `rgba(${_cr},${_cg},${_cb},${_ca})`);
+          }
           ctx.fillStyle = grad; ctx.globalAlpha = 1;
         } else { ctx.fillStyle = _rFill; ctx.globalAlpha = opacity; }
       } else { ctx.fillStyle = _rFill; ctx.globalAlpha = opacity; }
@@ -24022,9 +24194,18 @@ function renderAnimListLegacy() {
         }
 
         if (_isGradFam) {
-          appendRangeSliderRow(_fillWrap, 'Blend',
-            _activeReg.gradientStart ?? 0, _activeReg.gradientEnd ?? 1,
-            (s, e) => { _applyReg({ gradientStart: s, gradientEnd: e }); });
+          const { c1: _bkC1, c2: _bkC2 } = getGradKnobs(_activeReg);
+          const _bkMkC = (hex, op) => {
+            const _rgb = parseColorToRgb(hex);
+            return _rgb ? `rgba(${_rgb.r},${_rgb.g},${_rgb.b},${op})` : `rgba(128,128,128,${op})`;
+          };
+          const _bkC1hex = _activeReg.fillColor || anim.color || '#888888';
+          const _bkC2hex = _activeReg.gradientToColor || _activeReg.fillColor || anim.color || '#888888';
+          appendGradientBlendBar(_fillWrap,
+            _bkC1, _bkC2,
+            _bkMkC(_bkC1hex, _activeReg.fillOpacity ?? 0.3),
+            _bkMkC(_bkC2hex, _activeReg.gradientToOpacity ?? 0),
+            (c1k, c2k) => { _applyReg({ gradC1Knobs: c1k, gradC2Knobs: c2k }); });
         }
 
         if (_fillStyle === 'gradient') {
