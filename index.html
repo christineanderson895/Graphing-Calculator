@@ -19898,8 +19898,8 @@ function insertAnchorOnArc(anim, arc, preview) {
   }
   if (origCurve.promotedAnchors) origCurve.promotedAnchors.splice(si + 1, 0, false);
   if (anim.promotedAnchors && anim.promotedAnchors !== origCurve.promotedAnchors) anim.promotedAnchors.splice(si + 1, 0, false);
-  if (origCurve.anchorLocked) origCurve.anchorLocked.splice(si + 1, 0, undefined);
-  if (anim.anchorLocked && anim.anchorLocked !== origCurve.anchorLocked) anim.anchorLocked.splice(si + 1, 0, undefined);
+  if (origCurve.anchorLocked) origCurve.anchorLocked.splice(si + 1, 0, false);
+  if (anim.anchorLocked && anim.anchorLocked !== origCurve.anchorLocked) anim.anchorLocked.splice(si + 1, 0, false);
   recompileSegment(origCurve, si);
   recompileSegment(origCurve, si + 1);
   delete origCurve._circleArc; // segment count changed; no longer a uniform circle
