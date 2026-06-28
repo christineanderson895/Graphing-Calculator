@@ -8991,6 +8991,7 @@ canvas.addEventListener('mousedown', e => {
           origFrameBounds: frameMathBounds(frame),
           ...(resizeHit.anim.curves ? { mergedCurves: true, origStates: resizeHit.anim.curves.map(cloneTransformState) } : {}),
         };
+        if (!isPrimitiveAnim(resizeHit.anim)) resizeHit.anim.regions = [];
       }
     } else if (resizeHit.groupId != null) {
       const f = groupSelectionFrameMetrics(resizeHit.groupId);
@@ -10789,7 +10790,9 @@ window.addEventListener('mouseup', e => {
   if (isolDragging) { isolDragging = false; updateCursor(); return; }
   if (objDragging) { objDragging = false; updateCursor(); return; }
   if (resizeDrag) {
+    const _rdAnim = resizeDrag.anim;
     resizeDrag = null;
+    if (_rdAnim && !isPrimitiveAnim(_rdAnim) && canFillAnim(_rdAnim)) detectObjectTopology(_rdAnim);
     renderAnimList(); draw(); updateCursor(); return;
   }
   if (rotateDrag) {
@@ -14403,6 +14406,7 @@ function applySideResizeShearForCursor(drag, mathX, mathY) {
   anim.anchors = origAnchors.map(transformPoint);
   anim.segments = origSegs.map(seg => transformResizeSeg(seg, transformPoint));
   anim.anchorLocked = drag.origAnchorLocked ? [...drag.origAnchorLocked] : [];
+  anim._circleArc = null;
   recompileAnim(anim);
   return true;
 }
@@ -14592,7 +14596,7 @@ function applyResizeBounds(drag, nextBounds) {
       }
     }
   }
-  if (!isPrimitiveAnim(anim)) recompileAnim(anim);
+  if (!isPrimitiveAnim(anim)) { anim._circleArc = null; recompileAnim(anim); }
 }
 
 function rotationCenterForAnim(anim) {
@@ -15410,9 +15414,15 @@ function drawSelectedMultiSelectionBounds() {
 function drawCommittedAnimation(anim, { deferOverlay = false } = {}) {
   if (!anim || !isAnimEffectivelyVisible(anim) || anim.inPlacementMode) return;
   const inEditMode = (editModeAnimId === anim.id);
-  // Skip region fills during a merged-object drag — region paths use stale compiled closures
-  // and would render at the pre-drag position. They are redrawn correctly after mouseup.
-  if (!frameDrag?.mergedCurves || frameDrag.anim !== anim || !frameDrag.hasMoved || !!frameDrag.origSplitAnchors) drawObjectRegionFillsForAnim(anim);
+  // Skip region fills during a drag — region paths use stale compiled closures and would
+  // render at the pre-drag position. They are redrawn correctly after mouseup.
+  // Only skip for non-primitive shapes: primitive anims use drawPrimitive which handles fill
+  // via ctx.arc/ellipse, but only when regions is empty. Stale region fills on primitives
+  // are tolerable (same as pre-fix behavior) because drawPrimitive still draws a correct outline.
+  const _inResizeDrag = !!(resizeDrag && resizeDrag.anim === anim);
+  const _skipRegionFill = (_inResizeDrag && !isPrimitiveAnim(anim)) ||
+    (frameDrag?.mergedCurves && frameDrag.anim === anim && frameDrag.hasMoved && !frameDrag.origSplitAnchors);
+  if (!_skipRegionFill) drawObjectRegionFillsForAnim(anim);
 
   if (anim.curves) {
     // During a merged-object frameDrag, _topoSplitCurves closures are stale (baked at the
@@ -15474,7 +15484,9 @@ function drawCommittedAnimation(anim, { deferOverlay = false } = {}) {
   if (anim.anchors.length === 1 && anim.segments.length === 0) drawDot(anim);
   // Skip direct-fill paths when regions exist — drawObjectRegionFills handles those,
   // with anim.fillColor as fallback if any region.fillColor is null.
-  if (canFillAnim(anim) && !anim.regions?.length) {
+  // Exception: during a resize drag, regions are stale, so bypass the guard and use
+  // the live compiled segments directly (same pattern as the region-fill skip above).
+  if (canFillAnim(anim) && (!anim.regions?.length || _inResizeDrag)) {
     const _fStyle = animFillStyle(anim);
     if (_fStyle === 'gradient') {
       drawGradientFill(anim);
