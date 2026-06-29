@@ -22366,11 +22366,6 @@ function renderObjectTray(detailAnim) {
   });
 
   tilesEl.scrollLeft = clampObjectTrayScroll(tilesEl, previousScrollLeft);
-  if (!groupSelectionMode && !isMultiSelectionActive()) {
-    const focus = activeFocus || lastObjectTrayFocus;
-    const didFocus = focusObjectTrayTile(tilesEl, focus);
-    if (!didFocus) tilesEl.scrollLeft = clampObjectTrayScroll(tilesEl, previousScrollLeft);
-  }
   updateTilesMoreIndicator();
 }
 
