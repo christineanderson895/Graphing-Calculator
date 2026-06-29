@@ -17297,8 +17297,8 @@ function appendRegionColorExpansion(parent, region, group) {
         a => { region.patternAngle = a; draw(); });
       panel.appendChild(wheelRow);
 
-      appendSliderRow(panel, 'Spacing', 4, 48, 1, region.patternSpacing ?? 12,
-        v => `${Math.round(v)}px`,
+      appendSliderRow(panel, 'Spacing', 0.01, 0.5, 0.01, getPatternSpacingFrac(region),
+        v => `${Math.round(v * 100)}%`,
         v => { region.patternSpacing = parseFloat(v); saveProject(); draw(); });
     }
 
@@ -17761,8 +17761,8 @@ function appendColorExpansion(parent, anim) {
         });
       panel.appendChild(wheelRow);
 
-      appendSliderRow(panel, 'Spacing', 4, 48, 1, anim.patternSpacing ?? 12,
-        v => `${Math.round(v)}px`, v => {
+      appendSliderRow(panel, 'Spacing', 0.01, 0.5, 0.01, getPatternSpacingFrac(anim),
+        v => `${Math.round(v * 100)}%`, v => {
           anim.patternSpacing = parseFloat(v);
           syncObjectFillToDetectedRegions(anim, { patternSpacing: anim.patternSpacing });
           saveProject(); draw();
@@ -20792,10 +20792,16 @@ function resolveContourBoundaries(region) {
   return { b1, b2 };
 }
 
+function getPatternSpacingFrac(obj) {
+  const v = obj.patternSpacing;
+  if (typeof v !== 'number' || v > 1) return 0.08;
+  return Math.max(0.01, Math.min(0.5, v));
+}
+
 function drawRegionPattern(ctx, region, curvesMap, opacity) {
   const patternType = region.patternType || 'lines';
   const angle = region.patternAngle ?? 0;
-  const spacing = (region.patternSpacing ?? 12) * devicePixelRatio;
+  const spacingFrac = getPatternSpacingFrac(region);
 
   ctx.save();
   ctx.beginPath();
@@ -20817,6 +20823,7 @@ function drawRegionPattern(ctx, region, curvesMap, opacity) {
     if (bounds) {
       const cx = (bounds.left + bounds.right) / 2, cy = (bounds.top + bounds.bottom) / 2;
       const diagHalf = Math.hypot(bounds.right - bounds.left, bounds.bottom - bounds.top) / 2;
+      const spacing = Math.max(2 * devicePixelRatio, spacingFrac * diagHalf);
       const span = diagHalf + spacing;
       const steps = Math.ceil(diagHalf / spacing) + 2;
       ctx.globalAlpha = 1;
@@ -20861,7 +20868,7 @@ function drawCurvePattern(anim) {
   if (!animFillColor(anim) || !anim.closed || !findLoopRange(anim)) return;
   const patternType = anim.patternType || 'lines';
   const angle = anim.patternAngle ?? 0;
-  const spacing = (anim.patternSpacing ?? 12) * devicePixelRatio;
+  const spacingFrac = getPatternSpacingFrac(anim);
   const opacity = animFillOpacity(anim);
 
   ctx.save();
@@ -20880,6 +20887,7 @@ function drawCurvePattern(anim) {
     if (bounds) {
       const cx = (bounds.left + bounds.right) / 2, cy = (bounds.top + bounds.bottom) / 2;
       const diagHalf = Math.hypot(bounds.right - bounds.left, bounds.bottom - bounds.top) / 2;
+      const spacing = Math.max(2 * devicePixelRatio, spacingFrac * diagHalf);
       const span = diagHalf + spacing;
       const steps = Math.ceil(diagHalf / spacing) + 2;
       ctx.globalAlpha = 1;
@@ -24235,7 +24243,7 @@ function renderAnimListLegacy() {
           });
           _fillWrap.appendChild(_patRow);
 
-          const _patSpacing = _activeReg.patternSpacing ?? 20;
+          const _patSpacing = getPatternSpacingFrac(_activeReg);
           const _pWRow = document.createElement('div');
           _pWRow.className = 'direction-wheel-row';
           _pWRow.style.marginTop = '4px';
@@ -24243,8 +24251,8 @@ function renderAnimListLegacy() {
           _pWRow.appendChild(_pWLbl);
           appendDirectionWheel(_pWRow, () => _activeReg.patternAngle ?? 0, a => { _applyReg({ patternAngle: a }); saveProject(); draw(); });
           _fillWrap.appendChild(_pWRow);
-          appendSliderRow(_fillWrap, 'Spacing', 5, 80, 1, _patSpacing,
-            v => `${Math.round(v)}`, v => { _applyReg({ patternSpacing: parseInt(v, 10) }); saveProject(); draw(); },
+          appendSliderRow(_fillWrap, 'Spacing', 0.01, 0.5, 0.01, _patSpacing,
+            v => `${Math.round(v * 100)}%`, v => { _applyReg({ patternSpacing: parseFloat(v) }); saveProject(); draw(); },
             false, { valAlign: 'center' });
         }
 
