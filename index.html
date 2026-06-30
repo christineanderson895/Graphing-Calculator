@@ -58,7 +58,7 @@
     #sidebar {
       width: 280px;
       min-width: 280px;
-      background: #342338;
+      background: #443348;
       display: flex;
       flex-direction: column;
       border-right: 1px solid #313244;
@@ -126,9 +126,9 @@
       flex-shrink: 0;
       height: 92px;
       margin: 0 0 8px;
-      border: 2px solid #6c7086;
+      border: 2px solid #776655;
       border-radius: 8px;
-      background: #200010;
+      background: #776655;
       display: flex;
       flex-direction: column;
       overflow: hidden;
@@ -149,11 +149,11 @@
     }
     #object-tiles-wrapper::before {
       left: 0;
-      background: linear-gradient(90deg, #200010 0%, rgba(32, 0, 16, 0) 100%);
+      background: linear-gradient(90deg, #776655 0%, rgba(119, 102, 85, 0) 100%);
     }
     #object-tiles-wrapper::after {
       right: 0;
-      background: linear-gradient(270deg, #200010 0%, rgba(32, 0, 16, 0) 100%);
+      background: linear-gradient(270deg, #776655 0%, rgba(119, 102, 85, 0) 100%);
     }
     #object-tiles-wrapper.can-scroll-left::before,
     #object-tiles-wrapper.can-scroll-right::after {
@@ -357,7 +357,7 @@
       box-sizing: border-box;
       border-radius: 6px;
       border: 1.5px solid #45475a;
-      background: #1e1e2e;
+      background: #000000;
       cursor: pointer;
       padding: 0; overflow: hidden; display: block;
       position: relative;
@@ -370,6 +370,8 @@
       box-shadow: 0 0 0 1px rgba(205, 214, 244, 0.22);
     }
     .obj-tile.obj-tile-hidden { opacity: 0.45; }
+    .obj-tile.pick-source-eligible { outline: 2px dashed #89b4fa; outline-offset: -2px; }
+    .obj-tile.pick-source-eligible:hover { background: rgba(137,180,250,0.12); outline-color: #cba6f7; }
     .obj-tile canvas { display: block; width: 100%; height: 100%; }
     .obj-tray-partition {
       flex: 0 0 2px;
@@ -2106,7 +2108,7 @@ const FILL_STYLES = [
   { key: 'circular',  title: 'Circular rings' },
   { key: 'radial',    title: 'Radial rays' },
 ];
-const FILL_STYLE_KEYS = new Set([...FILL_STYLES.map(s => s.key), 'pattern']);
+const FILL_STYLE_KEYS = new Set([...FILL_STYLES.map(s => s.key), 'pattern', 'custom-pattern']);
 
 // ── Undo ──
 const MAX_UNDO = 50;
@@ -2138,6 +2140,7 @@ console.warn('%c ANIMATOR BUILD 2026-06-23-I', 'background:#c00;color:#fff;font-
 
 let canvas = document.getElementById('graph');
 let ctx = canvas.getContext('2d');
+let _buildingPatternTile = false;
 let penOverlay = document.getElementById('pen-overlay');
 let penOverlayCtx = penOverlay.getContext('2d');
 
@@ -2484,6 +2487,8 @@ function _splitCurveBaseProps(orig, parentGroupId) {
     gradientToColor: orig.gradientToColor ?? null, gradientToOpacity: orig.gradientToOpacity ?? null,
     gradientAngle: orig.gradientAngle, patternType: orig.patternType,
     patternAngle: orig.patternAngle, patternSpacing: orig.patternSpacing,
+    customPatternSourceId: orig.customPatternSourceId ?? null, customPatternMode: orig.customPatternMode ?? 'mask',
+    croppedImageDataUrl: orig.croppedImageDataUrl ?? null, croppedImageLightness: orig.croppedImageLightness ?? 1.0,
     gradientFromArcs: new Set(), gradientToArcs: new Set(),
     activeSegments: new Set(), expandedAnchors: new Set(), expandedArcs: new Set(), regions: [],
   };
@@ -4293,6 +4298,7 @@ let lockHover    = null; // {anim, anchorIdx} | null — interior anchor lock to
 let anchorIconHover = null; // 'lock' | null — hovered icon in the anchor icon cluster
 let _anchorIconPositions = null; // { lock? } — canvas hit zones, set during draw()
 let editNodesMode = false;         // true while user is in "edit nodes" mode (add or remove non-topo anchors)
+let customPatternPickMode = null;  // {animId?, regionId?, onPick(pickedAnim)} | null
 let editNodesSubset = new Set();   // arc labels restricting Edit Nodes scope when entered from arc selection
 let _editNodeArcHover = null;      // { arc, origSegIdx, t, mathPos, pxDist } — cursor on arc stroke (add target)
 let _editNodeAnchorHover = null;   // { anim, anchorIdx, arc, cx, cy } — cursor on non-topo anchor (remove target)
@@ -4360,6 +4366,8 @@ function snapshotAnimations() {
     gradientToArcs: [...(a.gradientToArcs ?? [])],
     gradientToColor: a.gradientToColor ?? null,
     gradientToOpacity: a.gradientToOpacity ?? null,
+    croppedImageDataUrl: a.croppedImageDataUrl ?? null,
+    croppedImageLightness: a.croppedImageLightness ?? 1.0,
     name: a.name ?? null,
     _isPolygon: a._isPolygon ?? false,
     arcStyles: a.arcStyles && Object.keys(a.arcStyles).length ? { ...a.arcStyles } : null,
@@ -4510,6 +4518,8 @@ function restoreSnapshot(snap) {
       gradientToArcs: new Set(s.gradientToArcs ?? []),
       gradientToColor: s.gradientToColor ?? null,
       gradientToOpacity: s.gradientToOpacity ?? null,
+      croppedImageDataUrl: s.croppedImageDataUrl ?? null,
+      croppedImageLightness: s.croppedImageLightness ?? 1.0,
       name: s.name ?? null,
       _isPolygon: s._isPolygon ?? false,
       arcStyles: s.arcStyles ? { ...s.arcStyles } : {},
@@ -4544,6 +4554,11 @@ function restoreSnapshot(snap) {
       })) : null,
       regions: (s.regions ?? []).map(r => ({ ...r, boundary: r.boundary.map(e => ({ ...e })) })),
     };
+    if (anim.croppedImageDataUrl) {
+      anim._croppedImage = new Image();
+      anim._croppedImage.onload = () => draw();
+      anim._croppedImage.src = anim.croppedImageDataUrl;
+    }
     if (!anim.inPlacementMode) recompileAnim(anim);
     if (anim.curves) { for (const c of anim.curves) recompileAnim(c); }
     if (!anim.inPlacementMode) detectObjectTopology(anim);
@@ -5434,6 +5449,8 @@ function mergeObjects(ids) {
       _mr.patternType = _hr?.patternType ?? _hsrc.patternType;
       _mr.patternAngle = _hr?.patternAngle ?? _hsrc.patternAngle;
       _mr.patternSpacing = _hr?.patternSpacing ?? _hsrc.patternSpacing;
+      _mr.customPatternSourceId = _hr?.customPatternSourceId ?? _hsrc.customPatternSourceId ?? null;
+      _mr.customPatternMode = _hr?.customPatternMode ?? _hsrc.customPatternMode ?? 'mask';
     }
   }
   renderAnimList(); draw(); saveProject();
@@ -5955,6 +5972,7 @@ document.addEventListener('keydown', e => {
   if (isTypingTarget(document.activeElement)) return;
   if (e.key === 'Escape') {
     e.preventDefault();
+    if (customPatternPickMode !== null) { customPatternPickMode = null; renderAnimList(); draw(); return; }
     if (eyedropperTarget !== null) { deactivateEyedropper(); renderAnimList(); return; }
     if (freeformPenActive) { freeformPenActive = false; freeformPenCapture = null; currentTool = 'select'; updateToolPanel(); renderAnimList(); draw(); updateCursor(); return; }
     if (contourSelectMode !== null) { contourSelectMode = null; renderAnimList(); draw(); return; }
@@ -6741,6 +6759,10 @@ function makeTransformedAnimation(src, transformPoint, rotation) {
     patternType: src.patternType,
     patternAngle: src.patternAngle,
     patternSpacing: src.patternSpacing,
+    customPatternSourceId: src.customPatternSourceId ?? null,
+    customPatternMode: src.customPatternMode ?? 'mask',
+    croppedImageDataUrl: src.croppedImageDataUrl ?? null,
+    croppedImageLightness: src.croppedImageLightness ?? 1.0,
     closed: !!src.closed,
     text: src.text ?? '',
     fontSize: src.fontSize ?? 36,
@@ -7074,6 +7096,10 @@ function createSideActionCopy(src, kind) {
   animations.push(anim);
   recompileAnim(anim);
   if (anim.curves) for (const c of anim.curves) recompileAnim(c);
+  if (anim.croppedImageDataUrl && !anim._croppedImage) {
+    anim._croppedImage = new Image();
+    anim._croppedImage.src = anim.croppedImageDataUrl;
+  }
   detectObjectTopology(anim);
 
 
@@ -12477,8 +12503,54 @@ function drawPrimitiveShape(kind, p0, p1, color, lineWidth, alpha = 1, dashed = 
   ctx.restore();
 }
 
+function drawPrimitiveCroppedImage(anim, alpha) {
+  if (!anim._croppedImage?.complete || !anim._croppedImage.naturalWidth) return;
+  const kind = animKind(anim);
+  const p0 = anim.anchors[0], p1 = anim.anchors[1];
+  const [x0, y0] = toCanvas(p0.re, p0.im);
+  const [x1, y1] = toCanvas(p1.re, p1.im);
+  const rotation = animRotation(anim);
+  const bounds = selectedObjectCanvasBounds(anim);
+  if (!bounds) return;
+  ctx.save();
+  ctx.beginPath();
+  if (kind === 'rectangle') {
+    const temp = { kind: 'rectangle', anchors: [p0, p1], rotation };
+    const pts = primitiveRectangleCorners(temp).map(pt => toCanvas(pt.re, pt.im));
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+    ctx.closePath();
+  } else if (kind === 'triangle') {
+    const temp = { kind: 'triangle', anchors: [p0, p1], rotation };
+    const pts = primitiveTrianglePoints(temp).map(pt => toCanvas(pt.re, pt.im));
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+    ctx.closePath();
+  } else if (kind === 'circle') {
+    ctx.arc(x0, y0, Math.hypot(x1 - x0, y1 - y0), 0, Math.PI * 2);
+  } else if (kind === 'ellipse') {
+    const rx = Math.abs(x1 - x0), ry = Math.abs(y1 - y0);
+    ctx.ellipse(x0, y0, rx, ry, -rotation, 0, Math.PI * 2);
+  }
+  ctx.clip();
+  const lightness = anim.croppedImageLightness ?? 1.0;
+  ctx.globalAlpha = alpha * (animFillOpacity(anim) ?? 1);
+  if (lightness !== 1.0) ctx.filter = `brightness(${lightness})`;
+  ctx.drawImage(anim._croppedImage, bounds.left, bounds.top, bounds.right - bounds.left, bounds.bottom - bounds.top);
+  ctx.restore();
+}
+
 function drawPrimitive(anim, extraWidth = 0, alpha = 1) {
   if (!isPrimitiveAnim(anim) || anim.anchors.length < 2) return;
+  if (anim.croppedImageDataUrl && anim._croppedImage?.complete && extraWidth === 0 && alpha >= 1) {
+    drawPrimitiveCroppedImage(anim, alpha);
+    drawPrimitiveShape(
+      anim.kind, anim.anchors[0], anim.anchors[1], anim.color,
+      primitiveStrokeWidth(anim, 0), alpha, false, animRotation(anim),
+      null, animOutlineOpacity(anim), 0, 'solid', null
+    );
+    return;
+  }
   const fillColor = extraWidth === 0 && alpha >= 1 && !anim.regions?.length ? animFillColor(anim) : null;
   drawPrimitiveShape(
     anim.kind,
@@ -13165,7 +13237,7 @@ function sideActionButtonsForFrame(f) {
   return [{ kind: 'menu', x, y, w, h }];
 }
 
-function sideActionMenuItemsForFrame(f, forSingleAnim = false) {
+function sideActionMenuItemsForFrame(f, forSingleAnim = false, anim = null) {
   if (!f || !sideActionMenuOpen) return [];
   const dpr = devicePixelRatio;
   const h = 22 * dpr;
@@ -13178,7 +13250,10 @@ function sideActionMenuItemsForFrame(f, forSingleAnim = false) {
     { kind: 'reflect',   x: menuBtn.x, y: menuBtn.y + menuBtn.h + gap + (h + gap),   w, h },
     { kind: 'rotate',    x: menuBtn.x, y: menuBtn.y + menuBtn.h + gap + (h + gap)*2, w, h },
   ];
-  if (forSingleAnim) items.push({ kind: 'editNodes', x: menuBtn.x, y: menuBtn.y + menuBtn.h + gap + (h + gap)*3, w, h });
+  if (forSingleAnim) {
+    const _isCroppable = anim && isPrimitiveAnim(anim) && animKind(anim) !== 'line';
+    items.push({ kind: _isCroppable ? 'crop' : 'editNodes', x: menuBtn.x, y: menuBtn.y + menuBtn.h + gap + (h + gap)*3, w, h });
+  }
   return items;
 }
 
@@ -13219,7 +13294,7 @@ function querySideActionButtonHover(cx, cy) {
       for (const btn of sideActionButtonsForFrame(f)) {
         if (pointInRect(cx, cy, btn)) return { anim, kind: btn.kind };
       }
-      for (const item of sideActionMenuItemsForFrame(f, true)) {
+      for (const item of sideActionMenuItemsForFrame(f, true, anim)) {
         if (pointInRect(cx, cy, item)) return { anim, kind: item.kind };
       }
       return null;
@@ -13286,6 +13361,19 @@ function handleSideActionButtonPress(action) {
   if (action.kind === 'rotate') {
     toggleRotationModeFromSideAction(action);
     renderAnimList(); draw(); updateCursor();
+    return true;
+  }
+  if (action.kind === 'crop') {
+    if (action.anim && isPrimitiveAnim(action.anim) && animKind(action.anim) !== 'line') {
+      pushUndo();
+      if (action.anim.croppedImageDataUrl) {
+        action.anim.croppedImageDataUrl = null;
+        action.anim._croppedImage = null;
+      } else {
+        cropPrimitive(action.anim);
+      }
+      saveProject(); renderAnimList(); draw();
+    }
     return true;
   }
   if (action.kind === 'editNodes') {
@@ -14839,6 +14927,7 @@ function drawSideActionMenuItem(item, hovered) {
   const midX = item.x + item.w * 0.5;
   const midY = item.y + item.h * 0.5;
   const text = item.kind === 'editNodes' ? (editNodesMode ? 'Exit Editing' : 'Edit Nodes') :
+    item.kind === 'crop' ? (selectedObjectAnim()?.croppedImageDataUrl ? 'Uncrop' : 'Crop') :
     item.kind === 'reflect' ? 'Reflect' : item.kind === 'rotate' ? 'Rotate' : 'Duplicate';
   ctx.save();
   ctx.fillStyle = '#11111b';
@@ -14864,7 +14953,7 @@ function drawSelectionSideActionButtons(anim) {
     const active = hovered || (btn.kind === 'rotate' && isRotationModeActiveForAnim(anim));
     drawSelectionSideActionButton(btn, active, hovered);
   }
-  for (const item of sideActionMenuItemsForFrame(f, true)) {
+  for (const item of sideActionMenuItemsForFrame(f, true, anim)) {
     const hovered = sideActionHover?.anim === anim && sideActionHover?.kind === item.kind;
     drawSideActionMenuItem(item, hovered);
   }
@@ -15492,6 +15581,8 @@ function drawCommittedAnimation(anim, { deferOverlay = false } = {}) {
       drawGradientFill(anim);
     } else if (_fStyle === 'pattern') {
       drawCurvePattern(anim);
+    } else if (_fStyle === 'custom-pattern') {
+      drawCurveCustomPattern(anim);
     } else if (animFillColor(anim)) {
       const isClosedFill = !!(anim.closed && findLoopRange(anim));
       drawCurveFill(anim, null, 1, isClosedFill ? [] : higherLayerBlockersFor(anim));
@@ -16702,6 +16793,15 @@ function makeFillStyleIcon(style) {
     [7, 12, 17].forEach(cx => [7, 12, 17].forEach(cy =>
       svg.appendChild(makeSvgEl('circle', { cx, cy, r: 1.6, style: 'fill:currentColor;stroke:none;' }))));
   }
+  if (style === 'custom-pattern') {
+    svg.appendChild(makeSvgEl('rect', { x: 3, y: 3, width: 18, height: 18, rx: 1,
+      fill: 'none', stroke: 'currentColor', 'stroke-width': 1.5 }));
+    svg.appendChild(makeSvgEl('path', {
+      d: 'M5,12 C7,8 9,16 11,12 C13,8 15,16 17,12 C18,9.5 19,10.5 19,12',
+      fill: 'none', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round'
+    }));
+    return svg;
+  }
   return svg;
 }
 
@@ -17091,7 +17191,7 @@ function appendRegionColorExpansion(parent, region, group) {
   const style = region.fillStyle || 'solid';
   const GRADIENT_FAMILY = ['gradient', 'contour-gradient'];
   const isGradientFamily = GRADIENT_FAMILY.includes(style);
-  const hasColor2 = isGradientFamily || style === 'pattern';
+  const hasColor2 = isGradientFamily || style === 'pattern' || style === 'custom-pattern';
   const isGroupRegion = !!groups.find(g => g.id === group.id);
   const _dropperSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21l1.5-4.5L15.5 6l3 3L8 20.5z"/><path d="M18.5 6l1.5-1.5c.8-.8.8-2.2 0-3s-2.2-.8-3 0L15.5 3"/></svg>`;
 
@@ -17202,15 +17302,17 @@ function appendRegionColorExpansion(parent, region, group) {
     // Top-level: Solid | Gradient | Pattern
     const styleRow = document.createElement('div');
     styleRow.className = 'fill-style-row';
+    const _isPatFam = style === 'pattern' || style === 'custom-pattern';
     [{ key: 'solid', title: 'Solid' }, { key: 'gradient', title: 'Gradient' }, { key: 'pattern', title: 'Pattern' }].forEach(({ key, title }) => {
       const btn = document.createElement('button');
-      const isActive = key === 'gradient' ? isGradientFamily : style === key;
+      const isActive = key === 'gradient' ? isGradientFamily : (key === 'pattern' ? _isPatFam : style === key);
       btn.className = 'fill-style-btn' + (isActive ? ' active' : '');
       btn.title = title;
       btn.appendChild(makeFillStyleIcon(key));
       btn.addEventListener('click', e => {
         e.stopPropagation();
-        const newStyle = key === 'gradient' ? (isGradientFamily ? style : 'gradient') : key;
+        const newStyle = key === 'gradient' ? (isGradientFamily ? style : 'gradient') :
+          (key === 'pattern' ? (_isPatFam ? style : 'pattern') : key);
         if (style !== newStyle) {
           pushUndo(); region.fillStyle = newStyle;
           if (newStyle !== 'solid' && !region.gradientToColor) {
@@ -17264,42 +17366,96 @@ function appendRegionColorExpansion(parent, region, group) {
       panel.appendChild(wheelRow);
     }
 
-    // Pattern type, direction, and spacing controls
-    if (style === 'pattern') {
+    // Pattern sub-type row (Lines | Dots | Crosshatch | Custom) + controls
+    if (_isPatFam) {
       const patternType = region.patternType || 'lines';
       const typeRow = document.createElement('div');
       typeRow.className = 'fill-style-row';
-      typeRow.style.marginTop = '4px';
-      [{ key: 'lines', title: 'Lines' }, { key: 'dots', title: 'Dots' }, { key: 'crosshatch', title: 'Crosshatch' }].forEach(({ key, title }) => {
+      typeRow.style.cssText = 'margin-top:4px;grid-template-columns:repeat(4,1fr);';
+      [{ key: 'lines', title: 'Lines' }, { key: 'dots', title: 'Dots' },
+       { key: 'crosshatch', title: 'Crosshatch' }, { key: 'custom', title: 'Custom' }].forEach(({ key, title }) => {
         const btn = document.createElement('button');
-        btn.className = 'fill-style-btn' + (patternType === key ? ' active' : '');
+        const isTypeActive = key === 'custom' ? style === 'custom-pattern' : (style === 'pattern' && patternType === key);
+        btn.className = 'fill-style-btn' + (isTypeActive ? ' active' : '');
         btn.title = title;
-        btn.appendChild(makeFillStyleIcon(key));
+        btn.appendChild(makeFillStyleIcon(key === 'custom' ? 'custom-pattern' : key));
         btn.addEventListener('click', e => {
           e.stopPropagation();
-          if (region.patternType !== key) {
-            pushUndo(); region.patternType = key;
-            saveProject(); renderAnimList(); draw();
+          pushUndo();
+          if (key === 'custom') {
+            region.fillStyle = 'custom-pattern';
+            if (!region.gradientToColor) { region.gradientToColor = region.fillColor || '#ffffff'; region.gradientToOpacity = region.gradientToOpacity ?? 1; }
+          } else {
+            region.fillStyle = 'pattern'; region.patternType = key;
           }
+          saveProject(); renderAnimList(); draw();
         });
         typeRow.appendChild(btn);
       });
       panel.appendChild(typeRow);
 
-      const wheelRow = document.createElement('div');
-      wheelRow.className = 'direction-wheel-row';
-      const lbl = document.createElement('span');
-      lbl.className = 'direction-wheel-label';
-      lbl.textContent = 'Angle';
-      wheelRow.appendChild(lbl);
-      appendDirectionWheel(wheelRow,
-        () => region.patternAngle ?? 0,
-        a => { region.patternAngle = a; draw(); });
-      panel.appendChild(wheelRow);
+      if (style === 'pattern') {
+        const wheelRow = document.createElement('div');
+        wheelRow.className = 'direction-wheel-row';
+        const lbl = document.createElement('span');
+        lbl.className = 'direction-wheel-label'; lbl.textContent = 'Angle';
+        wheelRow.appendChild(lbl);
+        appendDirectionWheel(wheelRow, () => region.patternAngle ?? 0, a => { region.patternAngle = a; draw(); });
+        panel.appendChild(wheelRow);
+        appendSliderRow(panel, 'Spacing', 0.01, 0.5, 0.01, getPatternSpacingFrac(region),
+          v => `${Math.round(v * 100)}%`, v => { region.patternSpacing = parseFloat(v); saveProject(); draw(); });
+      }
 
-      appendSliderRow(panel, 'Spacing', 0.01, 0.5, 0.01, getPatternSpacingFrac(region),
-        v => `${Math.round(v * 100)}%`,
-        v => { region.patternSpacing = parseFloat(v); saveProject(); draw(); });
+      if (style === 'custom-pattern') {
+        const _rIsPickMode = customPatternPickMode?.regionId === region.id;
+        panel.appendChild(makeCustomPatternSourceRow({
+          getSourceId: () => region.customPatternSourceId,
+          onSetSource: (id) => {
+            pushUndo(); region.customPatternSourceId = id;
+            if (id) { const src = animations.find(a => a.id === id); if (src) { const sb = selectedObjectCanvasBounds(src); if (sb) region.patternAngle = (sb.right - sb.left) >= (sb.bottom - sb.top) ? 0 : Math.PI / 2; } }
+            saveProject(); renderAnimList(); draw();
+          },
+          isPickMode: _rIsPickMode,
+          onEnterPickMode: () => {
+            customPatternPickMode = {
+              regionId: region.id,
+              onPick: (picked) => {
+                pushUndo(); region.customPatternSourceId = picked.id;
+                if (picked.croppedImageDataUrl) region.fillOpacity = 1.0;
+                const sb = selectedObjectCanvasBounds(picked); if (sb) region.patternAngle = (sb.right - sb.left) >= (sb.bottom - sb.top) ? 0 : Math.PI / 2;
+                saveProject();
+              }
+            };
+            renderAnimList(); draw();
+          },
+          onExitPickMode: () => { customPatternPickMode = null; renderAnimList(); draw(); }
+        }));
+
+        const modeRow = document.createElement('div');
+        modeRow.className = 'fill-style-row'; modeRow.style.marginTop = '4px';
+        const curMode = region.customPatternMode || 'mask';
+        [{ key: 'mask', title: 'Mask' }, { key: 'blend', title: 'Blend' }].forEach(({ key, title }) => {
+          const btn = document.createElement('button');
+          btn.className = 'fill-style-btn' + (curMode === key ? ' active' : '');
+          btn.style.fontSize = '0.65rem'; btn.textContent = title;
+          btn.addEventListener('click', e => {
+            e.stopPropagation();
+            if ((region.customPatternMode || 'mask') !== key) { pushUndo(); region.customPatternMode = key; saveProject(); renderAnimList(); draw(); }
+          });
+          modeRow.appendChild(btn);
+        });
+        panel.appendChild(modeRow);
+
+        const cpWheelRow = document.createElement('div');
+        cpWheelRow.className = 'direction-wheel-row';
+        const cpLbl = document.createElement('span');
+        cpLbl.className = 'direction-wheel-label'; cpLbl.textContent = 'Angle';
+        cpWheelRow.appendChild(cpLbl);
+        appendDirectionWheel(cpWheelRow, () => region.patternAngle ?? 0, a => { region.patternAngle = a; draw(); });
+        panel.appendChild(cpWheelRow);
+        appendSliderRow(panel, 'Spacing', 0.01, 0.5, 0.01, getPatternSpacingFrac(region),
+          v => `${Math.round(v * 100)}%`, v => { region.patternSpacing = parseFloat(v); saveProject(); draw(); });
+      }
     }
 
     // Boundary assignment (contour gradient only)
@@ -17524,7 +17680,8 @@ function appendColorExpansion(parent, anim) {
   const fillStyle = animFillStyle(anim);
   const isGradient = !isOutline && fillStyle === 'gradient';
   const isPattern = !isOutline && fillStyle === 'pattern';
-  const hasColor2 = isGradient || isPattern;
+  const isCustomPattern = !isOutline && fillStyle === 'custom-pattern';
+  const hasColor2 = isGradient || isPattern || isCustomPattern;
   if (isGradient) ensureGradientDefaults(anim);
 
   const root = document.createElement('div');
@@ -17611,6 +17768,29 @@ function appendColorExpansion(parent, anim) {
 
   } else if (objectFillTab === 1) {
     // ── Fill 1: fill color + opacity ──
+    // Cropped primitive: show Lightness/Opacity/Uncrop instead of color picker
+    if (anim.croppedImageDataUrl && isPrimitiveAnim(anim) && animKind(anim) !== 'line') {
+      appendSliderRow(panel, 'Lightness', 0, 200, 1,
+        Math.round((anim.croppedImageLightness ?? 1.0) * 100),
+        v => `${Math.round(v)}%`, v => { anim.croppedImageLightness = parseFloat(v) / 100; saveProject(); draw(); },
+        false, { valAlign: 'center' });
+      appendSliderRow(panel, 'Opacity', 0, 100, 1,
+        Math.round(clamp(animFillOpacity(anim), 0, 1) * 100),
+        v => `${Math.round(v)}%`, v => { anim.fillOpacity = clamp(parseFloat(v) / 100, 0, 1); saveProject(); draw(); },
+        false, { valAlign: 'center' });
+      const _ucBtn = document.createElement('button');
+      _ucBtn.className = 'fill-style-btn';
+      _ucBtn.style.cssText = 'margin-top:4px;font-size:0.7rem;width:100%;';
+      _ucBtn.textContent = 'Uncrop';
+      _ucBtn.addEventListener('click', e => {
+        e.stopPropagation(); pushUndo();
+        anim.croppedImageDataUrl = null; anim._croppedImage = null;
+        saveProject(); renderAnimList(); draw();
+      });
+      panel.appendChild(_ucBtn);
+      root.appendChild(panel); parent.appendChild(root);
+      return;
+    }
     const c1 = animFillColor(anim) || anim.color;
     let c1Preview = normalizeColorString(c1) || c1;
     let c1Opacity = null;
@@ -17675,30 +17855,31 @@ function appendColorExpansion(parent, anim) {
     // ── Style tab ──
     const styleRow = document.createElement('div');
     styleRow.className = 'fill-style-row';
+    const _acPatFam = isPattern || isCustomPattern;
     [{ key: 'solid', title: 'Solid' }, { key: 'gradient', title: 'Gradient' }, { key: 'pattern', title: 'Pattern' }].forEach(({ key, title }) => {
       const btn = document.createElement('button');
-      btn.className = 'fill-style-btn' + (fillStyle === key ? ' active' : '');
+      const _acIsAct = key === 'pattern' ? _acPatFam : fillStyle === key;
+      btn.className = 'fill-style-btn' + (_acIsAct ? ' active' : '');
       btn.title = title;
       btn.appendChild(makeFillStyleIcon(key));
       btn.addEventListener('click', e => {
         e.stopPropagation();
-        if (fillStyle !== key) {
-          pushUndo(); anim.fillStyle = key;
-          if (key === 'gradient') ensureGradientDefaults(anim);
-          if ((key === 'gradient' || key === 'pattern') && !anim.gradientToColor) {
+        const _acNewStyle = key === 'pattern' ? (_acPatFam ? fillStyle : 'pattern') : key;
+        if (fillStyle !== _acNewStyle) {
+          pushUndo(); anim.fillStyle = _acNewStyle;
+          if (_acNewStyle === 'gradient') ensureGradientDefaults(anim);
+          if ((_acNewStyle === 'gradient' || _acNewStyle === 'pattern') && !anim.gradientToColor) {
             anim.gradientToColor = animFillColor(anim) || anim.color;
             if (!isFinite(anim.gradientToOpacity)) anim.gradientToOpacity = 0;
           }
           syncObjectFillToDetectedRegions(anim, {
-            fillColor: animFillColor(anim),
-            fillOpacity: animFillOpacity(anim),
-            fillStyle: anim.fillStyle || 'solid',
-            gradientToColor: anim.gradientToColor,
-            gradientToOpacity: anim.gradientToOpacity,
-            gradientAngle: anim.gradientAngle,
-            patternType: anim.patternType,
-            patternAngle: anim.patternAngle,
+            fillColor: animFillColor(anim), fillOpacity: animFillOpacity(anim),
+            fillStyle: anim.fillStyle || 'solid', gradientToColor: anim.gradientToColor,
+            gradientToOpacity: anim.gradientToOpacity, gradientAngle: anim.gradientAngle,
+            patternType: anim.patternType, patternAngle: anim.patternAngle,
             patternSpacing: anim.patternSpacing,
+            customPatternSourceId: anim.customPatternSourceId ?? null,
+            customPatternMode: anim.customPatternMode ?? 'mask',
           });
           saveProject(); renderAnimList(); draw();
         }
@@ -17724,49 +17905,117 @@ function appendColorExpansion(parent, anim) {
       panel.appendChild(wheelRow);
     }
 
-    if (isPattern) {
+    if (_acPatFam) {
       const patternType = anim.patternType || 'lines';
       const typeRow = document.createElement('div');
       typeRow.className = 'fill-style-row';
-      typeRow.style.marginTop = '4px';
-      [{ key: 'lines', title: 'Lines' }, { key: 'dots', title: 'Dots' }, { key: 'crosshatch', title: 'Crosshatch' }].forEach(({ key, title }) => {
+      typeRow.style.cssText = 'margin-top:4px;grid-template-columns:repeat(4,1fr);';
+      [{ key: 'lines', title: 'Lines' }, { key: 'dots', title: 'Dots' },
+       { key: 'crosshatch', title: 'Crosshatch' }, { key: 'custom', title: 'Custom' }].forEach(({ key, title }) => {
         const btn = document.createElement('button');
-        btn.className = 'fill-style-btn' + (patternType === key ? ' active' : '');
+        const _acTypeAct = key === 'custom' ? isCustomPattern : (isPattern && patternType === key);
+        btn.className = 'fill-style-btn' + (_acTypeAct ? ' active' : '');
         btn.title = title;
-        btn.appendChild(makeFillStyleIcon(key));
+        btn.appendChild(makeFillStyleIcon(key === 'custom' ? 'custom-pattern' : key));
         btn.addEventListener('click', e => {
           e.stopPropagation();
-          if ((anim.patternType || 'lines') !== key) {
-            pushUndo(); anim.patternType = key;
-            syncObjectFillToDetectedRegions(anim, { patternType: anim.patternType });
-            saveProject(); renderAnimList(); draw();
+          pushUndo();
+          if (key === 'custom') {
+            anim.fillStyle = 'custom-pattern';
+            if (!anim.gradientToColor) { anim.gradientToColor = animFillColor(anim) || anim.color; anim.gradientToOpacity = anim.gradientToOpacity ?? animFillOpacity(anim); }
+          } else {
+            anim.fillStyle = 'pattern'; anim.patternType = key;
           }
+          syncObjectFillToDetectedRegions(anim, {
+            fillStyle: anim.fillStyle, patternType: anim.patternType,
+            gradientToColor: anim.gradientToColor, gradientToOpacity: anim.gradientToOpacity,
+          });
+          saveProject(); renderAnimList(); draw();
         });
         typeRow.appendChild(btn);
       });
       panel.appendChild(typeRow);
 
-      const wheelRow = document.createElement('div');
-      wheelRow.className = 'direction-wheel-row';
-      const lbl = document.createElement('span');
-      lbl.className = 'direction-wheel-label';
-      lbl.textContent = 'Angle';
-      wheelRow.appendChild(lbl);
-      appendDirectionWheel(wheelRow,
-        () => anim.patternAngle ?? 0,
-        a => {
+      if (isPattern) {
+        const wheelRow = document.createElement('div');
+        wheelRow.className = 'direction-wheel-row';
+        const lbl = document.createElement('span');
+        lbl.className = 'direction-wheel-label'; lbl.textContent = 'Angle';
+        wheelRow.appendChild(lbl);
+        appendDirectionWheel(wheelRow, () => anim.patternAngle ?? 0, a => {
           anim.patternAngle = a;
           syncObjectFillToDetectedRegions(anim, { patternAngle: anim.patternAngle });
           saveProject(); draw();
         });
-      panel.appendChild(wheelRow);
+        panel.appendChild(wheelRow);
+        appendSliderRow(panel, 'Spacing', 0.01, 0.5, 0.01, getPatternSpacingFrac(anim),
+          v => `${Math.round(v * 100)}%`, v => {
+            anim.patternSpacing = parseFloat(v);
+            syncObjectFillToDetectedRegions(anim, { patternSpacing: anim.patternSpacing });
+            saveProject(); draw();
+          });
+      }
 
-      appendSliderRow(panel, 'Spacing', 0.01, 0.5, 0.01, getPatternSpacingFrac(anim),
-        v => `${Math.round(v * 100)}%`, v => {
-          anim.patternSpacing = parseFloat(v);
-          syncObjectFillToDetectedRegions(anim, { patternSpacing: anim.patternSpacing });
+      if (isCustomPattern) {
+        const _acIsPickMode = customPatternPickMode?.animId === anim.id;
+        panel.appendChild(makeCustomPatternSourceRow({
+          getSourceId: () => anim.customPatternSourceId,
+          onSetSource: (id) => {
+            pushUndo(); anim.customPatternSourceId = id;
+            syncObjectFillToDetectedRegions(anim, { customPatternSourceId: id });
+            if (id) { const src = animations.find(a => a.id === id); if (src) { const sb = selectedObjectCanvasBounds(src); if (sb) { anim.patternAngle = (sb.right - sb.left) >= (sb.bottom - sb.top) ? 0 : Math.PI / 2; syncObjectFillToDetectedRegions(anim, { patternAngle: anim.patternAngle }); } } }
+            saveProject(); renderAnimList(); draw();
+          },
+          isPickMode: _acIsPickMode,
+          onEnterPickMode: () => {
+            customPatternPickMode = {
+              animId: anim.id,
+              onPick: (picked) => {
+                pushUndo(); anim.customPatternSourceId = picked.id;
+                if (picked.croppedImageDataUrl) { anim.fillOpacity = 1.0; syncObjectFillToDetectedRegions(anim, { fillOpacity: 1.0 }); }
+                syncObjectFillToDetectedRegions(anim, { customPatternSourceId: picked.id });
+                const sb = selectedObjectCanvasBounds(picked); if (sb) { anim.patternAngle = (sb.right - sb.left) >= (sb.bottom - sb.top) ? 0 : Math.PI / 2; syncObjectFillToDetectedRegions(anim, { patternAngle: anim.patternAngle }); }
+                saveProject();
+              }
+            };
+            renderAnimList(); draw();
+          },
+          onExitPickMode: () => { customPatternPickMode = null; renderAnimList(); draw(); }
+        }));
+
+        const cpModeRow = document.createElement('div');
+        cpModeRow.className = 'fill-style-row'; cpModeRow.style.marginTop = '4px';
+        const cpCurMode = anim.customPatternMode || 'mask';
+        [{ key: 'mask', title: 'Mask' }, { key: 'blend', title: 'Blend' }].forEach(({ key, title }) => {
+          const btn = document.createElement('button');
+          btn.className = 'fill-style-btn' + (cpCurMode === key ? ' active' : '');
+          btn.style.fontSize = '0.65rem'; btn.textContent = title;
+          btn.addEventListener('click', e => {
+            e.stopPropagation();
+            if ((anim.customPatternMode || 'mask') !== key) { pushUndo(); anim.customPatternMode = key; syncObjectFillToDetectedRegions(anim, { customPatternMode: key }); saveProject(); renderAnimList(); draw(); }
+          });
+          cpModeRow.appendChild(btn);
+        });
+        panel.appendChild(cpModeRow);
+
+        const cpWheelRow = document.createElement('div');
+        cpWheelRow.className = 'direction-wheel-row';
+        const cpWlbl = document.createElement('span');
+        cpWlbl.className = 'direction-wheel-label'; cpWlbl.textContent = 'Angle';
+        cpWheelRow.appendChild(cpWlbl);
+        appendDirectionWheel(cpWheelRow, () => anim.patternAngle ?? 0, a => {
+          anim.patternAngle = a;
+          syncObjectFillToDetectedRegions(anim, { patternAngle: anim.patternAngle });
           saveProject(); draw();
         });
+        panel.appendChild(cpWheelRow);
+        appendSliderRow(panel, 'Spacing', 0.01, 0.5, 0.01, getPatternSpacingFrac(anim),
+          v => `${Math.round(v * 100)}%`, v => {
+            anim.patternSpacing = parseFloat(v);
+            syncObjectFillToDetectedRegions(anim, { patternSpacing: anim.patternSpacing });
+            saveProject(); draw();
+          });
+      }
     }
   }
 
@@ -18056,6 +18305,53 @@ function renderAnimThumbnail(anim, canvasEl, size = 48) {
   if (isPrimitiveAnim(anim)) {
     const p0 = anim.anchors[0], p1 = anim.anchors[1];
     if (!p0 || !p1) return;
+
+    if (anim.croppedImageDataUrl && anim._croppedImage?.complete && anim._croppedImage.naturalWidth) {
+      const img = anim._croppedImage;
+      const imgX = ox, imgY = PX - oy - (maxIm - minIm) * ts;
+      const imgW = (maxRe - minRe) * ts, imgH = (maxIm - minIm) * ts;
+      tctx.save();
+      tctx.beginPath();
+      if (anim.kind === 'rectangle') {
+        const [rx0,ry0] = T(Math.min(p0.re,p1.re), Math.max(p0.im,p1.im));
+        const [rx1,ry1] = T(Math.max(p0.re,p1.re), Math.min(p0.im,p1.im));
+        tctx.rect(rx0, ry0, rx1-rx0, ry1-ry0);
+      } else if (anim.kind === 'circle') {
+        const [cx,cy] = T(p0.re, p0.im);
+        tctx.arc(cx, cy, Math.hypot(p1.re-p0.re, p1.im-p0.im) * ts, 0, Math.PI*2);
+      } else if (anim.kind === 'ellipse') {
+        const [cx,cy] = T(p0.re, p0.im);
+        tctx.ellipse(cx, cy, Math.abs(p1.re-p0.re)*ts, Math.abs(p1.im-p0.im)*ts, 0, 0, Math.PI*2);
+      } else if (anim.kind === 'triangle') {
+        const pts = primitiveTrianglePoints(anim).map(pt => T(pt.re, pt.im));
+        if (pts.length >= 3) { tctx.moveTo(pts[0][0], pts[0][1]); for (let i=1;i<pts.length;i++) tctx.lineTo(pts[i][0],pts[i][1]); tctx.closePath(); }
+      }
+      tctx.clip();
+      tctx.globalAlpha = animFillOpacity(anim) ?? 1;
+      tctx.drawImage(img, imgX, imgY, imgW, imgH);
+      tctx.restore();
+      tctx.globalAlpha = 0.9;
+      tctx.strokeStyle = anim.color || '#cdd6f4';
+      tctx.lineWidth = 1.5 * dpr; tctx.lineCap = 'round'; tctx.lineJoin = 'round';
+      tctx.beginPath();
+      if (anim.kind === 'rectangle') {
+        const [rx0,ry0] = T(Math.min(p0.re,p1.re), Math.max(p0.im,p1.im));
+        const [rx1,ry1] = T(Math.max(p0.re,p1.re), Math.min(p0.im,p1.im));
+        tctx.rect(rx0, ry0, rx1-rx0, ry1-ry0);
+      } else if (anim.kind === 'circle') {
+        const [cx,cy] = T(p0.re, p0.im);
+        tctx.arc(cx, cy, Math.hypot(p1.re-p0.re, p1.im-p0.im) * ts, 0, Math.PI*2);
+      } else if (anim.kind === 'ellipse') {
+        const [cx,cy] = T(p0.re, p0.im);
+        tctx.ellipse(cx, cy, Math.abs(p1.re-p0.re)*ts, Math.abs(p1.im-p0.im)*ts, 0, 0, Math.PI*2);
+      } else if (anim.kind === 'triangle') {
+        const pts = primitiveTrianglePoints(anim).map(pt => T(pt.re, pt.im));
+        if (pts.length >= 3) { tctx.moveTo(pts[0][0], pts[0][1]); for (let i=1;i<pts.length;i++) tctx.lineTo(pts[i][0],pts[i][1]); tctx.closePath(); }
+      }
+      tctx.stroke();
+      return;
+    }
+
     tctx.beginPath();
     if (anim.kind === 'line') {
       const [x0,y0] = T(p0.re, p0.im), [x1,y1] = T(p1.re, p1.im);
@@ -18840,6 +19136,8 @@ function makeDetectedRegion(id, boundary, prior = null) {
     patternType: prior?.patternType,
     patternAngle: prior?.patternAngle,
     patternSpacing: prior?.patternSpacing,
+    customPatternSourceId: prior?.customPatternSourceId ?? null,
+    customPatternMode: prior?.customPatternMode ?? 'mask',
   };
 }
 
@@ -19536,6 +19834,8 @@ function detectObjectTopology(anim, { skipSpatialMigration = false } = {}) {
           nr.patternType = _pr.patternType;
           nr.patternAngle = _pr.patternAngle;
           nr.patternSpacing = _pr.patternSpacing;
+          nr.customPatternSourceId = _pr.customPatternSourceId ?? null;
+          nr.customPatternMode = _pr.customPatternMode ?? 'mask';
           _matched = _ni; break;
         }
       }
@@ -20327,8 +20627,9 @@ function computeRegionCanvasBounds(region, curvesMap) {
     const fwd = edge.endIdx > edge.startIdx;
     const sMin = Math.min(edge.startIdx, edge.endIdx), sMax = Math.max(edge.startIdx, edge.endIdx);
     const proc = pts => { for (const pt of pts) { if (!pt) continue; if (pt[0] < minX) minX = pt[0]; if (pt[0] > maxX) maxX = pt[0]; if (pt[1] < minY) minY = pt[1]; if (pt[1] > maxY) maxY = pt[1]; } };
-    if (fwd) { for (let s = sMin; s < sMax; s++) { const sg = anim.segments[s]; if (sg?.compiled) proc(sampleCompiledAdaptive(sg.compiled)); } }
-    else { for (let s = sMax-1; s >= sMin; s--) { const sg = anim.segments[s]; if (sg?.compiled) proc([...sampleCompiledAdaptive(sg.compiled)].reverse()); } }
+    const anchorPt = i => { const a = anim.anchors[i]; return a ? [toCanvas(a.re, a.im)] : []; };
+    if (fwd) { for (let s = sMin; s < sMax; s++) { const sg = anim.segments[s]; if (sg?.compiled) proc(sampleCompiledAdaptive(sg.compiled)); else { proc(anchorPt(s)); proc(anchorPt(s + 1)); } } }
+    else { for (let s = sMax-1; s >= sMin; s--) { const sg = anim.segments[s]; if (sg?.compiled) proc([...sampleCompiledAdaptive(sg.compiled)].reverse()); else { proc(anchorPt(s + 1)); proc(anchorPt(s)); } } }
   }
   return minX === Infinity ? null : { left: minX, right: maxX, top: minY, bottom: maxY };
 }
@@ -20798,6 +21099,174 @@ function getPatternSpacingFrac(obj) {
   return Math.max(0.01, Math.min(0.5, v));
 }
 
+function cropPrimitive(anim) {
+  if (!isPrimitiveAnim(anim) || animKind(anim) === 'line') return;
+  const bounds = selectedObjectCanvasBounds(anim);
+  if (!bounds) return;
+  const pxW0 = bounds.right - bounds.left, pxH0 = bounds.bottom - bounds.top;
+  if (pxW0 < 1 || pxH0 < 1) return;
+
+  // Draw the scene cleanly without selection handles and without the target rectangle itself,
+  // then capture directly from the main canvas. Hiding the target prevents its fill color from
+  // being baked into the captured image ("stained glass" effect).
+  const mainCanvas = ctx.canvas;
+  const prevSelectedId = selectedId, prevEditModeAnimId = editModeAnimId;
+  const prevVisible = anim.visible;
+  selectedId = null; editModeAnimId = null; anim.visible = false;
+  draw();
+  selectedId = prevSelectedId; editModeAnimId = prevEditModeAnimId; anim.visible = prevVisible;
+
+  // bounds are already in physical pixels (toCanvas uses originX = canvas.width/2 which is physical)
+  const pxX = Math.round(bounds.left), pxY = Math.round(bounds.top);
+  const pxW = Math.max(1, Math.round(pxW0)), pxH = Math.max(1, Math.round(pxH0));
+  const offCanvas = document.createElement('canvas');
+  offCanvas.width = pxW; offCanvas.height = pxH;
+  offCanvas.getContext('2d').drawImage(mainCanvas, pxX, pxY, pxW, pxH, 0, 0, pxW, pxH);
+
+  anim.croppedImageDataUrl = offCanvas.toDataURL('image/png');
+  anim.croppedImageLightness = 1.0;
+  anim.fillOpacity = 1.0;
+  anim._croppedImage = new Image();
+  anim._croppedImage.onload = () => draw();
+  anim._croppedImage.src = anim.croppedImageDataUrl;
+}
+
+function _animPickLabel(a) {
+  const k = animKind(a);
+  return k.charAt(0).toUpperCase() + k.slice(1) + ' ' + (animations.indexOf(a) + 1);
+}
+
+function makeCustomPatternSourceRow({ getSourceId, onSetSource, isPickMode, onEnterPickMode, onExitPickMode }) {
+  const row = document.createElement('div');
+  row.style.cssText = 'margin-top:6px;display:flex;align-items:center;gap:6px;flex-wrap:nowrap;';
+  const lbl = document.createElement('span');
+  lbl.style.cssText = 'font-size:0.7rem;color:#cdd6f4;min-width:44px;flex-shrink:0;';
+  lbl.textContent = 'Source';
+  row.appendChild(lbl);
+  if (isPickMode) {
+    const prompt = document.createElement('span');
+    prompt.style.cssText = 'flex:1;font-size:0.7rem;color:#89b4fa;font-style:italic;';
+    prompt.textContent = 'Click a tile below...';
+    const cancelBtn = document.createElement('button');
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.style.cssText = 'font-size:0.65rem;padding:2px 6px;background:#313244;color:#f38ba8;border:1px solid #585b70;border-radius:4px;cursor:pointer;flex-shrink:0;';
+    cancelBtn.addEventListener('click', e => { e.stopPropagation(); onExitPickMode(); });
+    row.appendChild(prompt); row.appendChild(cancelBtn);
+  } else {
+    const srcId = getSourceId();
+    const srcAnim = srcId ? animations.find(a => a.id === srcId) : null;
+    const nameSpan = document.createElement('span');
+    nameSpan.style.cssText = 'flex:1;font-size:0.7rem;color:#cdd6f4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+    nameSpan.textContent = srcAnim ? (srcAnim.name || _animPickLabel(srcAnim)) : '(none)';
+    const pickBtn = document.createElement('button');
+    pickBtn.textContent = srcAnim ? 'Change' : 'Pick...';
+    pickBtn.style.cssText = 'font-size:0.65rem;padding:2px 6px;background:#313244;color:#cdd6f4;border:1px solid #585b70;border-radius:4px;cursor:pointer;flex-shrink:0;';
+    pickBtn.addEventListener('click', e => { e.stopPropagation(); onEnterPickMode(); });
+    row.appendChild(nameSpan); row.appendChild(pickBtn);
+    if (srcAnim) {
+      const clrBtn = document.createElement('button');
+      clrBtn.textContent = '×'; clrBtn.title = 'Clear source';
+      clrBtn.style.cssText = 'font-size:0.8rem;padding:0 4px;background:#313244;color:#f38ba8;border:1px solid #585b70;border-radius:4px;cursor:pointer;flex-shrink:0;';
+      clrBtn.addEventListener('click', e => { e.stopPropagation(); onSetSource(null); });
+      row.appendChild(clrBtn);
+    }
+  }
+  return row;
+}
+
+function buildCustomPatternTile(sourceAnimId) {
+  if (_buildingPatternTile) return null;
+  const srcAnim = animations.find(a => a.id === sourceAnimId);
+  if (!srcAnim) return null;
+
+  // If source is a cropped primitive, use the cropped image directly as tile content
+  if (srcAnim.croppedImageDataUrl && srcAnim._croppedImage?.complete && srcAnim._croppedImage.naturalWidth) {
+    const img = srcAnim._croppedImage;
+    const tc = document.createElement('canvas');
+    tc.width = img.naturalWidth; tc.height = img.naturalHeight;
+    tc.getContext('2d').drawImage(img, 0, 0);
+    return tc;
+  }
+
+  const bounds = selectedObjectCanvasBounds(srcAnim);
+  if (!bounds) return null;
+
+  const tileW = Math.max(1, Math.round(bounds.right - bounds.left));
+  const tileH = Math.max(1, Math.round(bounds.bottom - bounds.top));
+
+  const contentCanvas = document.createElement('canvas');
+  contentCanvas.width = tileW;
+  contentCanvas.height = tileH;
+  const contentCtx = contentCanvas.getContext('2d');
+
+  contentCtx.save();
+  contentCtx.beginPath();
+  contentCtx.rect(0, 0, tileW, tileH);
+  contentCtx.clip();
+  contentCtx.translate(-bounds.left, -bounds.top);
+
+  const savedCtx = ctx;
+  ctx = contentCtx;
+  _buildingPatternTile = true;
+  try {
+    for (const anim of animations) {
+      if (anim.id === sourceAnimId) continue;
+      if (!isAnimEffectivelyVisible(anim) || anim.inPlacementMode) continue;
+      const ab = selectedObjectCanvasBounds(anim);
+      if (!ab) continue;
+      if (ab.right < bounds.left || ab.left > bounds.right || ab.bottom < bounds.top || ab.top > bounds.bottom) continue;
+      drawCommittedAnimation(anim, { deferOverlay: true });
+    }
+  } finally {
+    _buildingPatternTile = false;
+    ctx = savedCtx;
+    contentCtx.restore();
+  }
+
+  return contentCanvas;
+}
+
+function applyCustomPatternColorMapping(contentCanvas, color1, op1, color2, op2, mode) {
+  const tileW = contentCanvas.width;
+  const tileH = contentCanvas.height;
+  const tileCanvas = document.createElement('canvas');
+  tileCanvas.width = tileW;
+  tileCanvas.height = tileH;
+  const tileCtx = tileCanvas.getContext('2d');
+
+  if (mode === 'blend' && color2) {
+    const c1 = parseColorToRgb(color1) ?? { r: 0, g: 0, b: 0 };
+    const c2 = parseColorToRgb(color2) ?? { r: 255, g: 255, b: 255 };
+    const imgData = contentCanvas.getContext('2d').getImageData(0, 0, tileW, tileH);
+    const d = imgData.data;
+    const out = tileCtx.createImageData(tileW, tileH);
+    const od = out.data;
+    for (let i = 0; i < d.length; i += 4) {
+      const a = d[i + 3] / 255;
+      if (a < 0.01) { od[i + 3] = 0; continue; }
+      const lum = (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]) / 255;
+      od[i]     = Math.round(c1.r + (c2.r - c1.r) * lum);
+      od[i + 1] = Math.round(c1.g + (c2.g - c1.g) * lum);
+      od[i + 2] = Math.round(c1.b + (c2.b - c1.b) * lum);
+      od[i + 3] = Math.round(a * op2 * 255);
+    }
+    tileCtx.putImageData(out, 0, 0);
+  } else {
+    // Mask mode: all ink pixels become Color 2
+    const c2 = color2 ? parseColorToRgb(color2) : null;
+    if (c2) {
+      tileCtx.fillStyle = rgbaCss(c2, op2);
+      tileCtx.fillRect(0, 0, tileW, tileH);
+      tileCtx.globalCompositeOperation = 'destination-in';
+      tileCtx.drawImage(contentCanvas, 0, 0);
+    } else {
+      tileCtx.drawImage(contentCanvas, 0, 0);
+    }
+  }
+
+  return tileCanvas;
+}
+
 function drawRegionPattern(ctx, region, curvesMap, opacity) {
   const patternType = region.patternType || 'lines';
   const angle = region.patternAngle ?? 0;
@@ -20814,9 +21283,10 @@ function drawRegionPattern(ctx, region, curvesMap, opacity) {
     if (c1) { ctx.fillStyle = rgbaCss(c1, opacity); ctx.globalAlpha = 1; ctx.fill(); }
   }
 
-  // Color 2: pattern overlay
-  const patColor = region.gradientToColor;
-  const c2 = patColor ? parseColorToRgb(patColor) : null;
+  // Color 2: pattern overlay; if unset or same as background, render as black for visibility (don't mutate stored state)
+  let patColor = region.gradientToColor;
+  if (!patColor || patColor === region.fillColor) patColor = '#000000';
+  const c2 = parseColorToRgb(patColor);
   if (c2) {
     const rgba = rgbaCss(c2, region.gradientToOpacity ?? opacity);
     const bounds = computeRegionCanvasBounds(region, curvesMap);
@@ -20928,6 +21398,94 @@ function drawCurvePattern(anim) {
   ctx.restore();
 }
 
+function _applyCustomPatternTile(drawCtx, tileCanvas, bounds, angle, spacingFrac, opacity = 1) {
+  const diagHalf = Math.hypot(bounds.right - bounds.left, bounds.bottom - bounds.top) / 2;
+  const targetSize = Math.max(2 * devicePixelRatio, spacingFrac * diagHalf);
+  const tileMaxDim = Math.max(tileCanvas.width, tileCanvas.height);
+  const s = tileMaxDim > 0 ? targetSize / tileMaxDim : 1;
+  const pattern = drawCtx.createPattern(tileCanvas, 'repeat');
+  if (!pattern) return;
+  const angleDeg = angle * 180 / Math.PI;
+  pattern.setTransform(new DOMMatrix().rotateSelf(angleDeg).scaleSelf(s, s));
+  drawCtx.fillStyle = pattern;
+  drawCtx.globalAlpha = opacity;
+  drawCtx.fillRect(bounds.left - 2, bounds.top - 2, bounds.right - bounds.left + 4, bounds.bottom - bounds.top + 4);
+}
+
+function drawRegionCustomPattern(drawCtx, region, curvesMap, opacity) {
+  const sourceId = region.customPatternSourceId;
+  if (!sourceId) return;
+  const srcAnim = animations.find(a => a.id === sourceId);
+  const contentCanvas = buildCustomPatternTile(sourceId);
+  if (!contentCanvas) return;
+  const isCroppedSrc = !!(srcAnim?.croppedImageDataUrl);
+  let tileCanvas;
+  if (isCroppedSrc) {
+    tileCanvas = contentCanvas;
+  } else {
+    const color1 = region.fillColor;
+    const color2 = region.gradientToColor;
+    const op2 = region.gradientToOpacity ?? opacity;
+    const mode = region.customPatternMode || 'mask';
+    tileCanvas = applyCustomPatternColorMapping(contentCanvas, color1, opacity, color2, op2, mode);
+  }
+  const bounds = computeRegionCanvasBounds(region, curvesMap);
+  if (!bounds) return;
+
+  drawCtx.save();
+  drawCtx.beginPath();
+  addRegionBoundaryToPathLike(drawCtx, region.boundary, curvesMap);
+  drawCtx.clip();
+
+  if (!isCroppedSrc) {
+    const color1 = region.fillColor;
+    if (color1) {
+      const c1 = parseColorToRgb(color1);
+      if (c1) { drawCtx.fillStyle = rgbaCss(c1, opacity); drawCtx.globalAlpha = 1; drawCtx.fill(); }
+    }
+  }
+
+  _applyCustomPatternTile(drawCtx, tileCanvas, bounds, region.patternAngle ?? 0, getPatternSpacingFrac(region), isCroppedSrc ? opacity : 1);
+  drawCtx.restore();
+}
+
+function drawCurveCustomPattern(anim) {
+  if (!animFillColor(anim) || !anim.closed || !findLoopRange(anim)) return;
+  const sourceId = anim.customPatternSourceId;
+  if (!sourceId) return;
+  const srcAnim = animations.find(a => a.id === sourceId);
+  const contentCanvas = buildCustomPatternTile(sourceId);
+  if (!contentCanvas) return;
+  const opacity = animFillOpacity(anim);
+  const isCroppedSrc = !!(srcAnim?.croppedImageDataUrl);
+  let tileCanvas;
+  if (isCroppedSrc) {
+    tileCanvas = contentCanvas;
+  } else {
+    const color1 = animFillColor(anim);
+    const color2 = anim.gradientToColor;
+    const op2 = anim.gradientToOpacity ?? opacity;
+    const mode = anim.customPatternMode || 'mask';
+    tileCanvas = applyCustomPatternColorMapping(contentCanvas, color1, opacity, color2, op2, mode);
+  }
+  const bounds = selectedObjectCanvasBounds(anim);
+  if (!bounds) return;
+
+  ctx.save();
+  ctx.beginPath();
+  if (!addCurveFillPath(ctx, anim, true)) { ctx.restore(); return; }
+  ctx.clip();
+
+  if (!isCroppedSrc) {
+    const color1 = animFillColor(anim);
+    const c1 = parseColorToRgb(color1);
+    if (c1) { ctx.fillStyle = rgbaCss(c1, opacity); ctx.globalAlpha = 1; ctx.fill(); }
+  }
+
+  _applyCustomPatternTile(ctx, tileCanvas, bounds, anim.patternAngle ?? 0, getPatternSpacingFrac(anim), isCroppedSrc ? opacity : 1);
+  ctx.restore();
+}
+
 function makeLinearGradientAxis(bounds, angle) {
   const cx = (bounds.left + bounds.right) / 2;
   const cy = (bounds.top + bounds.bottom) / 2;
@@ -21034,6 +21592,8 @@ function drawObjectRegionFillsForAnim(anim) {
       drawRadialGradientBlend(ctx, region, curvesMap, _rFill, opacity, _rGradTo || _rFill, _rGradToOp, gradKnobsToStops(_gk1d, _gk2d));
     } else if (_rStyle === 'pattern') {
       drawRegionPattern(ctx, region, curvesMap, opacity);
+    } else if (_rStyle === 'custom-pattern') {
+      drawRegionCustomPattern(ctx, region, curvesMap, opacity);
     } else {
       const _fillRule = region.holeBoundaries?.length ? 'evenodd' : 'nonzero';
       const _rPath = buildRegionPath(region, curvesMap);
@@ -22250,8 +22810,18 @@ function appendAnimTrayTile(tilesEl, anim, { label = '', child = true, singleOnl
   thumbCanvas.draggable = false;
   tile.appendChild(thumbCanvas);
   renderAnimThumbnail(anim, thumbCanvas);
+  if (customPatternPickMode && customPatternPickMode.animId !== anim.id) {
+    tile.classList.add('pick-source-eligible');
+  }
   tile.addEventListener('click', (e) => {
     if (Date.now() < suppressTileClickUntil) return;
+    if (customPatternPickMode) {
+      if (customPatternPickMode.animId === anim.id) return; // can't pick self
+      customPatternPickMode.onPick(anim);
+      customPatternPickMode = null;
+      renderAnimList(); draw(); updateCursor();
+      return;
+    }
     openColorMenuAnimId = null;
     if (anim.inPlacementMode) { selectedId = anim.id; renderAnimList(); return; }
     if (e.ctrlKey || e.metaKey) { ctrlClickSelectId(anim.id); renderAnimList(); draw(); updateCursor(); return; }
@@ -23837,6 +24407,21 @@ function renderAnimListLegacy() {
     detectObjectTopology(anim);
     saveProject();
   }
+  if (objectDetailTab === 'fill' && _isCvtPrimitive && canFillAnim(anim) &&
+      animFillStyle(anim) !== 'solid' && !anim.regions?.length) {
+    detectObjectTopology(anim);
+    syncObjectFillToDetectedRegions(anim, {
+      fillColor: anim.fillColor, fillOpacity: animFillOpacity(anim),
+      fillStyle: anim.fillStyle, gradientToColor: anim.gradientToColor,
+      gradientToOpacity: anim.gradientToOpacity ?? 0,
+      gradientAngle: anim.gradientAngle,
+      patternType: anim.patternType, patternAngle: anim.patternAngle,
+      patternSpacing: anim.patternSpacing,
+      customPatternSourceId: anim.customPatternSourceId ?? null,
+      customPatternMode: anim.customPatternMode ?? 'mask',
+    });
+    saveProject();
+  }
   const _regions = anim.regions ?? [];
 
   if (objectDetailTab === 'outline') {
@@ -24032,26 +24617,306 @@ function renderAnimListLegacy() {
     };
 
     if (_isCvtPrimitive) {
-      // Primitive circle/ellipse: show fill controls directly
+      // Primitive shape fill: Color 1 | Color 2 | Style sub-tabs
       const _fillWrap = document.createElement('div');
-      _fillWrap.style.cssText = 'padding-top:4px;';
-      const _initFillColor = (anim.regions?.[0]?.fillColor) || anim.fillColor || anim.color;
-      let _fillOpCtrl = null;
-      appendHslColorPicker(_fillWrap, _initFillColor, (color, meta = {}) => {
-        anim.fillColor = color;
-        syncObjectFillToDetectedRegions(anim, { fillColor: color, fillOpacity: anim.fillOpacity ?? 0.5, fillStyle: anim.fillStyle || 'solid' });
-        saveProject(); draw();
-        if (meta.fromHueClick) renderAnimList();
-      }, { withUndo: true, fallbackHue: colorToHsl(_initFillColor).h,
-        onPreviewChange(hex) { _fillOpCtrl?.setTrack(opacitySliderTrack(hex)); } });
-      _fillOpCtrl = appendSliderRow(_fillWrap, 'Opacity', 0, 100, 1,
-        Math.round(clamp((anim.regions?.[0]?.fillOpacity ?? anim.fillOpacity) ?? 0.5, 0, 1) * 100),
-        v => `${Math.round(v)}%`, v => {
-          anim.fillOpacity = clamp(parseFloat(v) / 100, 0, 1);
-          syncObjectFillToDetectedRegions(anim, { fillColor: anim.fillColor, fillOpacity: anim.fillOpacity, fillStyle: anim.fillStyle || 'solid' });
-          saveProject(); draw();
-        },
-        false, { colorTrack: opacitySliderTrack(_initFillColor) });
+      _fillWrap.style.cssText = 'display:flex;flex-direction:column;gap:6px;';
+
+      // Cropped image fill — show Lightness + Opacity + Uncrop instead of normal fill controls
+      if (anim.croppedImageDataUrl && animKind(anim) !== 'line') {
+        appendSliderRow(_fillWrap, 'Lightness', 0, 200, 1,
+          Math.round((anim.croppedImageLightness ?? 1.0) * 100),
+          v => `${Math.round(v)}%`, v => { anim.croppedImageLightness = parseFloat(v) / 100; saveProject(); draw(); },
+          false, { valAlign: 'center' });
+        appendSliderRow(_fillWrap, 'Opacity', 0, 100, 1,
+          Math.round(clamp(animFillOpacity(anim), 0, 1) * 100),
+          v => `${Math.round(v)}%`, v => { anim.fillOpacity = clamp(parseFloat(v) / 100, 0, 1); saveProject(); draw(); },
+          false, { valAlign: 'center' });
+        const _ucBtn = document.createElement('button');
+        _ucBtn.className = 'fill-style-btn';
+        _ucBtn.style.cssText = 'margin-top:4px;font-size:0.7rem;width:100%;';
+        _ucBtn.textContent = 'Uncrop';
+        _ucBtn.addEventListener('click', e => {
+          e.stopPropagation(); pushUndo();
+          anim.croppedImageDataUrl = null; anim._croppedImage = null;
+          saveProject(); renderAnimList(); draw();
+        });
+        _fillWrap.appendChild(_ucBtn);
+        _dtContent.appendChild(_fillWrap);
+        return;
+      }
+
+      const _primStyle = animFillStyle(anim);
+      const _primIsGradFam = _primStyle === 'gradient' || _primStyle === 'contour-gradient' || _primStyle === 'radial-gradient';
+      const _primIsCustomPat = _primStyle === 'custom-pattern';
+      const _primHasC2 = _primIsGradFam || _primStyle === 'pattern' || _primIsCustomPat;
+
+      // Sub-tab bar: Color 1 | Color 2 | Style
+      const _primSubBar = document.createElement('div');
+      _primSubBar.className = 'color-tab-bar';
+      ['Color 1', 'Color 2', 'Style'].forEach((t, idx) => {
+        const _sb = document.createElement('button');
+        _sb.type = 'button';
+        _sb.className = 'color-tab' + (regionFillSubTab === idx + 1 ? ' active' : '');
+        _sb.textContent = t;
+        _sb.style.cssText = 'flex:1;padding:4px 6px;font-size:0.65rem;';
+        _sb.addEventListener('click', e => { e.stopPropagation(); regionFillSubTab = idx + 1; renderAnimList(); });
+        _primSubBar.appendChild(_sb);
+      });
+      _fillWrap.appendChild(_primSubBar);
+
+      // Write fields to both anim and its regions (no-op when regions empty)
+      const _primSync = (fields) => {
+        Object.assign(anim, fields);
+        syncObjectFillToDetectedRegions(anim, fields);
+      };
+      // Create regions for non-solid fills if they don't exist yet, then sync all fill data
+      const _primEnsureRegions = () => {
+        if (anim.regions?.length) return;
+        detectObjectTopology(anim);
+        syncObjectFillToDetectedRegions(anim, {
+          fillColor: anim.fillColor, fillOpacity: animFillOpacity(anim),
+          fillStyle: anim.fillStyle, gradientToColor: anim.gradientToColor,
+          gradientToOpacity: anim.gradientToOpacity ?? 0,
+          gradientAngle: anim.gradientAngle,
+          patternType: anim.patternType, patternAngle: anim.patternAngle,
+          patternSpacing: anim.patternSpacing,
+          gradC1Knobs: anim.gradC1Knobs, gradC2Knobs: anim.gradC2Knobs,
+          customPatternSourceId: anim.customPatternSourceId ?? null,
+          customPatternMode: anim.customPatternMode ?? 'mask',
+        });
+      };
+
+      if (regionFillSubTab === 1) {
+        // Color 1
+        const _c1Init = anim.fillColor || anim.color;
+        let _c1Prev = normalizeColorString(_c1Init) || _c1Init;
+        let _c1Op = null;
+        appendHslColorPicker(_fillWrap, _c1Init, (color, meta = {}) => {
+          _primSync({ fillColor: color });
+          saveProject(); if (meta.fromHueClick) renderAnimList(); draw();
+        }, { withUndo: true, fallbackHue: colorToHsl(_c1Init).h,
+          onPreviewChange(hex) { _c1Prev = hex; _c1Op?.setTrack(opacitySliderTrack(hex)); } });
+        _c1Op = appendSliderRow(_fillWrap, 'Opacity', 0, 100, 1,
+          Math.round(clamp(animFillOpacity(anim), 0, 1) * 100),
+          v => `${Math.round(v)}%`, v => {
+            _primSync({ fillOpacity: clamp(parseFloat(v) / 100, 0, 1) });
+            saveProject(); draw();
+          }, false, { colorTrack: opacitySliderTrack(_c1Prev) });
+
+      } else if (regionFillSubTab === 2) {
+        // Color 2 — always editable; takes effect when style is gradient or pattern
+        // Pin gradientToColor and gradientToOpacity on first open so Color 2 doesn't follow Color 1 changes.
+        if (!anim.gradientToColor) anim.gradientToColor = anim.fillColor || anim.color;
+        if (anim.gradientToOpacity == null) anim.gradientToOpacity = animFillOpacity(anim);
+        saveProject();
+        const _c2Init = anim.gradientToColor;
+        let _c2Prev = normalizeColorString(_c2Init) || _c2Init;
+        let _c2Op = null;
+        appendHslColorPicker(_fillWrap, _c2Init, (color, meta = {}) => {
+          _primSync({ gradientToColor: color });
+          saveProject(); if (meta.fromHueClick) renderAnimList(); draw();
+        }, { withUndo: true, fallbackHue: colorToHsl(anim.fillColor || anim.color).h,
+          onPreviewChange(hex) { _c2Prev = hex; _c2Op?.setTrack(opacitySliderTrack(hex)); } });
+        _c2Op = appendSliderRow(_fillWrap, 'Opacity', 0, 100, 1,
+          Math.round(clamp(anim.gradientToOpacity ?? animFillOpacity(anim), 0, 1) * 100),
+          v => `${Math.round(v)}%`, v => {
+            _primSync({ gradientToOpacity: clamp(parseFloat(v) / 100, 0, 1) });
+            saveProject(); draw();
+          }, false, { colorTrack: opacitySliderTrack(_c2Prev) });
+
+      } else {
+        // Style
+        const _pStyleRow = document.createElement('div');
+        _pStyleRow.className = 'fill-style-row';
+        const _pIsPatFam = _primStyle === 'pattern' || _primIsCustomPat;
+        [{ key: 'solid', title: 'Solid' }, { key: 'gradient', title: 'Gradient' }, { key: 'pattern', title: 'Pattern' }].forEach(({ key, title }) => {
+          const _fsb = document.createElement('button');
+          const _isAct = key === 'gradient' ? _primIsGradFam : (key === 'pattern' ? _pIsPatFam : _primStyle === key);
+          _fsb.className = 'fill-style-btn' + (_isAct ? ' active' : '');
+          _fsb.title = title;
+          _fsb.appendChild(makeFillStyleIcon(key));
+          _fsb.addEventListener('click', e => {
+            e.stopPropagation();
+            const _newStyle = key === 'gradient' ? (_primIsGradFam ? _primStyle : 'gradient') :
+              (key === 'pattern' ? (_pIsPatFam ? _primStyle : 'pattern') : key);
+            if (_primStyle !== _newStyle) {
+              pushUndo();
+              anim.fillStyle = _newStyle;
+              if (_newStyle !== 'solid' && !anim.gradientToColor) {
+                anim.gradientToColor = anim.fillColor || anim.color;
+                if (!isFinite(anim.gradientToOpacity)) anim.gradientToOpacity = 0;
+              }
+              // Pattern overlay needs a visible Color 2 opacity
+              if (_newStyle === 'pattern' && !(anim.gradientToOpacity > 0)) {
+                anim.gradientToOpacity = animFillOpacity(anim);
+              }
+              if (_newStyle === 'solid') {
+                anim.regions = []; anim._topoSplitCurves = null;
+              } else {
+                _primEnsureRegions();
+                syncObjectFillToDetectedRegions(anim, { fillStyle: _newStyle,
+                  gradientToColor: anim.gradientToColor, gradientToOpacity: anim.gradientToOpacity ?? 0 });
+              }
+              saveProject(); renderAnimList(); draw();
+            }
+          });
+          _pStyleRow.appendChild(_fsb);
+        });
+        _fillWrap.appendChild(_pStyleRow);
+
+        // Gradient sub-types: Linear | Radial | Contour
+        if (_primIsGradFam) {
+          const _pGradRow = document.createElement('div');
+          _pGradRow.className = 'fill-style-row';
+          _pGradRow.style.marginTop = '4px';
+          [{ key: 'gradient', title: 'Linear' }, { key: 'radial-gradient', title: 'Radial' }, { key: 'contour-gradient', title: 'Contour' }].forEach(({ key, title }) => {
+            const _gsb = document.createElement('button');
+            _gsb.className = 'fill-style-btn' + (_primStyle === key ? ' active' : '');
+            _gsb.title = title;
+            _gsb.appendChild(makeFillStyleIcon(key));
+            _gsb.addEventListener('click', e => {
+              e.stopPropagation();
+              if (_primStyle !== key) {
+                pushUndo(); anim.fillStyle = key;
+                if (!anim.gradientToColor) { anim.gradientToColor = anim.fillColor || anim.color; if (!isFinite(anim.gradientToOpacity)) anim.gradientToOpacity = 0; }
+                _primEnsureRegions();
+                syncObjectFillToDetectedRegions(anim, { fillStyle: key });
+                saveProject(); renderAnimList(); draw();
+              }
+            });
+            _pGradRow.appendChild(_gsb);
+          });
+          _fillWrap.appendChild(_pGradRow);
+
+          // Gradient blend bar
+          if (anim.regions?.length) {
+            const _pReg = anim.regions[0];
+            const { c1: _bkC1, c2: _bkC2 } = getGradKnobs(_pReg);
+            const _bkMkC = (hex, op) => { const _rgb = parseColorToRgb(hex); return _rgb ? `rgba(${_rgb.r},${_rgb.g},${_rgb.b},${op})` : `rgba(128,128,128,${op})`; };
+            appendGradientBlendBar(_fillWrap,
+              _bkC1, _bkC2,
+              _bkMkC(anim.fillColor || anim.color || '#888888', anim.fillOpacity ?? 0.5),
+              _bkMkC(anim.gradientToColor || anim.fillColor || anim.color || '#888888', anim.gradientToOpacity ?? 0),
+              (c1k, c2k) => {
+                anim.gradC1Knobs = c1k; anim.gradC2Knobs = c2k;
+                syncObjectFillToDetectedRegions(anim, { gradC1Knobs: c1k, gradC2Knobs: c2k });
+                saveProject(); draw();
+              });
+          }
+
+          // Direction wheel (linear gradient only)
+          if (_primStyle === 'gradient') {
+            const _pWRow = document.createElement('div');
+            _pWRow.className = 'direction-wheel-row';
+            const _pWLbl = document.createElement('span'); _pWLbl.className = 'direction-wheel-label'; _pWLbl.textContent = 'Direction';
+            _pWRow.appendChild(_pWLbl);
+            appendDirectionWheel(_pWRow,
+              () => (anim.regions?.[0]?.gradientAngle ?? anim.gradientAngle ?? Math.PI / 4),
+              a => { _primSync({ gradientAngle: a }); saveProject(); draw(); });
+            _fillWrap.appendChild(_pWRow);
+          }
+        }
+
+        // Pattern + Custom Pattern sub-type controls
+        if (_pIsPatFam) {
+          const _patType = anim.regions?.[0]?.patternType || anim.patternType || 'lines';
+          const _pPatRow = document.createElement('div');
+          _pPatRow.className = 'fill-style-row';
+          _pPatRow.style.cssText = 'margin-top:4px;grid-template-columns:repeat(4,1fr);';
+          [{ key: 'lines', title: 'Lines' }, { key: 'dots', title: 'Dots' },
+           { key: 'crosshatch', title: 'Crosshatch' }, { key: 'custom', title: 'Custom' }].forEach(({ key, title }) => {
+            const _pb = document.createElement('button');
+            const _pbAct = key === 'custom' ? _primIsCustomPat : (_primStyle === 'pattern' && _patType === key);
+            _pb.className = 'fill-style-btn' + (_pbAct ? ' active' : '');
+            _pb.title = title;
+            _pb.appendChild(makeFillStyleIcon(key === 'custom' ? 'custom-pattern' : key));
+            _pb.addEventListener('click', e => {
+              e.stopPropagation(); pushUndo();
+              if (key === 'custom') {
+                anim.fillStyle = 'custom-pattern';
+                if (!anim.gradientToColor) { anim.gradientToColor = anim.fillColor || anim.color; anim.gradientToOpacity = anim.gradientToOpacity ?? animFillOpacity(anim); }
+                _primEnsureRegions();
+                syncObjectFillToDetectedRegions(anim, { fillStyle: 'custom-pattern', gradientToColor: anim.gradientToColor, gradientToOpacity: anim.gradientToOpacity });
+              } else {
+                anim.fillStyle = 'pattern'; anim.patternType = key;
+                _primSync({ patternType: key, fillStyle: 'pattern' });
+              }
+              saveProject(); renderAnimList(); draw();
+            });
+            _pPatRow.appendChild(_pb);
+          });
+          _fillWrap.appendChild(_pPatRow);
+
+          if (_primStyle === 'pattern') {
+            const _pPWRow = document.createElement('div');
+            _pPWRow.className = 'direction-wheel-row';
+            _pPWRow.style.marginTop = '4px';
+            const _pPWLbl = document.createElement('span'); _pPWLbl.className = 'direction-wheel-label'; _pPWLbl.textContent = 'Direction';
+            _pPWRow.appendChild(_pPWLbl);
+            appendDirectionWheel(_pPWRow,
+              () => (anim.regions?.[0]?.patternAngle ?? anim.patternAngle ?? 0),
+              a => { _primSync({ patternAngle: a }); saveProject(); draw(); });
+            _fillWrap.appendChild(_pPWRow);
+            appendSliderRow(_fillWrap, 'Spacing', 0.01, 0.5, 0.01, getPatternSpacingFrac(anim.regions?.[0] ?? anim),
+              v => `${Math.round(v * 100)}%`, v => { _primSync({ patternSpacing: parseFloat(v) }); saveProject(); draw(); },
+              false, { valAlign: 'center' });
+          }
+
+          if (_primIsCustomPat) {
+            const _mpIsPickMode = customPatternPickMode?.animId === anim.id;
+            _fillWrap.appendChild(makeCustomPatternSourceRow({
+              getSourceId: () => anim.customPatternSourceId,
+              onSetSource: (id) => {
+                pushUndo(); anim.customPatternSourceId = id; _primSync({ customPatternSourceId: id });
+                if (id) { const src = animations.find(a => a.id === id); if (src) { const sb = selectedObjectCanvasBounds(src); if (sb) { anim.patternAngle = (sb.right - sb.left) >= (sb.bottom - sb.top) ? 0 : Math.PI / 2; _primSync({ patternAngle: anim.patternAngle }); } } }
+                saveProject(); renderAnimList(); draw();
+              },
+              isPickMode: _mpIsPickMode,
+              onEnterPickMode: () => {
+                customPatternPickMode = {
+                  animId: anim.id,
+                  onPick: (picked) => {
+                    pushUndo(); anim.customPatternSourceId = picked.id; _primSync({ customPatternSourceId: picked.id });
+                    if (picked.croppedImageDataUrl) { anim.fillOpacity = 1.0; _primSync({ fillOpacity: 1.0 }); }
+                    const sb = selectedObjectCanvasBounds(picked); if (sb) { anim.patternAngle = (sb.right - sb.left) >= (sb.bottom - sb.top) ? 0 : Math.PI / 2; _primSync({ patternAngle: anim.patternAngle }); }
+                    saveProject();
+                  }
+                };
+                renderAnimList(); draw();
+              },
+              onExitPickMode: () => { customPatternPickMode = null; renderAnimList(); draw(); }
+            }));
+
+            const _cpModeRow = document.createElement('div');
+            _cpModeRow.className = 'fill-style-row'; _cpModeRow.style.marginTop = '4px';
+            const _cpCurMode = anim.customPatternMode || 'mask';
+            [{ key: 'mask', title: 'Mask' }, { key: 'blend', title: 'Blend' }].forEach(({ key, title }) => {
+              const _mb = document.createElement('button');
+              _mb.className = 'fill-style-btn' + (_cpCurMode === key ? ' active' : '');
+              _mb.style.fontSize = '0.65rem'; _mb.textContent = title;
+              _mb.addEventListener('click', e => {
+                e.stopPropagation();
+                if (_cpCurMode !== key) { pushUndo(); anim.customPatternMode = key; _primSync({ customPatternMode: key }); saveProject(); renderAnimList(); draw(); }
+              });
+              _cpModeRow.appendChild(_mb);
+            });
+            _fillWrap.appendChild(_cpModeRow);
+
+            const _cpWRow = document.createElement('div');
+            _cpWRow.className = 'direction-wheel-row'; _cpWRow.style.marginTop = '4px';
+            const _cpWLbl = document.createElement('span'); _cpWLbl.className = 'direction-wheel-label'; _cpWLbl.textContent = 'Angle';
+            _cpWRow.appendChild(_cpWLbl);
+            appendDirectionWheel(_cpWRow,
+              () => (anim.regions?.[0]?.patternAngle ?? anim.patternAngle ?? 0),
+              a => { _primSync({ patternAngle: a }); saveProject(); draw(); });
+            _fillWrap.appendChild(_cpWRow);
+            appendSliderRow(_fillWrap, 'Spacing', 0.01, 0.5, 0.01, getPatternSpacingFrac(anim.regions?.[0] ?? anim),
+              v => `${Math.round(v * 100)}%`, v => { _primSync({ patternSpacing: parseFloat(v) }); saveProject(); draw(); },
+              false, { valAlign: 'center' });
+          }
+        }
+      }
+
       _dtContent.appendChild(_fillWrap);
     } else {
 
@@ -24152,17 +25017,19 @@ function renderAnimListLegacy() {
       } else {
         // Style
         const _isGradFam = _fillStyle === 'gradient' || _fillStyle === 'contour-gradient' || _fillStyle === 'radial-gradient';
+        const _mrIsPatFam = _fillStyle === 'pattern' || _fillStyle === 'custom-pattern';
         const _styleRow = document.createElement('div');
         _styleRow.className = 'fill-style-row';
         [{ key: 'solid', title: 'Solid' }, { key: 'gradient', title: 'Gradient' }, { key: 'pattern', title: 'Pattern' }].forEach(({ key, title }) => {
           const _fsb = document.createElement('button');
-          const _isActive = key === 'gradient' ? _isGradFam : _fillStyle === key;
+          const _isActive = key === 'gradient' ? _isGradFam : (key === 'pattern' ? _mrIsPatFam : _fillStyle === key);
           _fsb.className = 'fill-style-btn' + (_isActive ? ' active' : '');
           _fsb.title = title;
           _fsb.appendChild(makeFillStyleIcon(key));
           _fsb.addEventListener('click', e => {
             e.stopPropagation();
-            const _newStyle = key === 'gradient' ? (_isGradFam ? _fillStyle : 'gradient') : key;
+            const _newStyle = key === 'gradient' ? (_isGradFam ? _fillStyle : 'gradient') :
+              (key === 'pattern' ? (_mrIsPatFam ? _fillStyle : 'pattern') : key);
             if (_fillStyle !== _newStyle) {
               pushUndo(); _applyReg({ fillStyle: _newStyle });
               if (_newStyle !== 'solid' && !_activeReg.gradientToColor) _applyReg({ gradientToColor: _activeReg.fillColor || anim.color, gradientToOpacity: 0 });
@@ -24220,35 +25087,94 @@ function renderAnimListLegacy() {
           _fillWrap.appendChild(_wRow);
         }
 
-        if (_fillStyle === 'pattern') {
+        if (_mrIsPatFam) {
           const _patType = _activeReg.patternType || 'lines';
           const _patRow = document.createElement('div');
           _patRow.className = 'fill-style-row';
-          _patRow.style.marginTop = '4px';
-          [{ key: 'lines', title: 'Lines' }, { key: 'dots', title: 'Dots' }, { key: 'crosshatch', title: 'Crosshatch' }].forEach(({ key, title }) => {
+          _patRow.style.cssText = 'margin-top:4px;grid-template-columns:repeat(4,1fr);';
+          [{ key: 'lines', title: 'Lines' }, { key: 'dots', title: 'Dots' },
+           { key: 'crosshatch', title: 'Crosshatch' }, { key: 'custom', title: 'Custom' }].forEach(({ key, title }) => {
             const _pb = document.createElement('button');
-            _pb.className = 'fill-style-btn' + (_patType === key ? ' active' : '');
+            const _pbAct = key === 'custom' ? _fillStyle === 'custom-pattern' : (_fillStyle === 'pattern' && _patType === key);
+            _pb.className = 'fill-style-btn' + (_pbAct ? ' active' : '');
             _pb.title = title;
-            _pb.appendChild(makeFillStyleIcon(key));
+            _pb.appendChild(makeFillStyleIcon(key === 'custom' ? 'custom-pattern' : key));
             _pb.addEventListener('click', e => {
-              e.stopPropagation();
-              if (_patType !== key) { pushUndo(); _applyReg({ patternType: key }); saveProject(); renderAnimList(); draw(); }
+              e.stopPropagation(); pushUndo();
+              if (key === 'custom') {
+                _applyReg({ fillStyle: 'custom-pattern' });
+                if (!_activeReg.gradientToColor) _applyReg({ gradientToColor: _activeReg.fillColor || anim.color, gradientToOpacity: 1 });
+              } else {
+                _applyReg({ fillStyle: 'pattern', patternType: key });
+              }
+              saveProject(); renderAnimList(); draw();
             });
             _patRow.appendChild(_pb);
           });
           _fillWrap.appendChild(_patRow);
 
-          const _patSpacing = getPatternSpacingFrac(_activeReg);
-          const _pWRow = document.createElement('div');
-          _pWRow.className = 'direction-wheel-row';
-          _pWRow.style.marginTop = '4px';
-          const _pWLbl = document.createElement('span'); _pWLbl.className = 'direction-wheel-label'; _pWLbl.textContent = 'Direction';
-          _pWRow.appendChild(_pWLbl);
-          appendDirectionWheel(_pWRow, () => _activeReg.patternAngle ?? 0, a => { _applyReg({ patternAngle: a }); saveProject(); draw(); });
-          _fillWrap.appendChild(_pWRow);
-          appendSliderRow(_fillWrap, 'Spacing', 0.01, 0.5, 0.01, _patSpacing,
-            v => `${Math.round(v * 100)}%`, v => { _applyReg({ patternSpacing: parseFloat(v) }); saveProject(); draw(); },
-            false, { valAlign: 'center' });
+          if (_fillStyle === 'pattern') {
+            const _pWRow = document.createElement('div');
+            _pWRow.className = 'direction-wheel-row'; _pWRow.style.marginTop = '4px';
+            const _pWLbl = document.createElement('span'); _pWLbl.className = 'direction-wheel-label'; _pWLbl.textContent = 'Direction';
+            _pWRow.appendChild(_pWLbl);
+            appendDirectionWheel(_pWRow, () => _activeReg.patternAngle ?? 0, a => { _applyReg({ patternAngle: a }); saveProject(); draw(); });
+            _fillWrap.appendChild(_pWRow);
+            appendSliderRow(_fillWrap, 'Spacing', 0.01, 0.5, 0.01, getPatternSpacingFrac(_activeReg),
+              v => `${Math.round(v * 100)}%`, v => { _applyReg({ patternSpacing: parseFloat(v) }); saveProject(); draw(); },
+              false, { valAlign: 'center' });
+          }
+
+          if (_fillStyle === 'custom-pattern') {
+            const _mrIsPickMode = customPatternPickMode?.regionId === _activeReg.id;
+            _fillWrap.appendChild(makeCustomPatternSourceRow({
+              getSourceId: () => _activeReg.customPatternSourceId,
+              onSetSource: (id) => {
+                pushUndo(); _applyReg({ customPatternSourceId: id });
+                if (id) { const src = animations.find(a => a.id === id); if (src) { const sb = selectedObjectCanvasBounds(src); if (sb) _applyReg({ patternAngle: (sb.right - sb.left) >= (sb.bottom - sb.top) ? 0 : Math.PI / 2 }); } }
+                saveProject(); renderAnimList(); draw();
+              },
+              isPickMode: _mrIsPickMode,
+              onEnterPickMode: () => {
+                customPatternPickMode = {
+                  regionId: _activeReg.id,
+                  onPick: (picked) => {
+                    pushUndo(); _applyReg({ customPatternSourceId: picked.id });
+                    if (picked.croppedImageDataUrl) _applyReg({ fillOpacity: 1.0 });
+                    const sb = selectedObjectCanvasBounds(picked); if (sb) _applyReg({ patternAngle: (sb.right - sb.left) >= (sb.bottom - sb.top) ? 0 : Math.PI / 2 });
+                    saveProject();
+                  }
+                };
+                renderAnimList(); draw();
+              },
+              onExitPickMode: () => { customPatternPickMode = null; renderAnimList(); draw(); }
+            }));
+
+            const _mrModeRow = document.createElement('div');
+            _mrModeRow.className = 'fill-style-row'; _mrModeRow.style.marginTop = '4px';
+            const _mrCurMode = _activeReg.customPatternMode || 'mask';
+            [{ key: 'mask', title: 'Mask' }, { key: 'blend', title: 'Blend' }].forEach(({ key, title }) => {
+              const _mb = document.createElement('button');
+              _mb.className = 'fill-style-btn' + (_mrCurMode === key ? ' active' : '');
+              _mb.style.fontSize = '0.65rem'; _mb.textContent = title;
+              _mb.addEventListener('click', e => {
+                e.stopPropagation();
+                if (_mrCurMode !== key) { pushUndo(); _applyReg({ customPatternMode: key }); saveProject(); renderAnimList(); draw(); }
+              });
+              _mrModeRow.appendChild(_mb);
+            });
+            _fillWrap.appendChild(_mrModeRow);
+
+            const _mrWRow = document.createElement('div');
+            _mrWRow.className = 'direction-wheel-row'; _mrWRow.style.marginTop = '4px';
+            const _mrWLbl = document.createElement('span'); _mrWLbl.className = 'direction-wheel-label'; _mrWLbl.textContent = 'Angle';
+            _mrWRow.appendChild(_mrWLbl);
+            appendDirectionWheel(_mrWRow, () => _activeReg.patternAngle ?? 0, a => { _applyReg({ patternAngle: a }); saveProject(); draw(); });
+            _fillWrap.appendChild(_mrWRow);
+            appendSliderRow(_fillWrap, 'Spacing', 0.01, 0.5, 0.01, getPatternSpacingFrac(_activeReg),
+              v => `${Math.round(v * 100)}%`, v => { _applyReg({ patternSpacing: parseFloat(v) }); saveProject(); draw(); },
+              false, { valAlign: 'center' });
+          }
         }
 
         // Boundary assignment (contour gradient only)
