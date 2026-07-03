@@ -1043,7 +1043,7 @@
       transition: background 0.1s, color 0.1s, border-color 0.1s;
     }
     .contour-arc-btn.b1.active { background: #1e3a5f; color: #89b4fa; border-color: #89b4fa; }
-    .contour-arc-btn.b2.active { background: #3d2a1a; color: #fab387; border-color: #fab387; }
+    .contour-arc-btn.b2.active { background: #322a45; color: #cba6f7; border-color: #cba6f7; }
     .contour-arc-btn:not(.active):hover { background: #45475a; color: #cdd6f4; }
     .contour-arc-status { font-size: 0.62rem; color: #6c7086; margin-right: 2px; }
     .contour-set-btn {
@@ -1051,7 +1051,7 @@
       border: 1px solid #45475a; background: #313244; color: #a6adc8; cursor: pointer;
     }
     .contour-set-btn.b1:hover { background: #1e3a5f; color: #89b4fa; border-color: #89b4fa; }
-    .contour-set-btn.b2:hover { background: #3d2a1a; color: #fab387; border-color: #fab387; }
+    .contour-set-btn.b2:hover { background: #322a45; color: #cba6f7; border-color: #cba6f7; }
     .contour-mode-label { font-size: 0.72rem; font-weight: 600; padding: 4px 0 2px; }
     .contour-mode-count { font-size: 0.65rem; color: #7f849c; padding: 2px 0 6px; line-height: 1.4; }
     .contour-mode-actions { display: flex; gap: 6px; }
@@ -2108,7 +2108,7 @@ const FILL_STYLES = [
   { key: 'circular',  title: 'Circular rings' },
   { key: 'radial',    title: 'Radial rays' },
 ];
-const FILL_STYLE_KEYS = new Set([...FILL_STYLES.map(s => s.key), 'pattern', 'custom-pattern']);
+const FILL_STYLE_KEYS = new Set([...FILL_STYLES.map(s => s.key), 'pattern', 'custom-pattern', 'radial-gradient', 'contour-gradient']);
 
 // ── Undo ──
 const MAX_UNDO = 50;
@@ -4326,7 +4326,7 @@ function snapshotAnimations() {
     groupId: a.groupId ?? null,
     fillColor: a.fillColor ?? null,
     outlineOpacity: a.outlineOpacity ?? 1,
-    fillOpacity: a.fillOpacity ?? 0.5,
+    fillOpacity: a.fillOpacity ?? 0.3,
     fillStyle: normalizeFillStyle(a.fillStyle),
     closed: !!a.closed,
     text: a.text ?? '',
@@ -4376,7 +4376,7 @@ function snapshotAnimations() {
       id: c.id, color: c.color, kind: c.kind || 'freeform',
       freeformPen: c.freeformPen ?? false,
       fillColor: c.fillColor ?? null, outlineOpacity: c.outlineOpacity ?? 1,
-      fillOpacity: c.fillOpacity ?? 0.5, fillStyle: normalizeFillStyle(c.fillStyle),
+      fillOpacity: c.fillOpacity ?? 0.3, fillStyle: normalizeFillStyle(c.fillStyle),
       closed: !!c.closed, text: c.text ?? '', fontSize: c.fontSize ?? 36,
       fontFamily: c.fontFamily ?? 'sans-serif', fontBold: c.fontBold ?? false,
       fontItalic: c.fontItalic ?? false, textAlign: c.textAlign ?? 'left',
@@ -4478,7 +4478,7 @@ function restoreSnapshot(snap) {
       groupId: s.groupId ?? null,
       fillColor: s.fillColor ?? null,
       outlineOpacity: s.outlineOpacity ?? 1,
-      fillOpacity: s.fillOpacity ?? 0.5,
+      fillOpacity: s.fillOpacity ?? 0.3,
       fillStyle: normalizeFillStyle(s.fillStyle),
       closed: !!s.closed,
       text: s.text ?? '',
@@ -4528,7 +4528,7 @@ function restoreSnapshot(snap) {
         id: c.id, color: c.color, kind: c.kind || 'freeform',
         freeformPen: c.freeformPen ?? false,
         fillColor: c.fillColor ?? null, outlineOpacity: c.outlineOpacity ?? 1,
-        fillOpacity: c.fillOpacity ?? 0.5, fillStyle: normalizeFillStyle(c.fillStyle),
+        fillOpacity: c.fillOpacity ?? 0.3, fillStyle: normalizeFillStyle(c.fillStyle),
         closed: !!c.closed, text: c.text ?? '', fontSize: c.fontSize ?? 36,
         fontFamily: c.fontFamily ?? 'sans-serif', fontBold: c.fontBold ?? false,
         fontItalic: c.fontItalic ?? false, textAlign: c.textAlign ?? 'left',
@@ -5286,7 +5286,7 @@ function mergeObjects(ids) {
         anchorLabels: src.anchorLabels ? [...src.anchorLabels] : [],
         fillColor: src.regions?.[0]?.fillColor ?? src.fillColor ?? null,
         outlineOpacity: src.outlineOpacity ?? 1,
-        fillOpacity: src.regions?.[0]?.fillOpacity ?? src.fillOpacity ?? 0.5,
+        fillOpacity: src.regions?.[0]?.fillOpacity ?? src.fillOpacity ?? 0.3,
         fillStyle: src.regions?.[0]?.fillStyle ?? src.fillStyle ?? 'solid',
         gradientFromArcs: src.gradientFromArcs ? new Set(src.gradientFromArcs) : new Set(),
         gradientToArcs: src.gradientToArcs ? new Set(src.gradientToArcs) : new Set(),
@@ -5390,50 +5390,38 @@ function mergeObjects(ids) {
       // way" around a circle arc but the dominant-arc owner is still correct either way.
       let _bndLog = 'no-fallback';
       if (_hits.length !== 1) {
-        const _arcCounts = new Map(sources.map(_s => [_s.id, 0]));
+        // Exterior-segment fallback: for each boundary edge, sample the midpoint of its middle
+        // segment and check if it lies OUTSIDE all other sources. A crescent region has its outer
+        // arc exterior to the other source (exterior count > 0), so that source wins. An
+        // intersection region has ALL boundary arcs interior to the other source (extTotal = 0),
+        // so no source wins and the region is left unfilled.
+        // Arc-count majority is NOT used here because freeform curves can have unequal arc counts
+        // on the two sides of an intersection boundary, causing the wrong source to "win".
+        const _extCounts = new Map(sources.map(_s => [_s.id, 0]));
         for (const _edge of _mr.boundary) {
-          if (_arcCounts.has(_edge.animId))
-            _arcCounts.set(_edge.animId, _arcCounts.get(_edge.animId) + 1);
+          const _eid = _edge.animId;
+          if (!_extCounts.has(_eid)) continue;
+          const _esc = _migrSplitMap.get(_eid);
+          if (!_esc) continue;
+          const _lo = Math.min(_edge.startIdx, _edge.endIdx);
+          const _hi = Math.max(_edge.startIdx, _edge.endIdx);
+          if (_lo >= _hi) continue;
+          const _msi = Math.floor((_lo + _hi - 1) / 2);
+          const _mpts = sampleCompiledAdaptive(_esc.segments[_msi]?.compiled);
+          const _mp = _mpts[Math.floor(_mpts.length / 2)];
+          if (!_mp) continue;
+          if (!sources.some(_os => _os.id !== _eid && _ptInSrc(_mp[0], _mp[1], _os)))
+            _extCounts.set(_eid, _extCounts.get(_eid) + 1);
         }
-        const _arcTotal = [..._arcCounts.values()].reduce((a, b) => a + b, 0);
+        const _extTotal = [..._extCounts.values()].reduce((a, b) => a + b, 0);
         let _arcOwner = null;
-        for (const [_sid, _cnt] of _arcCounts) {
-          if (_cnt * 2 > _arcTotal) { _arcOwner = sources.find(_s => _s.id === _sid); break; }
-        }
-        if (_arcOwner) { _hits = [_arcOwner]; _bndLog = `arcCount:hit(src=${_arcOwner.id.toFixed(0)})`; }
-        else {
-          // Arc counts tied (e.g. two circles split at symmetric anchor indices → equal arc lengths).
-          // Exterior-segment fallback: for each source's boundary edges, sample the midpoint of the
-          // middle segment and check if it lies OUTSIDE all other sources. The crescent of circle A
-          // is bounded by A's outer arc (exterior to B → exterior count > 0) and B's inner arc
-          // (inside A → exterior count = 0), so A wins. The lens region has both sources' inner
-          // arcs all inside the other → extTotal = 0 → tie → correctly gets no fill.
-          const _extCounts = new Map(sources.map(_s => [_s.id, 0]));
-          for (const _edge of _mr.boundary) {
-            const _eid = _edge.animId;
-            if (!_extCounts.has(_eid)) continue;
-            const _esc = _migrSplitMap.get(_eid);
-            if (!_esc) continue;
-            const _lo = Math.min(_edge.startIdx, _edge.endIdx);
-            const _hi = Math.max(_edge.startIdx, _edge.endIdx);
-            if (_lo >= _hi) continue;
-            const _msi = Math.floor((_lo + _hi - 1) / 2);
-            const _mpts = sampleCompiledAdaptive(_esc.segments[_msi]?.compiled);
-            const _mp = _mpts[Math.floor(_mpts.length / 2)];
-            if (!_mp) continue;
-            if (!sources.some(_os => _os.id !== _eid && _ptInSrc(_mp[0], _mp[1], _os)))
-              _extCounts.set(_eid, _extCounts.get(_eid) + 1);
+        if (_extTotal > 0) {
+          for (const [_sid, _cnt] of _extCounts) {
+            if (_cnt * 2 > _extTotal) { _arcOwner = sources.find(_s => _s.id === _sid); break; }
           }
-          const _extTotal = [..._extCounts.values()].reduce((a, b) => a + b, 0);
-          _arcOwner = null;
-          if (_extTotal > 0) {
-            for (const [_sid, _cnt] of _extCounts) {
-              if (_cnt * 2 > _extTotal) { _arcOwner = sources.find(_s => _s.id === _sid); break; }
-            }
-          }
-          if (_arcOwner) { _hits = [_arcOwner]; _bndLog = `extCount:hit(src=${_arcOwner.id.toFixed(0)})`; }
-          else _bndLog = 'extCount:tie';
         }
+        if (_arcOwner) { _hits = [_arcOwner]; _bndLog = `extCount:hit(src=${_arcOwner.id.toFixed(0)})`; }
+        else _bndLog = 'extCount:tie';
       }
       const _hsrc = _hits.length === 1 ? _hits[0] : null;
       const _hr = _hsrc?.regions?.[0];
@@ -5441,7 +5429,7 @@ function mergeObjects(ids) {
       console.log(`[merge-fill] region bnd=${_mr.boundary.map(e=>e.animId.toFixed(0)).join(',')} | centHits=${_centHits} | ${_bndLog} → fill=${_srcFill??'none'}`);
       if (!_hsrc || !_srcFill) continue;
       _mr.fillColor = _srcFill;
-      _mr.fillOpacity = _hr?.fillOpacity ?? _hsrc.fillOpacity ?? 0.5;
+      _mr.fillOpacity = _hr?.fillOpacity ?? _hsrc.fillOpacity ?? 0.3;
       _mr.fillStyle = _hr?.fillStyle ?? _hsrc.fillStyle ?? 'solid';
       _mr.gradientToColor = _hr?.gradientToColor ?? _hsrc.gradientToColor ?? null;
       _mr.gradientToOpacity = _hr?.gradientToOpacity ?? _hsrc.gradientToOpacity ?? null;
@@ -5611,7 +5599,7 @@ function animOutlineOpacity(anim) {
 }
 
 function animFillOpacity(anim) {
-  return (isFinite(anim?.fillOpacity) ? clamp(anim.fillOpacity, 0, 1) : 0.5) * _globalCanvasDimFactor;
+  return (isFinite(anim?.fillOpacity) ? clamp(anim.fillOpacity, 0, 1) : 0.3) * _globalCanvasDimFactor;
 }
 
 function normalizeFillStyle(style, legacyRadialIsCircular = false) {
@@ -5758,12 +5746,43 @@ function deleteAnimation(id) {
   renderAnimList(); neutralizeToolPanel(); draw(); updateCursor();
 }
 
-function deleteSubCurve(anim, curveId) {
-  pushUndo();
-  anim.curves = anim.curves.filter(c => c.id !== curveId);
+// Delete the given topological arcs. For any sub-curve where the deletion covers EVERY arc
+// belonging to it, the sub-curve's actual geometry is removed from anim.curves (a true
+// delete), matching the expectation that Delete actually deletes — rather than only ever
+// hiding the stroke and leaving the underlying geometry (and its topological influence)
+// intact. A sub-curve only partially covered by the deletion keeps the existing hide-only
+// behavior (anim.deletedArcs), since removing its whole geometry would also wipe out other,
+// unselected arcs on the same curve that the user still wants.
+function deleteTopoArcs(anim, arcsToDelete) {
+  if (!arcsToDelete.length) return;
+  const { topoArcs } = computeObjectTopologyData(anim);
+  const arcsByCurve = new Map();
+  for (const a of topoArcs) {
+    if (!arcsByCurve.has(a.curveId)) arcsByCurve.set(a.curveId, []);
+    arcsByCurve.get(a.curveId).push(a);
+  }
+  const toDeleteKeys = new Set(arcsToDelete.map(a => `${a.curveId}:${a.fromIdx}:${a.toIdx}`));
+  const curveIdsToFullyDelete = new Set();
+  if (anim.curves) {
+    for (const [curveId, arcs] of arcsByCurve) {
+      if (!anim.curves.some(c => c.id === curveId)) continue;
+      if (arcs.length > 0 && arcs.every(a => toDeleteKeys.has(`${a.curveId}:${a.fromIdx}:${a.toIdx}`)))
+        curveIdsToFullyDelete.add(curveId);
+    }
+  }
+  const hideOnly = arcsToDelete.filter(a => !curveIdsToFullyDelete.has(a.curveId));
+  if (hideOnly.length) {
+    if (!anim.deletedArcs) anim.deletedArcs = [];
+    for (const arc of hideOnly) {
+      anim.deletedArcs.push({ curveId: arc.curveId, fromIdx: arc.fromIdx, toIdx: arc.toIdx, wrapAround: !!arc.wrapAround });
+    }
+  }
+  if (curveIdsToFullyDelete.size) {
+    anim.curves = anim.curves.filter(c => !curveIdsToFullyDelete.has(c.id));
+  }
   drillObjectArc = null;
   selectedArcKeys = new Set();
-  if (anim.curves.length === 0) {
+  if (anim.curves && anim.curves.length === 0) {
     selectedId = null;
     animations = animations.filter(a => a.id !== anim.id);
     renderAnimList(); draw();
@@ -5773,18 +5792,11 @@ function deleteSubCurve(anim, curveId) {
   renderAnimList(); draw();
 }
 
-// Delete a topological arc: hide its stroke and remove it as a DCEL face boundary so
-// the two adjacent fill regions merge. Does NOT modify child curve geometry.
 function deleteTopoArc(anim, drillArc) {
   const { curveId, fromIdx, toIdx, wrapAround } = drillArc;
   if (!anim._topoSplitCurves?.has(curveId)) return;
   pushUndo();
-  if (!anim.deletedArcs) anim.deletedArcs = [];
-  anim.deletedArcs.push({ curveId, fromIdx, toIdx, wrapAround: !!wrapAround });
-  drillObjectArc = null;
-  selectedArcKeys = new Set();
-  detectObjectTopology(anim);
-  renderAnimList(); draw();
+  deleteTopoArcs(anim, [{ curveId, fromIdx, toIdx, wrapAround: !!wrapAround }]);
 }
 
 function deleteSelectedTopoArcs(anim) {
@@ -5793,14 +5805,7 @@ function deleteSelectedTopoArcs(anim) {
   const toDelete = topoArcs.filter(a => selectedArcKeys.has(a.label));
   if (toDelete.length === 0) return;
   pushUndo();
-  if (!anim.deletedArcs) anim.deletedArcs = [];
-  for (const arc of toDelete) {
-    anim.deletedArcs.push({ curveId: arc.curveId, fromIdx: arc.fromIdx, toIdx: arc.toIdx, wrapAround: !!arc.wrapAround });
-  }
-  drillObjectArc = null;
-  selectedArcKeys = new Set();
-  detectObjectTopology(anim);
-  renderAnimList(); draw();
+  deleteTopoArcs(anim, toDelete);
 }
 
 function buildClipboardText() {
@@ -5893,7 +5898,7 @@ function pasteFromClipboard(text) {
     id: animIdMap.get(s.id), letter: s.letter, color: s.color, kind: s.kind || 'freeform',
     groupId: s.groupId != null ? (groupIdMap.get(s.groupId) ?? null) : null,
     fillColor: s.fillColor ?? null, outlineOpacity: s.outlineOpacity ?? 1,
-    fillOpacity: s.fillOpacity ?? 0.5, fillStyle: normalizeFillStyle(s.fillStyle),
+    fillOpacity: s.fillOpacity ?? 0.3, fillStyle: normalizeFillStyle(s.fillStyle),
     closed: !!s.closed, text: s.text ?? '', fontSize: s.fontSize ?? 36,
     fontFamily: s.fontFamily ?? 'sans-serif', fontBold: s.fontBold ?? false,
     fontItalic: s.fontItalic ?? false, textAlign: s.textAlign ?? 'left',
@@ -5916,7 +5921,7 @@ function pasteFromClipboard(text) {
     curves: s.curves ? s.curves.map(c => ({
       id: curveIdMap.get(c.id), color: c.color, kind: c.kind || 'freeform',
       fillColor: c.fillColor ?? null, outlineOpacity: c.outlineOpacity ?? 1,
-      fillOpacity: c.fillOpacity ?? 0.5, fillStyle: normalizeFillStyle(c.fillStyle),
+      fillOpacity: c.fillOpacity ?? 0.3, fillStyle: normalizeFillStyle(c.fillStyle),
       closed: !!c.closed, text: c.text ?? '', fontSize: c.fontSize ?? 36,
       fontFamily: c.fontFamily ?? 'sans-serif', fontBold: c.fontBold ?? false,
       fontItalic: c.fontItalic ?? false, textAlign: c.textAlign ?? 'left',
@@ -6310,6 +6315,47 @@ function finalizePolylinePlacement(anim) {
   saveProject();
 }
 
+// Finds the closest point along ANY other curve's visible segments to a canvas position, so
+// a placement endpoint can snap onto an existing edge — not just an existing anchor on it.
+// Skips primitives (circle/rectangle/etc.): they have no real anchor/segment structure to
+// insert an anchor into until converted, which is out of scope for this snap.
+function nearestEdgePointForSnap(excludeAnimId, canvasX, canvasY, thresholdPx, samplesPerSeg = 24) {
+  let best = null;
+  for (const a of animations) {
+    if (a.id === excludeAnimId || a.inPlacementMode || isTextAnim(a)) continue;
+    const curves = a.curves ?? [a];
+    for (const c of curves) {
+      if (isPrimitiveAnim(c) || isTextAnim(c)) continue;
+      for (let s = 0; s < c.segments.length; s++) {
+        const seg = c.segments[s];
+        if (!seg?.compiled || seg.visible === false) continue;
+        for (let k = 0; k <= samplesPerSeg; k++) {
+          const t = k / samplesPerSeg;
+          const p = compiledCanvasPoint(seg.compiled, t);
+          if (!p) continue;
+          const dist = Math.hypot(p[0] - canvasX, p[1] - canvasY);
+          if (!best || dist < best.dist) best = { anim: a, curve: c, segIdx: s, t, dist };
+        }
+      }
+    }
+  }
+  return best && best.dist <= thresholdPx ? best : null;
+}
+
+// Snaps a placement endpoint onto the nearest point along another curve's edge by inserting
+// a real anchor there (reusing the same segment-split used for adding anchors mid-curve) —
+// so the new curve and the existing one end up sharing a genuinely coincident node, rather
+// than just visually-close but topologically disconnected coordinates.
+function snapPlacementEndpointToEdge(excludeAnimId, mathX, mathY, thresholdPx = 14 * devicePixelRatio) {
+  const [cx, cy] = toCanvas(mathX, mathY);
+  const hit = nearestEdgePointForSnap(excludeAnimId, cx, cy, thresholdPx);
+  if (!hit) return null;
+  splitSegmentAtT(hit.curve, hit.segIdx, hit.t);
+  const inserted = hit.curve.anchors[hit.segIdx + 1];
+  if (hit.anim.regions?.length) detectObjectTopology(hit.anim);
+  return cloneCx(inserted);
+}
+
 function finalizePlacement(anim) {
   if (!anim || !anim.inPlacementMode) return;
   if (isPrimitiveAnim(anim)) { finalizePrimitivePlacement(anim); return; }
@@ -6320,6 +6366,19 @@ function finalizePlacement(anim) {
     currentTool = 'select';
     updateToolPanel();
     renderAnimList(); draw(); updateCursor(); return;
+  }
+  // Snap the first/last anchors onto a nearby edge of another curve, if close enough, so a
+  // curve drawn to subdivide a shape actually connects to it instead of just floating nearby.
+  {
+    const _snapThresh = 14 * devicePixelRatio;
+    const _first = anim.anchors[0];
+    const _snappedFirst = snapPlacementEndpointToEdge(anim.id, _first.re, _first.im, _snapThresh);
+    if (_snappedFirst) { _first.re = _snappedFirst.re; _first.im = _snappedFirst.im; }
+    if (anim.anchors.length >= 2) {
+      const _last = anim.anchors[anim.anchors.length - 1];
+      const _snappedLast = snapPlacementEndpointToEdge(anim.id, _last.re, _last.im, _snapThresh);
+      if (_snappedLast) { _last.re = _snappedLast.re; _last.im = _snappedLast.im; }
+    }
   }
   // Auto-close if first and last anchors are within snap threshold
   {
@@ -6506,6 +6565,7 @@ function startPlacementFromTool(kind) {
       const placing = animations.find(a => a.inPlacementMode);
       if (placing) cancelPlacement(placing);
       exitEditMode();
+      selectedId = null;
       selectedGroupId = null;
       clearMultiSelection();
       clearGroupMode();
@@ -6585,8 +6645,18 @@ function commitFreeformPenStroke() {
   if (simplified.length < 2) { draw(); return; }
   const mathPts = simplified.map(p => new Cx(...toMath(p.x, p.y)));
   const _closeThresh = Math.max(snapCurveThreshold(), 20 / scale);
-  if (mathPts.length >= 3 && Math.hypot(mathPts[mathPts.length - 1].re - mathPts[0].re, mathPts[mathPts.length - 1].im - mathPts[0].im) < _closeThresh) {
-    mathPts[mathPts.length - 1] = mathPts[0];
+  const _didClose = mathPts.length >= 3 && Math.hypot(mathPts[mathPts.length - 1].re - mathPts[0].re, mathPts[mathPts.length - 1].im - mathPts[0].im) < _closeThresh;
+  if (_didClose) mathPts[mathPts.length - 1] = mathPts[0];
+  // Snap the stroke's start/end onto a nearby edge of another curve, if close enough, so a
+  // stroke drawn to subdivide a shape actually connects to it instead of just floating nearby.
+  // Must happen before segments are built from these points, so the curve's control handles
+  // are computed from the final (snapped) position rather than the pre-snap one.
+  if (!_didClose) {
+    const _snappedFirst = snapPlacementEndpointToEdge(null, mathPts[0].re, mathPts[0].im);
+    if (_snappedFirst) { mathPts[0].re = _snappedFirst.re; mathPts[0].im = _snappedFirst.im; }
+    const _last = mathPts[mathPts.length - 1];
+    const _snappedLast = snapPlacementEndpointToEdge(null, _last.re, _last.im);
+    if (_snappedLast) { _last.re = _snappedLast.re; _last.im = _snappedLast.im; }
   }
   const segs = computeFreshPlacementSegments(mathPts);
   if (!segs.length) { draw(); return; }
@@ -6596,6 +6666,7 @@ function commitFreeformPenStroke() {
   anim.segments = segs;
   anim.anchorLocked = mathPts.map(() => false);
   anim.freeformPen = true;
+  if (_didClose) anim.closed = true;
   anim.inPlacementMode = false;
   recompileAnim(anim);
   detectObjectTopology(anim);
@@ -7365,6 +7436,10 @@ function applyEyedropperColor(hex) {
 }
 
 function updateCursor() {
+  if (contourSelectMode !== null) {
+    canvas.style.cursor = 'pointer';
+    return;
+  }
   if (eyedropperTarget !== null) {
     canvas.style.cursor = EYEDROPPER_CURSOR;
     objCanvas.style.cursor = EYEDROPPER_CURSOR;
@@ -7686,7 +7761,7 @@ function hitTestObjectRegion(anim, cx, cy) {
   if (!anim?.regions?.length || !isAnimEffectivelyVisible(anim) || anim.inPlacementMode) return null;
   const curvesMap = buildTopologyCurvesMap(anim);
   for (const region of anim.regions) {
-    if (!region.fillColor || (region.fillOpacity ?? 0) <= 0) continue;
+    if (!region.boundary?.length) continue;
     const p = buildRegionPath(region, curvesMap);
     const fillRule = region.holeBoundaries?.length ? 'evenodd' : 'nonzero';
     if (ctx.isPointInPath(p, cx, cy, fillRule)) return region.id;
@@ -8732,8 +8807,17 @@ canvas.addEventListener('mousedown', e => {
         const d = Math.hypot(ccx - jn.x, ccy - jn.y);
         if (d < closestDist) { closestDist = d; closestJn = jn; }
       }
-      if (closestJn) {
-        const prev = contourSelectMode.nodeIndices;
+      if (closestJn?.isCenter) {
+        // A center click always produces a standalone point boundary — it doesn't
+        // extend an in-progress arc selection.
+        contourSelectMode = {
+          ...contourSelectMode, loopIndex: closestJn.loopIndex,
+          isCenterPoint: true, centerAnimId: closestJn.centerAnimId, nodeIndices: [],
+        };
+        renderAnimList(); draw();
+      } else if (closestJn) {
+        // A perimeter click after a center selection starts a fresh arc selection.
+        const prev = contourSelectMode.isCenterPoint ? [] : contourSelectMode.nodeIndices;
         const loopIndex = activeLoopIdxCsm ?? closestJn.loopIndex;
         const loopBoundary = loopsCsm[loopIndex] ?? loopsCsm[0] ?? [];
         const expandedCsm = expandedContourBoundary(loopBoundary, curvesMapCsm);
@@ -8756,7 +8840,10 @@ canvas.addEventListener('mousedown', e => {
             if (targetSet.has(k)) { newGroupIdx = k; break; }
           }
         }
-        contourSelectMode = { ...contourSelectMode, loopIndex, nodeIndices: [...prev, newGroupIdx] };
+        contourSelectMode = {
+          ...contourSelectMode, loopIndex, nodeIndices: [...prev, newGroupIdx],
+          isCenterPoint: false, centerAnimId: null,
+        };
         renderAnimList(); draw();
       } else {
         // Clicked in dead space — cancel boundary selection
@@ -9017,7 +9104,13 @@ canvas.addEventListener('mousedown', e => {
           origFrameBounds: frameMathBounds(frame),
           ...(resizeHit.anim.curves ? { mergedCurves: true, origStates: resizeHit.anim.curves.map(cloneTransformState) } : {}),
         };
-        if (!isPrimitiveAnim(resizeHit.anim)) resizeHit.anim.regions = [];
+        if (!isPrimitiveAnim(resizeHit.anim)) {
+          // Stash before clearing so per-region fill colors (e.g. a sampled color) survive:
+          // detectObjectTopology's mouseup rebuild falls back to _savedPriorRegions whenever
+          // anim.regions is empty, but only if something actually populated it first.
+          if (resizeHit.anim.regions?.length) resizeHit.anim._savedPriorRegions = resizeHit.anim.regions;
+          resizeHit.anim.regions = [];
+        }
       }
     } else if (resizeHit.groupId != null) {
       const f = groupSelectionFrameMetrics(resizeHit.groupId);
@@ -10818,7 +10911,23 @@ window.addEventListener('mouseup', e => {
   if (resizeDrag) {
     const _rdAnim = resizeDrag.anim;
     resizeDrag = null;
-    if (_rdAnim && !isPrimitiveAnim(_rdAnim) && canFillAnim(_rdAnim)) detectObjectTopology(_rdAnim);
+    // Non-primitive: newly fillable shape from a shear/side-resize bake, needs first detection.
+    // Still-primitive: kept regenerating live during the drag, but any cached regions/split-curves
+    // from before the drag (fill1Arcs/fill2Arcs, schematic arc data) are now stale and need a
+    // fresh rebuild — deferred to here (once) rather than every drag frame for performance.
+    // skipSpatialMigration: a resize doesn't change topology, but it does move/scale the shape,
+    // so the old absolute-position centroid used by spatial migration can land outside the new
+    // (moved) region and drop the fill — ordinal mapping is correct here instead (same rationale
+    // as the frameDrag translate case below).
+    if (_rdAnim && ((!isPrimitiveAnim(_rdAnim) && canFillAnim(_rdAnim)) ||
+        _rdAnim.regions?.length || _rdAnim._topoSplitCurves)) {
+      detectObjectTopology(_rdAnim, { skipSpatialMigration: true });
+    }
+    // pushUndo() at resize mousedown schedules a save (setTimeout) that fires while anim.regions
+    // is still intentionally emptied for the drag — that save persists the empty regions to
+    // localStorage. Nothing saved the corrected state rebuilt above, so a reload always restored
+    // the stale, empty-regions snapshot even though the live in-memory canvas looked correct.
+    saveProject();
     renderAnimList(); draw(); updateCursor(); return;
   }
   if (rotateDrag) {
@@ -14426,7 +14535,13 @@ function applyShearForCursor(drag, mathX, mathY) {
     anim.activeSegments = new Set();
     anim.expandedAnchors = new Set();
     anim.expandedArcs = new Set();
+    anim._circleArc = null;
     recompileAnim(anim);
+    // The baked anchor/segment layout just changed shape entirely (e.g. an ellipse's
+    // 12-sample circle topology collapses to this path's 4 segments), leaving any cached
+    // topology/regions stale — invalidate now, but the (expensive) rebuild itself happens
+    // once at drag-end (resizeDrag mouseup handler) rather than on every drag frame.
+    if (anim.regions?.length || anim._topoSplitCurves) anim._topoSplitCurves = null;
     return true;
   }
 
@@ -14484,7 +14599,13 @@ function applySideResizeShearForCursor(drag, mathX, mathY) {
     anim.activeSegments = new Set();
     anim.expandedAnchors = new Set();
     anim.expandedArcs = new Set();
+    anim._circleArc = null;
     recompileAnim(anim);
+    // The baked anchor/segment layout just changed shape entirely (e.g. an ellipse's
+    // 12-sample circle topology collapses to this path's 4 segments), leaving any cached
+    // topology/regions stale — invalidate now, but the (expensive) rebuild itself happens
+    // once at drag-end (resizeDrag mouseup handler) rather than on every drag frame.
+    if (anim.regions?.length || anim._topoSplitCurves) anim._topoSplitCurves = null;
     return true;
   }
 
@@ -14650,6 +14771,10 @@ function applyResizeBounds(drag, nextBounds) {
     ];
     anim.segments = [];
     anim.anchorLocked = [];
+    // Circle/ellipse stays a live-regenerated primitive topology-wise, but cached
+    // regions/split-curves from before the resize can reference the old rx/ry — invalidate
+    // now; the (expensive) rebuild happens once at drag-end, not on every drag frame.
+    if (anim.regions?.length || anim._topoSplitCurves) anim._topoSplitCurves = null;
     return;
   }
 
@@ -15537,9 +15662,27 @@ function drawCommittedAnimation(anim, { deferOverlay = false } = {}) {
         drawTextAnim(proxy);
       } else {
         if (proxy.anchors.length === 1 && proxy.segments.length === 0) drawDot(proxy);
-        if (!anim.regions?.length && canFillAnim(proxy) && (animFillColor(proxy) || animFillColor(anim))) {
-          const _fillProxy = animFillColor(proxy) ? proxy : { ...proxy, fillColor: anim.fillColor, fillStyle: anim.fillStyle, fillOpacity: anim.fillOpacity };
-          drawCurveFill(_fillProxy, null, 1, []);
+        if (!anim.regions?.length && canFillAnim(proxy)) {
+          // A region-based merged object's actual fill lives on anim.regions[i].fillColor, never
+          // on proxy/anim.fillColor — during a resize drag anim.regions is temporarily emptied
+          // (see resize mousedown), so without this the fill just silently draws nothing instead
+          // of falling back to anim.fillColor like the never-topologized case below does.
+          const _fillSrc = _inResizeDrag ? anim._savedPriorRegions?.[0] : null;
+          const _fProxy = _fillSrc?.fillColor ? { ...proxy,
+            fillColor: _fillSrc.fillColor, fillOpacity: _fillSrc.fillOpacity, fillStyle: _fillSrc.fillStyle,
+            gradientToColor: _fillSrc.gradientToColor, gradientToOpacity: _fillSrc.gradientToOpacity,
+            gradientAngle: _fillSrc.gradientAngle, gradC1Knobs: _fillSrc.gradC1Knobs, gradC2Knobs: _fillSrc.gradC2Knobs,
+            patternType: _fillSrc.patternType, patternAngle: _fillSrc.patternAngle, patternSpacing: _fillSrc.patternSpacing,
+            customPatternSourceId: _fillSrc.customPatternSourceId, customPatternMode: _fillSrc.customPatternMode,
+          } : (animFillColor(proxy) ? proxy
+            : (animFillColor(anim) ? { ...proxy, fillColor: anim.fillColor, fillStyle: anim.fillStyle, fillOpacity: anim.fillOpacity } : null));
+          if (_fProxy) {
+            const _fStyle = animFillStyle(_fProxy);
+            if (_fStyle === 'gradient') drawGradientFill(_fProxy);
+            else if (_fStyle === 'pattern') drawCurvePattern(_fProxy);
+            else if (_fStyle === 'custom-pattern') drawCurveCustomPattern(_fProxy);
+            else if (animFillColor(_fProxy)) drawCurveFill(_fProxy, null, 1, []);
+          }
         }
         for (let i = 0; i < renderC.segments.length; i++) {
           const _as = splitC
@@ -15576,16 +15719,28 @@ function drawCommittedAnimation(anim, { deferOverlay = false } = {}) {
   // Exception: during a resize drag, regions are stale, so bypass the guard and use
   // the live compiled segments directly (same pattern as the region-fill skip above).
   if (canFillAnim(anim) && (!anim.regions?.length || _inResizeDrag)) {
-    const _fStyle = animFillStyle(anim);
+    // A region-based object's actual fill color/style lives on region.fillColor, not
+    // anim.fillColor (which is never updated once regions exist) — during a resize drag
+    // anim.regions is temporarily emptied, so pull from the pre-drag stash instead, or the
+    // color momentarily flickers back to the object's original (pre-edit) fill.
+    const _fillSrc = anim.regions?.[0] ?? (_inResizeDrag ? anim._savedPriorRegions?.[0] : null);
+    const _fProxy = _fillSrc?.fillColor ? { ...anim,
+      fillColor: _fillSrc.fillColor, fillOpacity: _fillSrc.fillOpacity, fillStyle: _fillSrc.fillStyle,
+      gradientToColor: _fillSrc.gradientToColor, gradientToOpacity: _fillSrc.gradientToOpacity,
+      gradientAngle: _fillSrc.gradientAngle, gradC1Knobs: _fillSrc.gradC1Knobs, gradC2Knobs: _fillSrc.gradC2Knobs,
+      patternType: _fillSrc.patternType, patternAngle: _fillSrc.patternAngle, patternSpacing: _fillSrc.patternSpacing,
+      customPatternSourceId: _fillSrc.customPatternSourceId, customPatternMode: _fillSrc.customPatternMode,
+    } : anim;
+    const _fStyle = animFillStyle(_fProxy);
     if (_fStyle === 'gradient') {
-      drawGradientFill(anim);
+      drawGradientFill(_fProxy);
     } else if (_fStyle === 'pattern') {
-      drawCurvePattern(anim);
+      drawCurvePattern(_fProxy);
     } else if (_fStyle === 'custom-pattern') {
-      drawCurveCustomPattern(anim);
-    } else if (animFillColor(anim)) {
+      drawCurveCustomPattern(_fProxy);
+    } else if (animFillColor(_fProxy)) {
       const isClosedFill = !!(anim.closed && findLoopRange(anim));
-      drawCurveFill(anim, null, 1, isClosedFill ? [] : higherLayerBlockersFor(anim));
+      drawCurveFill(_fProxy, null, 1, isClosedFill ? [] : higherLayerBlockersFor(anim));
     }
   }
   for (let i = 0; i < anim.segments.length; i++) {
@@ -17057,7 +17212,7 @@ function _appendAllRegionColor(parent, anim) {
   appendHslColorPicker(panel, initColor, (color, meta = {}) => {
     for (const r of regions) {
       r.fillColor = color;
-      if (!isFinite(r.fillOpacity) || r.fillOpacity <= 0) r.fillOpacity = 1;
+      if (!isFinite(r.fillOpacity) || r.fillOpacity <= 0) r.fillOpacity = 0.3;
     }
     saveProject(); if (meta.fromHueClick) renderAnimList(); draw();
   }, { withUndo: true, fallbackHue: _ridh,
@@ -17185,7 +17340,7 @@ function appendRegionColorExpansion(parent, region, group) {
     const _initDc = normalizeColorString(globalSettings.defaultColor);
     const _initDh = _initDc ? colorToHsl(_initDc).h : 0;
     region.fillColor = hslToHex(_initDh, 100, 50);
-    if (!isFinite(region.fillOpacity) || region.fillOpacity <= 0) region.fillOpacity = 1;
+    if (!isFinite(region.fillOpacity) || region.fillOpacity <= 0) region.fillOpacity = 0.3;
     saveProject();
   }
   const style = region.fillStyle || 'solid';
@@ -17195,8 +17350,15 @@ function appendRegionColorExpansion(parent, region, group) {
   const isGroupRegion = !!groups.find(g => g.id === group.id);
   const _dropperSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21l1.5-4.5L15.5 6l3 3L8 20.5z"/><path d="M18.5 6l1.5-1.5c.8-.8.8-2.2 0-3s-2.2-.8-3 0L15.5 3"/></svg>`;
 
+  // Region ids are per-object sequence numbers, not globally unique — must also match the
+  // owning group/anim, otherwise a stale contourSelectMode from a different object can collide.
+  const contourModeScopeMatches = isGroupRegion
+    ? contourSelectMode?.groupId === group.id
+    : contourSelectMode?.animId === group.id;
+  const isSelectingThisRegion = contourModeScopeMatches && contourSelectMode?.regionId === region.id;
+
   // If contour selection is active for this region, lock to the Style tab
-  const activeTab = (contourSelectMode?.regionId === region.id) ? 3
+  const activeTab = isSelectingThisRegion ? 3
     : (gradientColorTab >= 1 && gradientColorTab <= 3 ? gradientColorTab : 1);
 
   const root = document.createElement('div');
@@ -17462,11 +17624,11 @@ function appendRegionColorExpansion(parent, region, group) {
     if (style === 'contour-gradient' && region.boundary?.length) {
       const arcSection = document.createElement('div');
       arcSection.className = 'contour-arc-section';
-      const isSelecting = contourSelectMode?.regionId === region.id;
+      const isSelecting = isSelectingThisRegion;
 
       if (isSelecting) {
         const activeMode = contourSelectMode;
-        const sideColor = activeMode.side === 'b1' ? '#89b4fa' : '#fab387';
+        const sideColor = activeMode.side === 'b1' ? '#89b4fa' : '#cba6f7';
         const sideLabel = activeMode.side === 'b1' ? 'Boundary 1' : 'Boundary 2';
 
         const modeLabel = document.createElement('div');
@@ -17478,14 +17640,16 @@ function appendRegionColorExpansion(parent, region, group) {
         const countLabel = document.createElement('div');
         countLabel.className = 'contour-mode-count';
         const nNodes = activeMode.nodeIndices.length;
-        countLabel.textContent = nNodes === 0
-          ? 'Click junction nodes on canvas'
-          : nNodes === 1
-            ? '1 node clicked — click the next junction (CCW) or same to close'
-            : `${nNodes} nodes clicked`;
+        countLabel.textContent = activeMode.isCenterPoint
+          ? 'Center point selected'
+          : nNodes === 0
+            ? 'Click junction nodes on canvas (or the center point)'
+            : nNodes === 1
+              ? '1 node clicked — click the next junction (CCW) or same to close'
+              : `${nNodes} nodes clicked`;
         arcSection.appendChild(countLabel);
 
-        const canSet = nNodes >= 2;
+        const canSet = activeMode.isCenterPoint || nNodes >= 2;
         const actionRow = document.createElement('div');
         actionRow.className = 'contour-mode-actions';
 
@@ -18046,7 +18210,7 @@ function addTransformedRegionBoundaryToPath(target, boundary, curvesMap, transfo
     const sMax = Math.max(edge.startIdx, edge.endIdx);
 
     const ca = curve._circleArc;
-    if (ca && (!ca.rotation || Math.abs(ca.rotation) < 1e-9)) {
+    if (ca && !curve._origSegForSplitSeg && (!ca.rotation || Math.abs(ca.rotation) < 1e-9)) {
       const isCircle = Math.abs(ca.rx - ca.ry) < 1e-9;
       const [ccx, ccy] = transform(ca.center.re, ca.center.im);
       const startAnchor = curve.anchors[fwd ? sMin : sMax];
@@ -19138,6 +19302,8 @@ function makeDetectedRegion(id, boundary, prior = null) {
     patternSpacing: prior?.patternSpacing,
     customPatternSourceId: prior?.customPatternSourceId ?? null,
     customPatternMode: prior?.customPatternMode ?? 'mask',
+    fill1Arcs: prior?.fill1Arcs ?? null,
+    fill2Arcs: prior?.fill2Arcs ?? null,
   };
 }
 
@@ -19222,7 +19388,7 @@ function _preserveRegionFill(anim, priorRegions) {
   const _pf = priorRegions[0];
   if (!_pf?.fillColor) return;
   anim.fillColor   = _pf.fillColor;
-  anim.fillOpacity = _pf.fillOpacity ?? 0.5;
+  anim.fillOpacity = _pf.fillOpacity ?? 0.3;
   anim.fillStyle   = _pf.fillStyle   ?? 'solid';
 }
 
@@ -19430,8 +19596,8 @@ function splitRawCurvesAtIntersections(rawCurves) {
       const pts = circleCircleIntersections(A_ca, B_ca);
       const nAl = A.anchors.length, nBl = B.anchors.length;
       for (const pt of pts) {
-        const { segIdx: sa, t: tA } = circleAngleAndSegment(A_ca, pt, A_ca.n || nAl);
-        const { segIdx: sb, t: tB } = circleAngleAndSegment(B_ca, pt, B_ca.n || nBl);
+        const { segIdx: sa, t: tA } = circleAngleAndSegment(A_ca, pt, A_ca.n || (nAl - 1));
+        const { segIdx: sb, t: tB } = circleAngleAndSegment(B_ca, pt, B_ca.n || (nBl - 1));
 
         let nearA = false, anchorIdxA_orig = 0;
         if (tA < SNAP_T) {
@@ -19461,7 +19627,7 @@ function splitRawCurvesAtIntersections(rawCurves) {
           splitPlan.get(B.id).get(sb).push({ t: tB, point: pt, exactPoint: pt });
         }
 
-        console.log(`[phase1a] pt=(${pt.re.toFixed(3)},${pt.im.toFixed(3)}) | A sa=${sa} tA=${tA.toFixed(4)} nearA=${nearA} aIdx=${anchorIdxA_orig} A_inferred=${!A._circleArc} | B sb=${sb} tB=${tB.toFixed(4)} nearB=${nearB} bIdx=${anchorIdxB_orig} B_inferred=${!B._circleArc}`);
+        // console.log(`[phase1a] pt=(${pt.re.toFixed(3)},${pt.im.toFixed(3)}) | A sa=${sa} tA=${tA.toFixed(4)} nearA=${nearA} aIdx=${anchorIdxA_orig} A_inferred=${!A._circleArc} | B sb=${sb} tB=${tB.toFixed(4)} nearB=${nearB} bIdx=${anchorIdxB_orig} B_inferred=${!B._circleArc}`);
         crossingRecords.push({ A, B, sa, sb, tA, tB, nearA, nearB, anchorIdxA_orig, anchorIdxB_orig });
       }
     }
@@ -19518,9 +19684,8 @@ function splitRawCurvesAtIntersections(rawCurves) {
       // Sanity cap: two smooth curves can't have more than ~4–6 genuine crossings.
       if (dedupedHits.length > 10) continue;
 
-
       // Commit.
-      if (dedupedHits.length > 0) console.log(`[phase1b] pair A=${A.id?.toFixed(0)} B=${B.id?.toFixed(0)} dedupedHits=${dedupedHits.length}:`, dedupedHits.map(h => `pt=(${h.point.re.toFixed(3)},${h.point.im.toFixed(3)}) sa=${h.sa} tA=${h.tA.toFixed(4)} nearA=${h.nearA} sb=${h.sb} tB=${h.tB.toFixed(4)} nearB=${h.nearB}`));
+      // if (dedupedHits.length > 0) console.log(`[phase1b] pair A=${A.id?.toFixed(0)} B=${B.id?.toFixed(0)} dedupedHits=${dedupedHits.length}:`, dedupedHits.map(h => `pt=(${h.point.re.toFixed(3)},${h.point.im.toFixed(3)}) sa=${h.sa} tA=${h.tA.toFixed(4)} nearA=${h.nearA} sb=${h.sb} tB=${h.tB.toFixed(4)} nearB=${h.nearB}`));
       // Use `exactPoint: point` for all split entries so both split anchors at the same
       // intersection land at the same position. Without this, A's anchor is at A's Bézier(tA)
       // and B's is at B's Bézier(tB) — slightly different positions that cause inconsistent
@@ -19629,7 +19794,7 @@ function splitRawCurvesAtIntersections(rawCurves) {
 
 
 
-  console.log(`[splitResult] curves: ${splitCurves.map(c=>`id=${c.id?.toFixed(0)} anchors=${c.anchors.length} segs=${c.segments.length}`).join(' | ')} | forceMerges: ${forceMerges.length}:`, forceMerges.map(fm=>`A=${fm.idA?.toFixed(0)}[${fm.anchorIdxA}] B=${fm.idB?.toFixed(0)}[${fm.anchorIdxB}]`));
+  // console.log(`[splitResult] curves: ${splitCurves.map(c=>`id=${c.id?.toFixed(0)} anchors=${c.anchors.length} segs=${c.segments.length}`).join(' | ')} | forceMerges: ${forceMerges.length}:`, forceMerges.map(fm=>`A=${fm.idA?.toFixed(0)}[${fm.anchorIdxA}] B=${fm.idB?.toFixed(0)}[${fm.anchorIdxB}]`));
   return { splitCurves, forceMerges };
 }
 
@@ -19678,12 +19843,24 @@ function detectObjectTopology(anim, { skipSpatialMigration = false } = {}) {
 
   // All anchor points are nodes. Register every anchor, then merge spatially coincident
   // anchors within the SAME curve via union-find (needed so the virtual closing anchor
-  // at index n is identified with anchor[0]).  Cross-curve connectivity is handled
-  // exclusively by forceMerges below — using a spatial threshold for cross-curve pairs
-  // incorrectly merges corresponding anchors of two nearly-identical closed curves
-  // (e.g. nearly-concentric circles whose evenly-spaced anchors land within any fixed
-  // epsilon), collapsing all their nodes and producing degenerate deg-4 DCEL nodes with
-  // duplicate departure angles.
+  // at index n is identified with anchor[0]). Cross-curve connectivity from genuine
+  // crossings is handled by forceMerges below — using a spatial threshold for cross-curve
+  // pairs in general incorrectly merges corresponding anchors of two nearly-identical
+  // closed curves (e.g. nearly-concentric circles whose evenly-spaced anchors land within
+  // any fixed epsilon), collapsing all their nodes and producing degenerate deg-4 DCEL
+  // nodes with duplicate departure angles.
+  //
+  // (2026-07-02) One narrow exception: an OPEN curve's endpoint (e.g. a hand-drawn arc)
+  // placed exactly on an existing vertex of a CLOSED curve (e.g. the object's outer
+  // boundary) is a genuine, intentional vertex snap — but it never shows up as a crossing
+  // since nothing crosses a segment interior at that point, and it's invisible to the
+  // same-curve-only merge above. A first attempt at this matched ANY anchor pair across
+  // ANY two curves and broke on an unrelated object that had two heavily-overlapping OPEN
+  // arc curves merged into it — an open endpoint could coincide with an interior point of
+  // the OTHER open curve, fragmenting it into many spurious junction nodes. Restricting to
+  // "open endpoint vs. a CLOSED curve's anchors" structurally rules that failure mode out:
+  // it only ever fires between an arc's own endpoint and the boundary it was snapped onto,
+  // never between two open curves.
   const EPSILON = 1e-6;
   const keyToNode = new Map();
   const nodePositions = [];
@@ -19703,6 +19880,25 @@ function detectObjectTopology(anim, { skipSpatialMigration = false } = {}) {
         const pj = a.anchors[j];
         if (Math.hypot(pj.re - pi.re, pj.im - pi.im) < EPSILON)
           ufUnion(ki, keyToNode.get(`${a.id}:${j}`));
+      }
+    }
+  }
+  // Cross-curve open-endpoint-onto-closed-curve vertex merge (see comment above). Only
+  // examines the 0/last anchor of each OPEN curve against every anchor of every CLOSED
+  // curve in the object — never open-vs-open, never closed-vs-closed.
+  const isOpenEndpoint = (curve, idx) => !curve.closed && (idx === 0 || idx === curve.anchors.length - 1);
+  for (const a of curves) {
+    if (a.closed) continue;
+    for (const i of [0, a.anchors.length - 1]) {
+      if (!isOpenEndpoint(a, i)) continue;
+      const pi = a.anchors[i], ki = keyToNode.get(`${a.id}:${i}`);
+      for (const b of curves) {
+        if (b === a || !b.closed) continue;
+        for (let j = 0; j < b.anchors.length; j++) {
+          const pj = b.anchors[j];
+          if (Math.hypot(pj.re - pi.re, pj.im - pi.im) < EPSILON)
+            ufUnion(ki, keyToNode.get(`${b.id}:${j}`));
+        }
       }
     }
   }
@@ -19756,8 +19952,8 @@ function detectObjectTopology(anim, { skipSpatialMigration = false } = {}) {
   }
   for (const edges of outgoing.values()) edges.sort((a, b) => a.depAngle - b.depAngle);
 
-  // [dcel-debug]
-  { const iNodes = []; for (const [nid, edges] of outgoing) { if (edges.length !== 2) iNodes.push(`nid=${nid} deg=${edges.length} angles=[${edges.map(e=>e.depAngle.toFixed(4)).join(',')}] from=[${edges.map(e=>`${e.animId?.toFixed(0).slice(-4)}:${e.fromIdx}→${e.toIdx}`).join(',')}]`); } console.log(`[dcel-debug] uniqueNodes=${uniqueNodes.size} half=${halfEdges.length} active=${activeHalfEdges.length} intersectionNodes(deg≠2):`, iNodes); }
+  // [dcel-debug] temporarily silenced during arcstyle-diag investigation
+  // { const iNodes = []; for (const [nid, edges] of outgoing) { if (edges.length !== 2) iNodes.push(`nid=${nid} deg=${edges.length} angles=[${edges.map(e=>e.depAngle.toFixed(4)).join(',')}] from=[${edges.map(e=>`${e.animId?.toFixed(0).slice(-4)}:${e.fromIdx}→${e.toIdx}`).join(',')}]`); } console.log(`[dcel-debug] uniqueNodes=${uniqueNodes.size} half=${halfEdges.length} active=${activeHalfEdges.length} intersectionNodes(deg≠2):`, iNodes); }
 
   const nextHE = he => {
     const nid = keyToNode.get(`${he.animId}:${he.toIdx}`);
@@ -19836,6 +20032,8 @@ function detectObjectTopology(anim, { skipSpatialMigration = false } = {}) {
           nr.patternSpacing = _pr.patternSpacing;
           nr.customPatternSourceId = _pr.customPatternSourceId ?? null;
           nr.customPatternMode = _pr.customPatternMode ?? 'mask';
+          nr.fill1Arcs = _pr.fill1Arcs ?? null;
+          nr.fill2Arcs = _pr.fill2Arcs ?? null;
           _matched = _ni; break;
         }
       }
@@ -20036,7 +20234,15 @@ function computeObjectTopologyData(anim) {
     const prevVis = prevSeg != null && prevSeg.visible !== false;
     const nextVis = nextSeg != null && nextSeg.visible !== false;
     const isOpenEndpoint = !c.closed && (i === 0 || i >= nS);
-    if (!prevVis && !nextVis && !isOpenEndpoint) continue;
+    // An open-curve endpoint is normally always essential — even if a segment is momentarily
+    // null/uncompiled — so it doesn't flicker out of the schematic during edits. But if the
+    // endpoint's own adjacent segment has been explicitly deleted (Delete key on that arc),
+    // its stroke is gone and the endpoint serves no further purpose; showing a node dot there
+    // is a stale leftover marker with nothing left to select. Only skip in that explicit-
+    // deletion case, not the general null-segment safety net covered by prevVis/nextVis above.
+    const endpointSegDeleted = isOpenEndpoint &&
+      ((i === 0 && nextSeg?.visible === false) || (i >= nS && prevSeg?.visible === false));
+    if ((!prevVis && !nextVis && !isOpenEndpoint) || endpointSegDeleted) continue;
     const root = find(j);
     if (!c.closed && (i === 0 || i === c.anchors.length - 1)) endpointRoots.add(root);
     if (!_rootCurves.has(root)) _rootCurves.set(root, new Set());
@@ -20584,7 +20790,14 @@ function addRegionBoundaryToPathLike(target, boundary, curvesMap) {
     const sMin = Math.min(edge.startIdx, edge.endIdx), sMax = Math.max(edge.startIdx, edge.endIdx);
 
     const ca = anim._circleArc;
-    if (ca && (!ca.rotation || Math.abs(ca.rotation) < 1e-9)) {
+    // Split anchors inserted at intersection points (Bézier-numerical Phase 1b, or any
+    // anchor whose position came from splitCurveAtTs) are NOT guaranteed to sit exactly
+    // on the geometric circle described by _circleArc. Drawing an exact ctx.arc between
+    // such anchors uses start/end angles derived from their (slightly off-circle)
+    // positions, producing an arc endpoint that doesn't coincide with the anchor itself —
+    // a tiny gap/seam at every split point that visually reads as mismatched fill/outline.
+    // Curves that were never split (anim._origSegForSplitSeg unset) keep the exact fast path.
+    if (ca && !anim._origSegForSplitSeg && (!ca.rotation || Math.abs(ca.rotation) < 1e-9)) {
       // Exact arc for circles and unrotated ellipses.
       const isCircle = Math.abs(ca.rx - ca.ry) < 1e-9;
       const [ccx, ccy] = toCanvas(ca.center.re, ca.center.im);
@@ -20680,12 +20893,25 @@ function contourBoundaryForMode(region, mode) {
 function computeArcGroups(expanded, curvesMap) {
   const N = expanded.length;
   if (!N) return [];
+  // Two edges are contiguous if they share a numeric index seam, or if they meet at the
+  // same physical point (e.g. the virtual closing anchor, which duplicates anchor 0 under
+  // a different index) — otherwise a simple closed curve whose boundary happens to be
+  // stored starting mid-loop gets a spurious break exactly at that seam.
+  const anchorPos = (animId, idx) => {
+    const a = curvesMap.get(animId)?.anchors?.[idx];
+    return a?.ok?.() ? [a.re, a.im] : null;
+  };
+  const contiguous = (prev, cur) => {
+    if (prev.animId !== cur.animId) return false;
+    if (cur.startIdx === prev.endIdx) return true;
+    const p1 = anchorPos(prev.animId, prev.endIdx), p2 = anchorPos(cur.animId, cur.startIdx);
+    return !!p1 && !!p2 && Math.hypot(p1[0] - p2[0], p1[1] - p2[1]) < 1e-6;
+  };
   const groups = [];
   let i = 0;
   while (i < N) {
     let j = i + 1;
-    while (j < N && expanded[j].animId === expanded[i].animId &&
-           expanded[j].startIdx === expanded[j - 1].endIdx) j++;
+    while (j < N && contiguous(expanded[j - 1], expanded[j])) j++;
     const anim = curvesMap.get(expanded[i].animId);
     let x = null, y = null;
     if (anim) {
@@ -20742,12 +20968,35 @@ function junctionNodesForRegion(boundary, curvesMap) {
   return junctions;
 }
 
+// Circle/ellipse primitives can also be picked by their center — not a point on the
+// boundary itself, but a useful single-point boundary for a radial-style blend.
+function circleCenterJunctionCandidates(boundary) {
+  const seen = new Set();
+  const out = [];
+  for (const edge of boundary) {
+    if (seen.has(edge.animId)) continue;
+    seen.add(edge.animId);
+    const primAnim = animations.find(a => a.id === edge.animId);
+    if (!primAnim || !isPrimitiveAnim(primAnim)) continue;
+    const kind = animKind(primAnim);
+    if (kind !== 'circle' && kind !== 'ellipse') continue;
+    const center = primitiveCenter(primAnim);
+    if (!center?.ok?.()) continue;
+    const [x, y] = toCanvas(center.re, center.im);
+    out.push({ x, y, animId: edge.animId });
+  }
+  return out;
+}
+
 function contourJunctionNodesForRegion(region, curvesMap) {
   const loops = contourRegionLoops(region);
   const result = [];
   for (let loopIndex = 0; loopIndex < loops.length; loopIndex++) {
     for (const jn of junctionNodesForRegion(loops[loopIndex], curvesMap)) {
       result.push({ ...jn, loopIndex });
+    }
+    for (const c of circleCenterJunctionCandidates(loops[loopIndex])) {
+      result.push({ x: c.x, y: c.y, groupIndices: [], loopIndex, isCenter: true, centerAnimId: c.animId });
     }
   }
   return result;
@@ -20793,11 +21042,13 @@ function contourModeEdgesFromNodes(boundary, nodeIndices, curvesMap) {
 }
 
 function contourModeEdgesForActiveSelection(region, mode, curvesMap) {
+  if (mode?.isCenterPoint) return [{ isPoint: true, isCenter: true, animId: mode.centerAnimId }];
   const boundary = contourBoundaryForMode(region, mode);
   const nodes = mode?.nodeIndices ?? [];
   if (nodes.length >= 2 && nodes[0] === nodes[nodes.length - 1]) return boundary.slice();
   return contourModeEdgesFromNodes(boundary, nodes, curvesMap);
 }
+
 
 function getCurvesMapForContourMode() {
   const m = contourSelectMode;
@@ -20807,7 +21058,7 @@ function getCurvesMapForContourMode() {
   } else {
     const anim = animations.find(a => a.id === m.animId);
     if (!anim) return null;
-    return new Map(animCurves(anim).map(c => [c.id, c]));
+    return buildTopologyCurvesMap(anim);
   }
 }
 
@@ -20834,31 +21085,37 @@ function drawContourSelectOverlay() {
   const junctions = contourJunctionNodesForRegion(region, curvesMap);
   const activeLoopIdx = Number.isInteger(contourSelectMode.loopIndex) ? contourSelectMode.loopIndex : null;
   const dpr = devicePixelRatio;
-  const color = side === 'b1' ? '#89b4fa' : '#fab387';
+  const B1_COLOR = '#89b4fa', B2_COLOR = '#cba6f7';
+  const color = side === 'b1' ? B1_COLOR : B2_COLOR;
 
   ctx.save();
 
-  // If no nodes clicked yet, show already-set boundary in its fill color (dashed)
-  if (nodeIndices.length === 0) {
-    const existingArcs = side === 'b1' ? region.fill1Arcs : region.fill2Arcs;
-    if (existingArcs?.length) {
-      const existingColor = side === 'b1'
-        ? (region.fillColor || color)
-        : (region.gradientToColor || region.fillColor || color);
-      const prePts = sampleBoundaryEdges(existingArcs, curvesMap, 80);
-      if (prePts.length >= 2) {
-        ctx.beginPath();
-        ctx.moveTo(prePts[0][0], prePts[0][1]);
-        for (let i = 1; i < prePts.length; i++) ctx.lineTo(prePts[i][0], prePts[i][1]);
-        ctx.strokeStyle = existingColor;
-        ctx.lineWidth = 3 * dpr;
-        ctx.globalAlpha = 0.75;
-        ctx.setLineDash([6 * dpr, 4 * dpr]);
-        ctx.stroke();
-        ctx.setLineDash([]);
-      }
-    }
-  }
+  // Always show each side's already-set boundary (dashed, in that side's accent color) so both
+  // boundaries stay visible for reference while picking the other — except the side currently
+  // being replaced, which drops its old dashed preview as soon as the first new node is clicked.
+  const drawExistingBoundary = (arcs, existingColor) => {
+    if (!arcs?.length) return;
+    const prePts = sampleBoundaryEdges(arcs, curvesMap, 80);
+    if (prePts.length < 2) return;
+    ctx.beginPath();
+    ctx.moveTo(prePts[0][0], prePts[0][1]);
+    for (let i = 1; i < prePts.length; i++) ctx.lineTo(prePts[i][0], prePts[i][1]);
+    // Dark halo underneath first so the dashed color reads clearly against both the dark
+    // canvas background and a bright fill (a plain 75%-alpha stroke washed out on either).
+    ctx.strokeStyle = '#11111bcc';
+    ctx.lineWidth = 5.5 * dpr;
+    ctx.globalAlpha = 1;
+    ctx.setLineDash([6 * dpr, 4 * dpr]);
+    ctx.stroke();
+    ctx.strokeStyle = existingColor;
+    ctx.lineWidth = 3 * dpr;
+    ctx.globalAlpha = 1;
+    ctx.stroke();
+    ctx.setLineDash([]);
+  };
+  const hasNewSelection = nodeIndices.length > 0 || contourSelectMode.isCenterPoint;
+  if (!(side === 'b1' && hasNewSelection)) drawExistingBoundary(region.fill1Arcs, B1_COLOR);
+  if (!(side === 'b2' && hasNewSelection)) drawExistingBoundary(region.fill2Arcs, B2_COLOR);
 
   // Draw path (requires at least 2 clicks to have any path)
   if (nodeIndices.length >= 2) {
@@ -20882,7 +21139,11 @@ function drawContourSelectOverlay() {
   const selectedGroupSet = new Set(nodeIndices);
   for (const jn of junctions) {
     const isActiveLoop = activeLoopIdx === null || jn.loopIndex === activeLoopIdx;
-    const isSelected = isActiveLoop && jn.groupIndices.some(gi => selectedGroupSet.has(gi));
+    const isSelected = isActiveLoop && (
+      jn.isCenter
+        ? (contourSelectMode.isCenterPoint && jn.centerAnimId === contourSelectMode.centerAnimId)
+        : jn.groupIndices.some(gi => selectedGroupSet.has(gi))
+    );
     const r = isSelected ? 7 * dpr : 5 * dpr;
     ctx.beginPath();
     ctx.arc(jn.x, jn.y, r, 0, Math.PI * 2);
@@ -20903,6 +21164,17 @@ function drawContourSelectOverlay() {
 function sampleBoundaryEdges(edges, curvesMap, N) {
   const raw = [];
   for (const edge of edges) {
+    if (edge.isCenter) {
+      // The center is not one of the curve's own anchors (curvesMap holds the topology
+      // path, whose anchors are perimeter samples) — resolve it from the original
+      // circle/ellipse primitive instead.
+      const primAnim = animations.find(a => a.id === edge.animId);
+      const center = primAnim ? primitiveCenter(primAnim) : null;
+      if (!center?.ok?.()) continue;
+      const [x, y] = toCanvas(center.re, center.im);
+      raw.push([x, y]);
+      continue;
+    }
     if (edge.isPoint) {
       const anim = curvesMap.get(edge.animId);
       if (!anim) continue;
@@ -20967,78 +21239,283 @@ function gradKnobsToStops(c1Knobs, c2Knobs) {
   return [{ pos: 0, t: firstT }, ...all, { pos: 1, t: lastT }];
 }
 
-function blendAtPos(stops, pos) {
-  for (let i = 1; i < stops.length; i++) {
-    if (pos <= stops[i].pos) {
-      const { pos: p0, t: t0 } = stops[i - 1];
-      const { pos: p1, t: t1 } = stops[i];
-      if (p1 <= p0) return t0;
-      return t0 + (t1 - t0) * (pos - p0) / (p1 - p0);
-    }
+// Reverses pts2 if that gives a better end-to-end correspondence with pts1 — both are sampled
+// independently by sampleBoundaryEdges, so index i is only guaranteed to mean "the same
+// relative position along each boundary" once they're known to run the same direction.
+function alignBoundaryPts(pts1, pts2) {
+  const N = Math.min(pts1.length, pts2.length);
+  const edist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+  if (edist(pts1[0], pts2[N - 1]) + edist(pts1[N - 1], pts2[0]) <
+      edist(pts1[0], pts2[0])    + edist(pts1[N - 1], pts2[N - 1])) {
+    return [...pts2].reverse();
   }
-  return stops[stops.length - 1].t;
+  return pts2;
 }
 
-function drawTwoBoundaryBlend(ctx, pts1, pts2, color1, opacity1, color2, opacity2, gradStops = null) {
+// samplePts sizes each boundary independently (based on that boundary's own on-screen length),
+// so pts1 and pts2 for the same region can come back with different point counts — pairing
+// pts1[i] with pts2[i] later only makes sense if both cover the same 0..1 span at the same
+// indices. Stretches/compresses pts (already an arc-length-uniform sample) to exactly N points
+// via simple index interpolation — cheap, and accurate since the source points are already
+// evenly spaced. Without this, drawTwoBoundaryBlendQuads truncated to the shorter array's length,
+// silently dropping the longer boundary's tail and pairing its last used point far short of its
+// true corner — producing an oversized, wrong quad fanning out from the shared corner (the wedge).
+function resamplePtsToN(pts, N) {
+  if (pts.length === N) return pts;
+  if (pts.length < 2) return Array(N).fill(pts[0] ?? [0, 0]);
+  const result = new Array(N);
+  for (let i = 0; i < N; i++) {
+    const t = (i / (N - 1)) * (pts.length - 1);
+    const lo = Math.floor(t), hi = Math.min(pts.length - 1, lo + 1);
+    const f = t - lo;
+    result[i] = [pts[lo][0] + f * (pts[hi][0] - pts[lo][0]), pts[lo][1] + f * (pts[hi][1] - pts[lo][1])];
+  }
+  return result;
+}
+
+// The reference width D must be at least as large as every column's actual local width — the
+// gradient axis only extends to distance D, so any column wider than D has its outer portion
+// left outside the axis entirely (unpainted, which composites as flat 0% opacity, not a
+// gradual fade). Using the maximum local width, rather than an average, guarantees every
+// column's true edge is reached.
+function maxBoundaryWidth(pts1, alignedPts2) {
+  const N = Math.min(pts1.length, alignedPts2.length);
+  if (N === 0) return 1;
+  let max = 0;
+  for (let i = 0; i < N; i++) {
+    const w = Math.hypot(pts1[i][0] - alignedPts2[i][0], pts1[i][1] - alignedPts2[i][1]);
+    if (w > max) max = w;
+  }
+  return max || 1;
+}
+
+// Precomputes boundary sample points and a reference width D for every contour-gradient
+// region, and — critically — makes sibling regions that share a boundary arc (the common
+// "split down the middle, arc = boundary1 on both sides" case) use the SAME D rather than
+// each computing its own independently. A shared D is what keeps the blend's fade *rate*
+// consistent right at the shared edge; two regions with different overall shapes computing
+// their own max width can each be individually reasonable but still disagree at the seam
+// (a visible Mach band), even though neither one is "wrong" in isolation.
+function computeContourGradientGeometry(contourRegions, curvesMap) {
+  const sig = edges => {
+    if (!edges?.length) return null;
+    const fwd = edges.map(e => `${e.animId}:${e.startIdx}:${e.endIdx}`).join('|');
+    const rev = [...edges].reverse().map(e => `${e.animId}:${e.endIdx}:${e.startIdx}`).join('|');
+    return fwd < rev ? fwd : rev;
+  };
+  // Sibling regions sharing a boundary arc each resample it independently by default — same
+  // physical curve, but arc-length parametrization can start counting from a different point
+  // along it, so the two regions' 300 sample points don't land in exactly the same places even
+  // though they trace the same line. That's a real, visible gap right at the shared edge, not
+  // just an AA artifact. Caching the sampled points by signature so every region referencing
+  // the same edge-list reuses the literal same array eliminates the mismatch entirely.
+  const sampledBySig = new Map();
+  const samplePts = edges => {
+    const key = sig(edges);
+    if (key && sampledBySig.has(key)) return sampledBySig.get(key);
+    // This is vector art with no fixed pixel scale — a fixed sample count looks fine at
+    // whatever zoom level it happened to be tuned at, but zooming in further stretches the
+    // same N quads over a much larger on-screen distance, making each quad (and any residual
+    // seam between quads) proportionally huge and visible. Basing the sample count on the
+    // boundary's actual on-screen length keeps each quad a small, roughly constant number of
+    // device pixels wide regardless of zoom. A cheap 200-point pass estimates that length.
+    // Capped at 800 (was briefly pushed to 8000 to test extreme-zoom appearance) — this
+    // recomputes and refills every quad on every draw() call, which fires on every mousemove,
+    // so a high cap was hammering the CPU continuously rather than just at idle.
+    const approx = sampleBoundaryEdges(edges, curvesMap, 200);
+    let approxLen = 0;
+    for (let i = 1; i < approx.length; i++) approxLen += Math.hypot(approx[i][0] - approx[i - 1][0], approx[i][1] - approx[i - 1][1]);
+    const n = Math.max(200, Math.min(800, Math.round(approxLen / 2)));
+    const pts = sampleBoundaryEdges(edges, curvesMap, n);
+    if (key) sampledBySig.set(key, pts);
+    return pts;
+  };
+  const entries = [];
+  const groups = new Map();
+  for (const region of contourRegions) {
+    const { b1, b2 } = resolveContourBoundaries(region);
+    const pts1 = samplePts(b1);
+    const pts2 = resamplePtsToN(alignBoundaryPts(pts1, samplePts(b2)), pts1.length);
+    const entry = { region, pts1, pts2, ownD: maxBoundaryWidth(pts1, pts2), sig1: sig(b1), sig2: sig(b2) };
+    entries.push(entry);
+    for (const s of [entry.sig1, entry.sig2]) {
+      if (!s) continue;
+      if (!groups.has(s)) groups.set(s, []);
+      groups.get(s).push(entry);
+    }
+  }
+  // Cluster regions that share a boundary via union-find, so they can be rendered onto one
+  // shared offscreen canvas before blurring (see drawContourGradientRegions) — blurring two
+  // regions' pixels separately and compositing them separately leaves a faint residual
+  // mismatch right at their shared edge, since each layer's blur only bleeds into its own
+  // canvas, not into the other's. Blurring the combined image once avoids that entirely.
+  const parent = entries.map((_, i) => i);
+  const find = i => { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; };
+  const union = (a, b) => { a = find(a); b = find(b); if (a !== b) parent[b] = a; };
+  const indexOf = new Map(entries.map((e, i) => [e, i]));
+  for (const members of groups.values()) {
+    if (members.length < 2) continue;
+    const first = indexOf.get(members[0]);
+    for (let k = 1; k < members.length; k++) union(first, indexOf.get(members[k]));
+  }
+  const result = new Map();
+  entries.forEach((entry, i) => {
+    const g1 = entry.sig1 ? groups.get(entry.sig1) : null;
+    const g2 = entry.sig2 ? groups.get(entry.sig2) : null;
+    const sharedGroup = (g1?.length > 1) ? g1 : ((g2?.length > 1) ? g2 : null);
+    // Take the max, not the average, of the siblings' own max widths — D must stay large
+    // enough to cover every column across ALL sharing regions, not just this one.
+    const D = sharedGroup ? Math.max(...sharedGroup.map(e => e.ownD)) : entry.ownD;
+    // Only ONE region per shared boundary1 should extend its edge slightly past the true line
+    // (see EDGE_OVERLAP in drawTwoBoundaryBlendQuads) — if both siblings extended into each
+    // other's territory, that pixel gets double coverage and reads as a bright line instead of
+    // the dark one a zero-extension seam produces. Exactly one full-coverage layer, not zero or
+    // two, is what actually closes the gap. Arbitrarily but deterministically pick the first
+    // region encountered for a given signature as the extender.
+    const extendBoundary1 = !!(g1?.length > 1 && g1[0] === entry);
+    result.set(entry.region, { pts1: entry.pts1, pts2: entry.pts2, D, clusterId: find(i), extendBoundary1 });
+  });
+  return result;
+}
+
+// Pure drawing: fills the strip between boundary1 (pts1) and boundary2 (p2) into destCtx one
+// thin quad at a time, each with its own native canvas linear gradient running from the
+// boundary1 side toward the boundary2 side (extended/foreshortened to the shared distance D,
+// not necessarily the quad's own true width). Color1 is always at pts1, color2 always at p2,
+// regardless of which curve is physically bigger/smaller. No offscreen canvas or blur here —
+// see drawContourGradientRegions, which draws every region in a shared cluster into one
+// offscreen canvas before blurring once.
+function drawTwoBoundaryBlendQuads(destCtx, pts1, pts2, color1, opacity1, color2, opacity2, gradStops, sharedD, extendBoundary1 = false) {
   const N = Math.min(pts1.length, pts2.length);
   if (N < 2) return;
   const c1 = parseColorToRgb(color1), c2 = parseColorToRgb(color2);
   if (!c1 || !c2) return;
-  const edist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
-  let p2 = pts2;
-  if (edist(pts1[0], p2[N - 1]) + edist(pts1[N - 1], p2[0]) <
-      edist(pts1[0], p2[0])    + edist(pts1[N - 1], p2[N - 1])) {
-    p2 = [...p2].reverse();
-  }
-  const polyArea = pts => {
-    let a = 0;
-    for (let i = 0; i < pts.length; i++) {
-      const [x0, y0] = pts[i], [x1, y1] = pts[(i + 1) % pts.length];
-      a += x0 * y1 - x1 * y0;
-    }
-    return Math.abs(a) / 2;
+  const p2 = alignBoundaryPts(pts1, pts2);
+  const _gStops = gradStops ?? [{ pos: 0, t: 0 }, { pos: 1, t: 1 }];
+  const colorAtT = t => {
+    const r = Math.round(c1.r + (c2.r - c1.r) * t);
+    const g = Math.round(c1.g + (c2.g - c1.g) * t);
+    const b = Math.round(c1.b + (c2.b - c1.b) * t);
+    const a = opacity1 + (opacity2 - opacity1) * t;
+    return `rgba(${r},${g},${b},${a})`;
   };
-  let outerPts, innerPts, b1IsOuter;
-  if (polyArea(pts1) >= polyArea(p2)) {
-    outerPts = pts1; innerPts = p2; b1IsOuter = true;
-  } else {
-    outerPts = p2; innerPts = pts1; b1IsOuter = false;
+  // Physical width from boundary1 to boundary2 at each sampled column. Two regions sharing a
+  // boundary generally have different widths on each side (e.g. the inside vs. outside of a
+  // bend) — fading each column across its own actual width changes color at a different
+  // *rate per pixel* on each side, right at the shared edge where both should start identically
+  // — that slope mismatch (not a color-value mismatch) reads as a visible seam (Mach band).
+  // Using one shared reference distance D for every column's gradient axis keeps the fade rate
+  // near boundary1 consistent regardless of that column's actual width: a narrow column reaches
+  // pure boundary2 color before its true edge (nothing left to render past that). D must be at
+  // least as large as every column's own width — a column wider than D would have its outer
+  // portion fall outside the gradient axis entirely (unpainted, composites as flat 0% opacity,
+  // not a gradual fade) — so this always uses the MAXIMUM local width, never an average.
+  const D = sharedD ?? maxBoundaryWidth(pts1, p2);
+  // A pixel sitting exactly on the boundary1 line gets only partial coverage from THIS quad's
+  // fill (it's right on the edge) — and when a sibling region on the other side of that same
+  // line fills its own quad up to the exact same edge, that pixel gets a second, separate
+  // partial-coverage paint. Two ~50%-coverage source-over paints of the *same* color don't
+  // add up to 100% coverage (compositing is multiplicative: 0.5 + 0.5*0.5 = 0.75, not 1.0) —
+  // a classic "seam crack" between adjacent shapes that no amount of color/slope/blur tuning
+  // fixes, since it's a coverage problem, not a color problem. Extending this quad's boundary1
+  // vertices slightly past the true line, into where a sibling's own quad would be, means the
+  // seam pixels get full coverage instead of partial. Only ONE region per shared boundary
+  // should do this (extendBoundary1, set by computeContourGradientGeometry) — if BOTH siblings
+  // extended into each other's territory, the seam gets double coverage instead of zero,
+  // reading as a bright line rather than a dark one; exactly one full-coverage layer is what's
+  // needed. The gradient axis itself still starts at the TRUE (unextended) boundary1 position,
+  // so the extended sliver only ever renders very close to pure boundary1 color — correct,
+  // since both sides agree that's what color that edge should be.
+  const EDGE_OVERLAP = extendBoundary1 ? 1.0 * devicePixelRatio : 0;
+  // Boundary1 and boundary2 converge to near-zero width at a shared endpoint (e.g. where the
+  // arc meets the outer boundary) — right around there, mB-mA is a near-zero vector, and
+  // dividing it by its own near-zero magnitude to get a unit direction is dominated by
+  // floating-point noise rather than the true geometry, producing a wildly wrong direction.
+  // Since that direction gets extended by the (large) shared D for the gradient axis, one bad
+  // direction paints a large, badly-colored wedge. Below this length, reuse the last reliably-
+  // computed direction instead — the true tangent direction varies smoothly along the curve,
+  // so a neighboring column's direction is a much better estimate than a noise-dominated one.
+  const MIN_DIR_LEN = 3 * devicePixelRatio;
+  let lastUx = 0, lastUy = -1;
+  for (let i = 0; i < N - 1; i++) {
+    const a0i = pts1[i], a1i = pts1[i + 1], b0i = p2[i], b1i = p2[i + 1];
+    const mAi = [(a0i[0] + a1i[0]) / 2, (a0i[1] + a1i[1]) / 2];
+    const mBi = [(b0i[0] + b1i[0]) / 2, (b0i[1] + b1i[1]) / 2];
+    const leni = Math.hypot(mBi[0] - mAi[0], mBi[1] - mAi[1]);
+    if (leni >= MIN_DIR_LEN) { lastUx = (mBi[0] - mAi[0]) / leni; lastUy = (mBi[1] - mAi[1]) / leni; break; }
   }
-  const offscreen = document.createElement('canvas');
-  offscreen.width = ctx.canvas.width;
-  offscreen.height = ctx.canvas.height;
-  const octx = offscreen.getContext('2d');
-  const K = 150;
-  for (let k = 0; k < K; k++) {
-    const t0 = k / K;
-    const t1 = (k + 1) / K;
-    const tm = (t0 + t1) / 2;
-    // frac: 0 = at boundary 1, 1 = at boundary 2 (regardless of which is geometrically outer)
-    const frac = b1IsOuter ? tm : 1 - tm;
-    const _gStops = gradStops ?? [{ pos: 0, t: 0 }, { pos: 1, t: 1 }];
-    const tc = blendAtPos(_gStops, frac);
-    const r = Math.round(c1.r + (c2.r - c1.r) * tc);
-    const g = Math.round(c1.g + (c2.g - c1.g) * tc);
-    const b = Math.round(c1.b + (c2.b - c1.b) * tc);
-    const alpha = opacity1 + (opacity2 - opacity1) * tc;
-    octx.fillStyle = `rgba(${r},${g},${b},${alpha})`;
-    octx.beginPath();
-    for (let i = 0; i < N; i++) {
-      const x = outerPts[i][0] * (1 - t0) + innerPts[i][0] * t0;
-      const y = outerPts[i][1] * (1 - t0) + innerPts[i][1] * t0;
-      if (i === 0) octx.moveTo(x, y); else octx.lineTo(x, y);
-    }
-    octx.closePath();
-    for (let i = 0; i < N; i++) {
-      const x = outerPts[i][0] * (1 - t1) + innerPts[i][0] * t1;
-      const y = outerPts[i][1] * (1 - t1) + innerPts[i][1] * t1;
-      if (i === 0) octx.moveTo(x, y); else octx.lineTo(x, y);
-    }
-    octx.closePath();
-    octx.fill('evenodd');
+  for (let i = 0; i < N - 1; i++) {
+    const a0 = pts1[i], a1 = pts1[i + 1], b0 = p2[i], b1 = p2[i + 1];
+    const mA = [(a0[0] + a1[0]) / 2, (a0[1] + a1[1]) / 2];
+    const mB = [(b0[0] + b1[0]) / 2, (b0[1] + b1[1]) / 2];
+    const len = Math.hypot(mB[0] - mA[0], mB[1] - mA[1]);
+    let ux, uy;
+    if (len >= MIN_DIR_LEN) { ux = (mB[0] - mA[0]) / len; uy = (mB[1] - mA[1]) / len; lastUx = ux; lastUy = uy; }
+    else { ux = lastUx; uy = lastUy; }
+    // Only extend when this quad has its own real direction. At a shared corner (where boundary1
+    // and boundary2 already meet at the same point) len falls below MIN_DIR_LEN and ux/uy is
+    // borrowed from a neighboring column — extending with a borrowed direction shifts that corner
+    // vertex sideways by a fixed few screen pixels, which shows up as a small wedge/spike right at
+    // the pinch point (visible when the shape is small on screen, invisible when zoomed in, since
+    // it's a fixed pixel size). There's no coverage crack to close at a single shared vertex anyway.
+    const extendPastA = pt => (EDGE_OVERLAP && len >= MIN_DIR_LEN) ? [pt[0] - ux * EDGE_OVERLAP, pt[1] - uy * EDGE_OVERLAP] : pt;
+    const ea0 = extendPastA(a0), ea1 = extendPastA(a1);
+    // Axis runs to this column's own true edge (len), not the shared D, so the last stop's color
+    // (color2/opacity2) actually appears there instead of being clamped short. Degenerate columns
+    // (len < MIN_DIR_LEN, direction borrowed from a neighbor) keep the old D-based axis; len
+    // itself is unreliable there and these are negligible slivers anyway.
+    const axisLen = len >= MIN_DIR_LEN ? len : D;
+    const grad = destCtx.createLinearGradient(mA[0], mA[1], mA[0] + ux * axisLen, mA[1] + uy * axisLen);
+    for (const stop of _gStops) grad.addColorStop(Math.max(0, Math.min(1, stop.pos)), colorAtT(stop.t));
+    destCtx.fillStyle = grad;
+    destCtx.beginPath();
+    destCtx.moveTo(ea0[0], ea0[1]);
+    destCtx.lineTo(ea1[0], ea1[1]);
+    destCtx.lineTo(b1[0], b1[1]);
+    destCtx.lineTo(b0[0], b0[1]);
+    destCtx.closePath();
+    destCtx.fill();
   }
-  ctx.globalAlpha = 1;
-  ctx.drawImage(offscreen, 0, 0);
+}
+
+// Draws every contour-gradient region in contourGeom (as returned by
+// computeContourGradientGeometry), grouping regions that share a boundary arc onto one shared
+// offscreen canvas before blurring once, rather than blurring+compositing each region
+// separately — see the clustering comment in computeContourGradientGeometry for why that
+// matters. colorFor(region) must return { color1, opacity1, color2, opacity2, gradStops }.
+function drawContourGradientRegions(ctx, contourGeom, colorFor, curvesMap) {
+  const clusters = new Map();
+  for (const [region, geom] of contourGeom) {
+    if (!clusters.has(geom.clusterId)) clusters.set(geom.clusterId, []);
+    clusters.get(geom.clusterId).push({ region, geom });
+  }
+  for (const members of clusters.values()) {
+    const offscreen = document.createElement('canvas');
+    offscreen.width = ctx.canvas.width;
+    offscreen.height = ctx.canvas.height;
+    const octx = offscreen.getContext('2d');
+    // Draw every quad crisply, with no filter — ctx.filter applies to each individual draw call,
+    // not once to the finished image, so setting it here would blur every one of the ~800 quads
+    // separately as it's composited, shrinking each one's own effective coverage.
+    for (const { region, geom } of members) {
+      const { color1, opacity1, color2, opacity2, gradStops } = colorFor(region);
+      drawTwoBoundaryBlendQuads(octx, geom.pts1, geom.pts2, color1, opacity1, color2, opacity2, gradStops, geom.D, geom.extendBoundary1);
+    }
+    // Blur exactly once, here, as the whole assembled offscreen image is composited onto the
+    // main canvas — this is what actually smooths the sub-pixel seams between adjacent quads
+    // (and between clusters) without touching each quad's own individual coverage. Clipping to
+    // each region's own true (sharp) boundary before drawing keeps that outer edge crisp — without
+    // this, blur would soften the region's own silhouette right along with the internal quad seams
+    // it's meant to smooth, making the whole shape look feathered instead of just the interior fade.
+    ctx.filter = `blur(${(1.8 * devicePixelRatio).toFixed(2)}px)`;
+    for (const { region } of members) {
+      ctx.save();
+      ctx.clip(buildRegionPath(region, curvesMap), regionFillRule(region));
+      ctx.drawImage(offscreen, 0, 0);
+      ctx.restore();
+    }
+    ctx.filter = 'none';
+  }
 }
 
 function drawRadialGradientBlend(ctx, region, curvesMap, color1, opacity1, color2, opacity2, gradStops = null) {
@@ -21502,18 +21979,29 @@ function drawGroupRegionFills() {
   for (const group of groups) {
     if (!group.regions?.length || isGroupEffectivelyHidden(group.id)) continue;
     const curvesMap = new Map(allDescendantAnims(group.id).map(a => [a.id, a]));
+    // Pre-pass: contour-gradient regions that share a boundary arc need to agree on a common
+    // reference width D so the blend's fade rate matches right at the shared edge, and are
+    // rendered together onto one shared offscreen canvas (see drawContourGradientRegions)
+    // rather than individually in the loop below — different fill styles never overlap here
+    // (only sit adjacent), so paint order relative to other styles doesn't matter.
+    const _contourRegions = group.regions.filter(r => r.fillColor && r.fillStyle === 'contour-gradient');
+    const _contourGeom = computeContourGradientGeometry(_contourRegions, curvesMap);
+    if (_contourRegions.length) {
+      drawContourGradientRegions(ctx, _contourGeom, region => {
+        const { c1, c2 } = getGradKnobs(region);
+        return {
+          color1: region.fillColor, opacity1: region.fillOpacity ?? 0.3,
+          color2: region.gradientToColor || region.fillColor, opacity2: region.gradientToOpacity ?? 0,
+          gradStops: gradKnobsToStops(c1, c2),
+        };
+      }, curvesMap);
+    }
     for (const region of group.regions) {
       if (!region.fillColor) continue;
       const opacity = region.fillOpacity ?? 0.3;
       ctx.save();
       if (region.fillStyle === 'contour-gradient') {
-        const { b1, b2 } = resolveContourBoundaries(region);
-        const pts1 = sampleBoundaryEdges(b1, curvesMap, 300);
-        const pts2 = sampleBoundaryEdges(b2, curvesMap, 300);
-        clipToRegionPath(ctx, region, curvesMap);
-        const { c1: _gk1a, c2: _gk2a } = getGradKnobs(region);
-        drawTwoBoundaryBlend(ctx, pts1, pts2, region.fillColor, opacity,
-          region.gradientToColor || region.fillColor, region.gradientToOpacity ?? 0, gradKnobsToStops(_gk1a, _gk2a));
+        // Already drawn above.
       } else if (region.fillStyle === 'radial-gradient') {
         clipToRegionPath(ctx, region, curvesMap);
         const { c1: _gk1b, c2: _gk2b } = getGradKnobs(region);
@@ -21569,6 +22057,34 @@ function drawGroupRegionFills() {
 function drawObjectRegionFillsForAnim(anim) {
   if (!anim?.regions?.length || !isAnimEffectivelyVisible(anim) || anim.inPlacementMode) return;
   const curvesMap = buildTopologyCurvesMap(anim);
+  // Pre-pass: contour-gradient regions that share a boundary arc need to agree on a common
+  // reference width D so the blend's fade rate matches right at the shared edge, and are
+  // rendered together onto one shared offscreen canvas (see drawContourGradientRegions)
+  // rather than individually in the loop below — different fill styles never overlap here
+  // (only sit adjacent), so paint order relative to other styles doesn't matter. Eligibility
+  // mirrors the per-region style resolution below.
+  const _contourRegions = anim.regions.filter(r => {
+    const _fill = r.fillColor || anim.fillColor;
+    if (!_fill) return false;
+    const _style = r.fillColor ? (r.fillStyle || 'solid') : animFillStyle(anim);
+    return _style === 'contour-gradient';
+  });
+  const _contourGeom = computeContourGradientGeometry(_contourRegions, curvesMap);
+  if (_contourRegions.length) {
+    drawContourGradientRegions(ctx, _contourGeom, region => {
+      const _fill = region.fillColor || anim.fillColor;
+      const _useRegion = !!region.fillColor;
+      const _opBase = _useRegion ? (region.fillOpacity ?? 0.3) : animFillOpacity(anim);
+      const _gradTo = _useRegion ? region.gradientToColor : anim.gradientToColor;
+      const _gradToOp = _useRegion ? (region.gradientToOpacity ?? 0) : (anim.gradientToOpacity ?? 0);
+      const { c1, c2 } = getGradKnobs(region);
+      return {
+        color1: _fill, opacity1: _opBase * _globalCanvasDimFactor,
+        color2: _gradTo || _fill, opacity2: _gradToOp,
+        gradStops: gradKnobsToStops(c1, c2),
+      };
+    }, curvesMap);
+  }
   for (const region of anim.regions) {
     const _rFill = region.fillColor || anim.fillColor;
     if (!_rFill) continue;
@@ -21580,12 +22096,7 @@ function drawObjectRegionFillsForAnim(anim) {
     const opacity = _rOpBase * _globalCanvasDimFactor;
     ctx.save();
     if (_rStyle === 'contour-gradient') {
-      const { b1, b2 } = resolveContourBoundaries(region);
-      const pts1 = sampleBoundaryEdges(b1, curvesMap, 300);
-      const pts2 = sampleBoundaryEdges(b2, curvesMap, 300);
-      clipToRegionPath(ctx, region, curvesMap);
-      const { c1: _gk1c, c2: _gk2c } = getGradKnobs(region);
-      drawTwoBoundaryBlend(ctx, pts1, pts2, _rFill, opacity, _rGradTo || _rFill, _rGradToOp, gradKnobsToStops(_gk1c, _gk2c));
+      // Already drawn above.
     } else if (_rStyle === 'radial-gradient') {
       clipToRegionPath(ctx, region, curvesMap);
       const { c1: _gk1d, c2: _gk2d } = getGradKnobs(region);
@@ -21853,6 +22364,12 @@ function snapMergedCorners(anim) {
 
   const pts = [];
   for (const c of curves) {
+    if (c.closed) continue; // closed curves have no endpoints to connect; skipping prevents
+                             // anchors of nearby closed curves from being averaged together
+    // Also skip pseudo-closed freeform curves (first and last anchor at same position).
+    // commitFreeformPenStroke sets closed=true for new strokes, but old saved data may not have it.
+    const _an = c.anchors;
+    if (_an.length >= 2 && Math.hypot(_an[0].re - _an[_an.length-1].re, _an[0].im - _an[_an.length-1].im) < 1e-9) continue;
     for (let i = 0; i < c.anchors.length; i++) pts.push({ c, i });
   }
 
@@ -23095,7 +23612,7 @@ function drawCurveSchematic(canvas, anim) {
     tracePath(ctx, loop.loopStart, loop.loopEnd);
     ctx.closePath();
     ctx.fillStyle = anim.fillColor || curveColor;
-    ctx.globalAlpha = anim.fillOpacity ?? 0.5;
+    ctx.globalAlpha = anim.fillOpacity ?? 0.3;
     ctx.fill();
     ctx.globalAlpha = 1;
   }
@@ -23146,7 +23663,9 @@ function addSchematicRegionBoundaryToPath(path, boundary, curvesMap, toC) {
     const sMin = Math.min(edge.startIdx, edge.endIdx), sMax = Math.max(edge.startIdx, edge.endIdx);
 
     const ca = c._circleArc;
-    if (ca && (!ca.rotation || Math.abs(ca.rotation) < 1e-9)) {
+    // See addRegionBoundaryToPathLike: split anchors aren't guaranteed to sit exactly on
+    // the geometric circle, so skip the exact-arc fast path for split curves.
+    if (ca && !c._origSegForSplitSeg && (!ca.rotation || Math.abs(ca.rotation) < 1e-9)) {
       const isCircle = Math.abs(ca.rx - ca.ry) < 1e-9;
       const cc = toC(ca.center);
       const startAnchor = c.anchors[fwd ? sMin : sMax];
@@ -23316,14 +23835,17 @@ function drawObjectSchematic(canvasEl, anim, opts = {}) {
   for (const c of curves) {
     const isPolyline = isPolylineAnim(c);
     const ca = c._circleArc;
-    const isExactArc = ca && (!ca.rotation || Math.abs(ca.rotation) < 1e-9);
+    const isExactArc = ca && !c._origSegForSplitSeg && (!ca.rotation || Math.abs(ca.rotation) < 1e-9);
     const isExactCircle = isExactArc && Math.abs(ca.rx - ca.ry) < 1e-9;
     let _ccx, _ccy, _cr, _cryS;
     if (isExactArc) {
       const cc = toC(ca.center);
       _ccx = cc.x; _ccy = cc.y;
-      _cr = Math.hypot(toC(c.anchors[0]).x - _ccx, toC(c.anchors[0]).y - _ccy);
-      if (!isExactCircle) _cryS = Math.abs(toC({ re: ca.center.re, im: ca.center.im + ca.ry }).y - _ccy);
+      // anchors[0] sits directly above center (offset by ry, not rx) — measuring "radius"
+      // as distance-to-anchors[0] silently equals ry for both axes, which is invisible for
+      // a true circle (rx===ry) but draws a squashed/misangled ellipse once rx !== ry.
+      _cr = ca.rx * sc;
+      if (!isExactCircle) _cryS = ca.ry * sc;
     }
     ctx.lineJoin = 'round'; ctx.lineCap = 'round';
     for (let i = 0; i < c.segments.length; i++) {
@@ -23388,14 +23910,14 @@ function drawObjectSchematic(canvasEl, anim, opts = {}) {
     ctx.lineJoin = 'round'; ctx.lineCap = 'round';
     ctx.beginPath();
     const _hca = c._circleArc;
-    const _hExact = _hca && (!_hca.rotation || Math.abs(_hca.rotation) < 1e-9);
+    const _hExact = _hca && !c._origSegForSplitSeg && (!_hca.rotation || Math.abs(_hca.rotation) < 1e-9);
     const _hIsCircle = _hExact && Math.abs(_hca.rx - _hca.ry) < 1e-9;
     let _hccx, _hccy, _hcr, _hcryS;
     if (_hExact) {
       const _hcc = toC(_hca.center);
       _hccx = _hcc.x; _hccy = _hcc.y;
-      _hcr = Math.hypot(toC(c.anchors[0]).x - _hccx, toC(c.anchors[0]).y - _hccy);
-      if (!_hIsCircle) _hcryS = Math.abs(toC({ re: _hca.center.re, im: _hca.center.im + _hca.ry }).y - _hccy);
+      _hcr = _hca.rx * sc;
+      if (!_hIsCircle) _hcryS = _hca.ry * sc;
     }
     let _hlStarted = false;
     const _drawHlSeg = i => {
@@ -24403,7 +24925,14 @@ function renderAnimListLegacy() {
   _dtContent.addEventListener('click', e => e.stopPropagation());
   detailEl.appendChild(_dtContent);
 
-  if (objectDetailTab === 'fill' && !anim.regions?.length && canFillAnim(anim) && !isPrimitiveAnim(anim)) {
+  // Guard against a resize drag: the resize mousedown handler intentionally empties anim.regions
+  // for the duration of the drag (the real rebuild happens once at mouseup, with the pre-drag
+  // fill colors restored from a stash) — this panel re-renders on every drag frame via
+  // renderAnimList(), and without this guard it would see the momentarily-empty regions and
+  // immediately re-detect topology mid-drag, using in-transit geometry and losing the fill
+  // colors before the resize's own mouseup rebuild ever gets a chance to restore them.
+  const _inResizeDragForPanel = !!(resizeDrag && resizeDrag.anim === anim);
+  if (objectDetailTab === 'fill' && !anim.regions?.length && canFillAnim(anim) && !isPrimitiveAnim(anim) && !_inResizeDragForPanel) {
     detectObjectTopology(anim);
     saveProject();
   }
@@ -24650,6 +25179,10 @@ function renderAnimListLegacy() {
       const _primIsCustomPat = _primStyle === 'custom-pattern';
       const _primHasC2 = _primIsGradFam || _primStyle === 'pattern' || _primIsCustomPat;
 
+      // Lock to Style sub-tab while in contour boundary select mode. Region ids are per-object
+      // sequence numbers, not globally unique, so animId must also match the current object.
+      if (contourSelectMode?.animId === anim.id && contourSelectMode?.regionId === anim.regions?.[0]?.id) regionFillSubTab = 3;
+
       // Sub-tab bar: Color 1 | Color 2 | Style
       const _primSubBar = document.createElement('div');
       _primSubBar.className = 'color-tab-bar';
@@ -24691,11 +25224,12 @@ function renderAnimListLegacy() {
         const _c1Init = anim.fillColor || anim.color;
         let _c1Prev = normalizeColorString(_c1Init) || _c1Init;
         let _c1Op = null;
-        appendHslColorPicker(_fillWrap, _c1Init, (color, meta = {}) => {
+        const _c1Row = appendHslColorPicker(_fillWrap, _c1Init, (color, meta = {}) => {
           _primSync({ fillColor: color });
           saveProject(); if (meta.fromHueClick) renderAnimList(); draw();
         }, { withUndo: true, fallbackHue: colorToHsl(_c1Init).h,
           onPreviewChange(hex) { _c1Prev = hex; _c1Op?.setTrack(opacitySliderTrack(hex)); } });
+        _appendFillDropper(_c1Row, 'fill', null);
         _c1Op = appendSliderRow(_fillWrap, 'Opacity', 0, 100, 1,
           Math.round(clamp(animFillOpacity(anim), 0, 1) * 100),
           v => `${Math.round(v)}%`, v => {
@@ -24712,11 +25246,12 @@ function renderAnimListLegacy() {
         const _c2Init = anim.gradientToColor;
         let _c2Prev = normalizeColorString(_c2Init) || _c2Init;
         let _c2Op = null;
-        appendHslColorPicker(_fillWrap, _c2Init, (color, meta = {}) => {
+        const _c2Row = appendHslColorPicker(_fillWrap, _c2Init, (color, meta = {}) => {
           _primSync({ gradientToColor: color });
           saveProject(); if (meta.fromHueClick) renderAnimList(); draw();
         }, { withUndo: true, fallbackHue: colorToHsl(anim.fillColor || anim.color).h,
           onPreviewChange(hex) { _c2Prev = hex; _c2Op?.setTrack(opacitySliderTrack(hex)); } });
+        _appendFillDropper(_c2Row, 'gradientTo', null);
         _c2Op = appendSliderRow(_fillWrap, 'Opacity', 0, 100, 1,
           Math.round(clamp(anim.gradientToOpacity ?? animFillOpacity(anim), 0, 1) * 100),
           v => `${Math.round(v)}%`, v => {
@@ -24795,7 +25330,7 @@ function renderAnimListLegacy() {
             const _bkMkC = (hex, op) => { const _rgb = parseColorToRgb(hex); return _rgb ? `rgba(${_rgb.r},${_rgb.g},${_rgb.b},${op})` : `rgba(128,128,128,${op})`; };
             appendGradientBlendBar(_fillWrap,
               _bkC1, _bkC2,
-              _bkMkC(anim.fillColor || anim.color || '#888888', anim.fillOpacity ?? 0.5),
+              _bkMkC(anim.fillColor || anim.color || '#888888', anim.fillOpacity ?? 0.3),
               _bkMkC(anim.gradientToColor || anim.fillColor || anim.color || '#888888', anim.gradientToOpacity ?? 0),
               (c1k, c2k) => {
                 anim.gradC1Knobs = c1k; anim.gradC2Knobs = c2k;
@@ -24814,6 +25349,89 @@ function renderAnimListLegacy() {
               () => (anim.regions?.[0]?.gradientAngle ?? anim.gradientAngle ?? Math.PI / 4),
               a => { _primSync({ gradientAngle: a }); saveProject(); draw(); });
             _fillWrap.appendChild(_pWRow);
+          }
+
+          // Boundary assignment (contour gradient only)
+          const _primReg = anim.regions?.[0];
+          if (_primStyle === 'contour-gradient' && _primReg?.boundary?.length) {
+            const _pArcSec = document.createElement('div');
+            _pArcSec.className = 'contour-arc-section';
+            const _pIsSelecting = contourSelectMode?.animId === anim.id && contourSelectMode?.regionId === _primReg.id;
+            if (_pIsSelecting) {
+              const _pCm = contourSelectMode;
+              const _pSideColor = _pCm.side === 'b1' ? '#89b4fa' : '#cba6f7';
+              const _pSideLabel = _pCm.side === 'b1' ? 'Boundary 1' : 'Boundary 2';
+              const _pModeLbl = document.createElement('div');
+              _pModeLbl.className = 'contour-mode-label';
+              _pModeLbl.style.color = _pSideColor;
+              _pModeLbl.textContent = `Setting ${_pSideLabel}`;
+              _pArcSec.appendChild(_pModeLbl);
+              const _pCntLbl = document.createElement('div');
+              _pCntLbl.className = 'contour-mode-count';
+              const _pNNodes = _pCm.nodeIndices.length;
+              _pCntLbl.textContent = _pCm.isCenterPoint ? 'Center point selected'
+                : _pNNodes === 0 ? 'Click junction nodes on canvas (or the center point)'
+                : _pNNodes === 1 ? '1 node clicked — click the next junction (CCW) or same to close'
+                : `${_pNNodes} nodes clicked`;
+              _pArcSec.appendChild(_pCntLbl);
+              const _pCanSet = _pCm.isCenterPoint || _pNNodes >= 2;
+              const _pActRow = document.createElement('div');
+              _pActRow.className = 'contour-mode-actions';
+              const _pSetBtn = document.createElement('button');
+              _pSetBtn.className = 'contour-confirm-btn';
+              _pSetBtn.textContent = 'Set';
+              _pSetBtn.disabled = !_pCanSet;
+              _pSetBtn.addEventListener('click', e => {
+                e.stopPropagation();
+                if (!_pCanSet) return;
+                pushUndo();
+                const _pEdges = contourModeEdgesForActiveSelection(_primReg, _pCm, getCurvesMapForContourMode());
+                if (_pCm.side === 'b1') _primReg.fill1Arcs = _pEdges.length ? _pEdges : null;
+                else _primReg.fill2Arcs = _pEdges.length ? _pEdges : null;
+                contourSelectMode = null;
+                saveProject(); renderAnimList(); draw();
+              });
+              const _pCancelBtn = document.createElement('button');
+              _pCancelBtn.className = 'contour-cancel-btn';
+              _pCancelBtn.textContent = 'Cancel';
+              _pCancelBtn.addEventListener('click', e => {
+                e.stopPropagation();
+                contourSelectMode = null;
+                renderAnimList(); draw();
+              });
+              _pActRow.append(_pSetBtn, _pCancelBtn);
+              _pArcSec.appendChild(_pActRow);
+            } else {
+              const _pBHdr = document.createElement('div');
+              _pBHdr.className = 'contour-arc-heading';
+              _pBHdr.textContent = 'Boundaries';
+              _pArcSec.appendChild(_pBHdr);
+              ['b1', 'b2'].forEach(side => {
+                const _pBRow = document.createElement('div');
+                _pBRow.className = 'contour-arc-row';
+                const _pArcs = side === 'b1' ? _primReg.fill1Arcs : _primReg.fill2Arcs;
+                const _pBLbl = document.createElement('span');
+                _pBLbl.className = 'contour-arc-label';
+                _pBLbl.textContent = side === 'b1' ? 'Boundary 1' : 'Boundary 2';
+                const _pBStatus = document.createElement('span');
+                _pBStatus.className = 'contour-arc-status';
+                _pBStatus.textContent = _pArcs?.length === 1 && _pArcs[0]?.isPoint ? 'point'
+                  : _pArcs?.length ? `${_pArcs.length} arc${_pArcs.length === 1 ? '' : 's'}` : 'auto';
+                const _pBBtn = document.createElement('button');
+                _pBBtn.className = `contour-set-btn ${side}`;
+                _pBBtn.textContent = 'Set';
+                _pBBtn.title = `Draw ${side === 'b1' ? 'Boundary 1' : 'Boundary 2'} on canvas`;
+                _pBBtn.addEventListener('click', e => {
+                  e.stopPropagation();
+                  regionFillSubTab = 3;
+                  contourSelectMode = { regionId: _primReg.id, groupId: null, animId: anim.id, side, loopIndex: null, nodeIndices: [] };
+                  renderAnimList(); draw();
+                });
+                _pBRow.append(_pBLbl, _pBStatus, _pBBtn);
+                _pArcSec.appendChild(_pBRow);
+              });
+            }
+            _fillWrap.appendChild(_pArcSec);
           }
         }
 
@@ -24940,11 +25558,12 @@ function renderAnimListLegacy() {
 
       // Disagreement detection for multi-select
       const _multiSel = _selRegObjs.length > 1;
-      const _initFillOpacity = _activeReg.fillOpacity ?? 1;
-      const _mixedFillOp = _multiSel && !_selRegObjs.every(r => (r.fillOpacity ?? 1) === _initFillOpacity);
+      const _initFillOpacity = _activeReg.fillOpacity ?? 0.3;
+      const _mixedFillOp = _multiSel && !_selRegObjs.every(r => (r.fillOpacity ?? 0.3) === _initFillOpacity);
 
-      // Lock to Style sub-tab while in contour boundary select mode
-      if (contourSelectMode?.regionId === _activeReg.id) regionFillSubTab = 3;
+      // Lock to Style sub-tab while in contour boundary select mode. Region ids are per-object
+      // sequence numbers, not globally unique, so animId must also match the current object.
+      if (contourSelectMode?.animId === anim.id && contourSelectMode?.regionId === _activeReg.id) regionFillSubTab = 3;
       // Sub-tabs: Color 1 | Color 2 | Style
       const _subBar = document.createElement('div');
       _subBar.className = 'color-tab-bar';
@@ -24969,12 +25588,12 @@ function renderAnimListLegacy() {
           const _sib = _regions.find(r => r !== _activeReg && r.fillColor);
           if (_sib) {
             _activeReg.fillColor = _sib.fillColor;
-            if (!isFinite(_activeReg.fillOpacity) || _activeReg.fillOpacity <= 0) _activeReg.fillOpacity = _sib.fillOpacity ?? 0.5;
+            if (!isFinite(_activeReg.fillOpacity) || _activeReg.fillOpacity <= 0) _activeReg.fillOpacity = _sib.fillOpacity ?? 0.3;
           } else {
             const _dc = normalizeColorString(globalSettings.defaultColor);
             const _dh = _dc ? colorToHsl(_dc).h : 0;
             _activeReg.fillColor = hslToHex(_dh, 100, 50);
-            if (!isFinite(_activeReg.fillOpacity) || _activeReg.fillOpacity <= 0) _activeReg.fillOpacity = 1;
+            if (!isFinite(_activeReg.fillOpacity) || _activeReg.fillOpacity <= 0) _activeReg.fillOpacity = 0.3;
           }
           saveProject();
         }
@@ -25181,10 +25800,10 @@ function renderAnimListLegacy() {
         if (_fillStyle === 'contour-gradient' && _activeReg.boundary?.length) {
           const _arcSec = document.createElement('div');
           _arcSec.className = 'contour-arc-section';
-          const _isSelecting = contourSelectMode?.regionId === _activeReg.id;
+          const _isSelecting = contourSelectMode?.animId === anim.id && contourSelectMode?.regionId === _activeReg.id;
           if (_isSelecting) {
             const _cm = contourSelectMode;
-            const _sideColor = _cm.side === 'b1' ? '#89b4fa' : '#fab387';
+            const _sideColor = _cm.side === 'b1' ? '#89b4fa' : '#cba6f7';
             const _sideLabel = _cm.side === 'b1' ? 'Boundary 1' : 'Boundary 2';
             const _modeLbl = document.createElement('div');
             _modeLbl.className = 'contour-mode-label';
@@ -25194,11 +25813,12 @@ function renderAnimListLegacy() {
             const _cntLbl = document.createElement('div');
             _cntLbl.className = 'contour-mode-count';
             const _nNodes = _cm.nodeIndices.length;
-            _cntLbl.textContent = _nNodes === 0 ? 'Click junction nodes on canvas'
+            _cntLbl.textContent = _cm.isCenterPoint ? 'Center point selected'
+              : _nNodes === 0 ? 'Click junction nodes on canvas (or the center point)'
               : _nNodes === 1 ? '1 node clicked — click the next junction (CCW) or same to close'
               : `${_nNodes} nodes clicked`;
             _arcSec.appendChild(_cntLbl);
-            const _canSet = _nNodes >= 2;
+            const _canSet = _cm.isCenterPoint || _nNodes >= 2;
             const _actRow = document.createElement('div');
             _actRow.className = 'contour-mode-actions';
             const _setBtn = document.createElement('button');
@@ -25763,9 +26383,18 @@ function updateTilesMoreIndicator() {
 }
 
 function renderAnimList() {
-  renderAnimListLegacy();
   const detailAnim = animations.find(a => a.id === selectedId) ||
                      animations.find(a => a.id === editModeAnimId);
+  // Clear a contour boundary-selection session left over from a different object/group —
+  // otherwise its regionId (a per-object sequence number, not globally unique) can collide
+  // with an unrelated region and incorrectly lock that object's panel to the Style tab.
+  if (contourSelectMode) {
+    const stillValid = contourSelectMode.groupId
+      ? contourSelectMode.groupId === selectedGroupId
+      : contourSelectMode.animId === detailAnim?.id;
+    if (!stillValid) contourSelectMode = null;
+  }
+  renderAnimListLegacy();
   renderObjectTray(detailAnim);
   updateGroupObjectsButton();
 }
