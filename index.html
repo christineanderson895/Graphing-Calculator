@@ -7,6 +7,16 @@
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
+    /* Solid cover shown until the app finishes its initial synchronous setup (see the
+       document.getElementById('app-loading-overlay')?.remove() call at the end of the main
+       script) — hides the brief flash of unstyled/half-initialized layout on first paint. */
+    #app-loading-overlay {
+      position: fixed;
+      inset: 0;
+      background: #000;
+      z-index: 2147483647;
+    }
+
     body {
       display: flex;
       height: 100vh;
@@ -1874,6 +1884,8 @@
 </head>
 <body>
 
+<div id="app-loading-overlay"></div>
+
 <div id="corner-fold"></div>
 <div id="fold-tooltip">Switch to Graphs</div>
 
@@ -2170,6 +2182,9 @@ let hSplitDragging = false, hSplitDragStartY = 0, hSplitDragStartHeight = 0;
 let isIsolViewport = false;
 let isolationAnimIds = new Set();
 
+/* [DEAD-AUX-A] AUX_WINDOWS_ENABLED is permanently false; these two viewport-swap
+   helpers are never called (all call sites are themselves inside AUX-window-only
+   code). Commented out rather than deleted so this is trivially reversible.
 // Temporarily swap canvas, ctx, and transform to the object window so all
 // drawing helpers (drawGrid, toCanvas, etc.) render into the correct target.
 function withObjViewport(fn) {
@@ -2187,6 +2202,7 @@ function withIsolViewport(fn) {
   try { return fn(); }
   finally { canvas = sC; ctx = sCt; originX = sX; originY = sY; scale = sSc; isObjViewport = sObj; isIsolViewport = sIsol; }
 }
+[/DEAD-AUX-A] */
 
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 
@@ -2574,13 +2590,17 @@ function resize() {
     originX = mainCanvas.width  / 2;
     originY = mainCanvas.height / 2;
   }
+  /* [DEAD-AUX-A] AUX_WINDOWS_ENABLED is permanently false; this call is a no-op.
   if (AUX_WINDOWS_ENABLED) {
     resizeObjCanvas();
     resizeIsolCanvas();
   }
+  [/DEAD-AUX-A] */
   draw();
 }
 
+/* [DEAD-AUX-A] Both functions early-return immediately (flag permanently false)
+   and their only caller above is also commented out.
 function resizeObjCanvas() {
   if (!AUX_WINDOWS_ENABLED) return;
   const wrap = objCanvas.parentElement;
@@ -2600,6 +2620,7 @@ function resizeIsolCanvas() {
   isolCanvas.style.width  = wrap.clientWidth  + 'px';
   isolCanvas.style.height = wrap.clientHeight + 'px';
 }
+[/DEAD-AUX-A] */
 
 window.addEventListener('resize', resize);
 
@@ -2609,9 +2630,11 @@ function toCanvas(mathX, mathY) {
 function toMath(cx, cy) {
   return [(cx - originX) / scale, (originY - cy) / scale];
 }
+/* [DEAD-AUX-A] Never called anywhere in the file.
 function toObjMath(cx, cy) {
   return [(cx - objOriginX) / objScale, (objOriginY - cy) / objScale];
 }
+[/DEAD-AUX-A] */
 
 function drawGrid() {
   const W = canvas.width, H = canvas.height;
@@ -2624,12 +2647,19 @@ function drawGrid() {
   const startY = Math.floor(-originY / step) * step + originY;
   ctx.lineWidth = 1;
   ctx.strokeStyle = gridStrokeColor();
-  for (let x = startX; x < W; x += step) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
-  for (let y = startY; y < H; y += step) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+  // Batch every grid line into a single path/stroke() call instead of one stroke() per line —
+  // this function redraws on every mousemove while the arc-builder/shape placement preview is
+  // active, so per-line stroke() calls (each with real per-call overhead) were visibly janky.
+  ctx.beginPath();
+  for (let x = startX; x < W; x += step) { ctx.moveTo(x, 0); ctx.lineTo(x, H); }
+  for (let y = startY; y < H; y += step) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
+  ctx.stroke();
   ctx.strokeStyle = axisStrokeColor();
   ctx.lineWidth = 1.5;
-  ctx.beginPath(); ctx.moveTo(originX, 0); ctx.lineTo(originX, H); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(0, originY); ctx.lineTo(W, originY); ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(originX, 0); ctx.lineTo(originX, H);
+  ctx.moveTo(0, originY); ctx.lineTo(W, originY);
+  ctx.stroke();
   ctx.fillStyle = axisTextColor();
   ctx.font = `${11 * devicePixelRatio}px sans-serif`;
   ctx.textAlign = 'center'; ctx.textBaseline = 'top';
@@ -4266,6 +4296,16 @@ let canvasTextEditor = null;
 let activeTextEditUndoAnimId = null;
 let eccentricitySliderActiveKey  = null; // {animId, segIdx} | null — whose ecc slider is focused
 let currentTool = 'select';
+let _previewDrawRAF = null;
+// Coalesces draw() to at most once per animation frame. The placement-preview mousemove path
+// (arc-builder/shape hover, before/while placing points) previously called the full draw()
+// synchronously on every raw mousemove event, which can fire far more often than the display
+// can actually repaint — each call redraws the whole scene (grid, all objects), so redundant
+// calls within the same frame were pure wasted work and showed up as visible jank.
+function schedulePreviewDraw() {
+  if (_previewDrawRAF) return;
+  _previewDrawRAF = requestAnimationFrame(() => { _previewDrawRAF = null; draw(); });
+}
 let selectedShapeKind = 'rectangle';
 let freeformPlacementBend = 0;  // 0–100; controls bend during freeform drawing, resets to 0 per new object
 let freeformBendModifier = 0; // Legacy disabled bend control; kept only so older notes/code are easy to trace.
@@ -5187,7 +5227,12 @@ function beginObjectFrameDrag(anim, mathX, mathY) {
     startMathX: mathX, startMathY: mathY,
     origAnchors: anim.anchors.map(cloneCx),
     origSegs: anim.segments.map(s => s ? ({ h0: cloneCx(s.h0), h1: cloneCx(s.h1) }) : null),
-    ...(anim.curves ? { mergedCurves: true, origStates: anim.curves.map(cloneTransformState), origSplitAnchors: buildOrigSplitAnchors(anim) } : {}),
+    ...(anim.curves
+      ? { mergedCurves: true, origStates: anim.curves.map(cloneTransformState), origSplitAnchors: buildOrigSplitAnchors(anim) }
+      // Single self-intersecting curves have real fill regions too (see detectObjectTopology) —
+      // origSplitAnchors alone (no mergedCurves) lets the translation-update code below keep the
+      // fill boundary in sync without pulling in merged-object-only behavior elsewhere.
+      : (anim._topoSplitCurves ? { origSplitAnchors: buildOrigSplitAnchors(anim) } : {})),
   };
   frameHover = anim;
   return true;
@@ -5630,9 +5675,14 @@ function syncObjectFillToDetectedRegions(anim, fields = {}) {
 }
 
 function canFillAnim(anim) {
-  if (anim?.curves) return !!(anim.regions?.length) || anim.curves.some(c => canFillAnim(c));
-  return !!anim && (isTextAnim(anim) || (isPrimitiveAnim(anim) && animKind(anim) !== 'line') ||
-    (!isPrimitiveAnim(anim) && !isTextAnim(anim) && !!anim.closed && anim.segments?.some(seg => !!seg)));
+  if (!anim) return false;
+  // A single open curve that self-intersects (see detectObjectTopology) has real fillable
+  // regions despite not being closed — check this before the closed-curve heuristic below,
+  // which would otherwise wrongly say no.
+  if (anim.regions?.length) return true;
+  if (anim.curves) return anim.curves.some(c => canFillAnim(c));
+  return isTextAnim(anim) || (isPrimitiveAnim(anim) && animKind(anim) !== 'line') ||
+    (!isPrimitiveAnim(anim) && !isTextAnim(anim) && !!anim.closed && anim.segments?.some(seg => !!seg));
 }
 
 function isDotAnim(anim) {
@@ -6045,7 +6095,10 @@ document.addEventListener('keydown', e => {
   if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId != null) {
     e.preventDefault();
     const anim = animations.find(a => a.id === selectedId);
-    if (anim?.curves && drillObjectArc?.animId === selectedId) {
+    // deleteTopoArcs/deleteTopoArc already handle standalone (non-merged) curves correctly —
+    // this used to require anim.curves, which incorrectly fell through to deleting the whole
+    // object for a single self-intersecting curve with an arc selected in its schematic.
+    if (anim?._topoSplitCurves && drillObjectArc?.animId === selectedId) {
       if (selectedArcKeys.size > 0) { deleteSelectedTopoArcs(anim); return; }
       deleteTopoArc(anim, drillObjectArc); return;
     }
@@ -7992,6 +8045,26 @@ function primitiveHitDistance(anim, cx, cy) {
   return Infinity;
 }
 
+// True if EVERY split segment corresponding to raw segment `segIdx` (on curve `curveId`,
+// which is anim.id itself for a standalone curve) has been marked invisible by an arc
+// deletion. anim.segments/anim.curves[i].segments never carry visible:false themselves —
+// only the _topoSplitCurves copy does (see detectObjectTopology) — so anything checking a
+// raw segment's deleted state needs to cross-reference via _origSegForSplitSeg.
+function isRawSegmentDeleted(anim, curveId, segIdx) {
+  if (!anim.deletedArcs?.length) return false;
+  const splitC = anim._topoSplitCurves?.get(curveId);
+  const osm = splitC?._origSegForSplitSeg;
+  if (!osm) return false;
+  let found = false;
+  for (let s = 0; s < osm.length; s++) {
+    if (osm[s] === segIdx) {
+      found = true;
+      if (splitC.segments[s]?.visible !== false) return false;
+    }
+  }
+  return found;
+}
+
 function segmentHitCandidate(anim, cx, cy) {
   if (!anim || !isAnimEffectivelyVisible(anim) || anim.inPlacementMode) return null;
   if (isPrimitiveAnim(anim)) {
@@ -8011,10 +8084,32 @@ function segmentHitCandidate(anim, cx, cy) {
       if (dist < bestDist) { bestDist = dist; bestHit = { anim, segIdx: 0, primitive: true }; }
       continue;
     }
+    // c.segments never carries visible:false itself — only the split-curve copy in
+    // _topoSplitCurves does (see detectObjectTopology) — so a raw segIdx whose split
+    // segments are ALL hidden needs to be found via the split curve's mapping back to raw
+    // indices (_origSegForSplitSeg), otherwise a deleted arc stays hoverable/hittable at its
+    // old spot. segIdx/u below stay in raw-segment space either way — several other features
+    // (e.g. splitting a segment at the clicked point) depend on that, so this only adds a
+    // skip condition rather than changing what gets returned.
+    let _hiddenRawSegs = null;
+    if (anim.deletedArcs?.length && editModeAnimId !== anim.id) {
+      const _splitC = anim._topoSplitCurves?.get(c.id);
+      const _osm = _splitC?._origSegForSplitSeg;
+      if (_osm) {
+        const _rawVisible = new Map();
+        for (let _s = 0; _s < _osm.length; _s++) {
+          const _orig = _osm[_s];
+          const _vis = _splitC.segments[_s]?.visible !== false;
+          _rawVisible.set(_orig, (_rawVisible.get(_orig) ?? false) || _vis);
+        }
+        _hiddenRawSegs = new Set([..._rawVisible.entries()].filter(([, v]) => !v).map(([k]) => k));
+      }
+    }
     for (let segIdx = 0; segIdx < c.segments.length; segIdx++) {
       const seg = c.segments[segIdx];
       if (!seg || !seg.compiled) continue;
       if (seg.visible === false && editModeAnimId !== anim.id) continue;
+      if (_hiddenRawSegs?.has(segIdx)) continue;
       const samples = sampleCompiledAdaptive(seg.compiled);
       const hit = polylineHitInfo(samples, cx, cy);
       if (hit.dist < bestDist) {
@@ -9080,7 +9175,9 @@ canvas.addEventListener('mousedown', e => {
         startMathX: mathX, startMathY: mathY,
         origAnchors: fb.anchors.map(cloneCx),
         origSegs: fb.segments.map(s => s ? ({ h0: cloneCx(s.h0), h1: cloneCx(s.h1) }) : null),
-        ...(fb.curves ? { mergedCurves: true, origStates: fb.curves.map(cloneTransformState), origSplitAnchors: buildOrigSplitAnchors(fb) } : {}),
+        ...(fb.curves
+          ? { mergedCurves: true, origStates: fb.curves.map(cloneTransformState), origSplitAnchors: buildOrigSplitAnchors(fb) }
+          : (fb._topoSplitCurves ? { origSplitAnchors: buildOrigSplitAnchors(fb) } : {})),
       };
       selectedGroupId = null;
       selectedId = fb.id;
@@ -10113,6 +10210,8 @@ canvas.addEventListener('mousedown', e => {
 });
 
 window.addEventListener('mousemove', e => {
+  /* [DEAD-AUX-A] AUX_WINDOWS_ENABLED permanently false; splitDragging/hSplitDragging
+     can never become true (only ever set inside the also-disabled split-handle listeners).
   if (AUX_WINDOWS_ENABLED && splitDragging) {
     const viewArea = document.getElementById('view-area');
     const totalW = viewArea.getBoundingClientRect().width;
@@ -10133,6 +10232,7 @@ window.addEventListener('mousemove', e => {
     }
     return;
   }
+  [/DEAD-AUX-A] */
 
   const isIsolDrag = AUX_WINDOWS_ENABLED && (isolDragging || resizeDrag?.onIsolCanvas || rotateDrag?.onIsolCanvas ||
                      handleDrag?.onIsolCanvas || anchorDrag?.onIsolCanvas ||
@@ -10175,7 +10275,7 @@ window.addEventListener('mousemove', e => {
       updateFreeformFirstArcPathSignal(placingForPreview, rawCursor);
       updateFreeformPendingSideSignal(placingForPreview, rawCursor);
     }
-    draw(); return;
+    schedulePreviewDraw(); return;
   }
 
   if (resizeDrag) {
@@ -10399,7 +10499,7 @@ window.addEventListener('mousemove', e => {
       if (!frameDrag.hasMoved && Math.hypot(mathX - frameDrag.startMathX, mathY - frameDrag.startMathY) * scale > 3)
         frameDrag.hasMoved = true;
       applyGroupTranslation(frameDrag, dx, dy);
-      if (frameDrag.mergedCurves) updateTopoSplitCurvesForTranslation(frameDrag, dx, dy);
+      if (frameDrag.origSplitAnchors) updateTopoSplitCurvesForTranslation(frameDrag, dx, dy);
       draw(); return;
     }
     const { anim, startMathX, startMathY, origAnchors, origSegs } = frameDrag;
@@ -10411,6 +10511,10 @@ window.addEventListener('mousemove', e => {
       s.h1 = new Cx(origSegs[i].h1.re + dx, origSegs[i].h1.im + dy);
     });
     recompileAnim(anim);
+    // Single self-intersecting curves store their fill-region boundary data separately
+    // (anim._topoSplitCurves) rather than deriving it live from anim.anchors — keep it
+    // in sync with the drag so the fill doesn't lag behind the outline.
+    if (frameDrag.origSplitAnchors) updateTopoSplitCurvesForTranslation(frameDrag, dx, dy);
     updateSidebarInputs(anim);
     draw(); return;
   }
@@ -10465,13 +10569,15 @@ window.addEventListener('mousemove', e => {
           anim: _pba, startMathX: _smx, startMathY: _smy,
           origAnchors: _pba.anchors.map(cloneCx),
           origSegs: _pba.segments.map(s => s ? ({ h0: cloneCx(s.h0), h1: cloneCx(s.h1) }) : null),
-          ...(_pba.curves ? { mergedCurves: true, origStates: _pba.curves.map(cloneTransformState), origSplitAnchors: buildOrigSplitAnchors(_pba) } : {}),
+          ...(_pba.curves
+            ? { mergedCurves: true, origStates: _pba.curves.map(cloneTransformState), origSplitAnchors: buildOrigSplitAnchors(_pba) }
+            : (_pba._topoSplitCurves ? { origSplitAnchors: buildOrigSplitAnchors(_pba) } : {})),
         };
       }
       const _dx = softSnap(mathX - _smx), _dy = softSnap(mathY - _smy);
       if (frameDrag.groupId != null || frameDrag.multi || frameDrag.mergedCurves) {
         applyGroupTranslation(frameDrag, _dx, _dy);
-        if (frameDrag.mergedCurves) updateTopoSplitCurvesForTranslation(frameDrag, _dx, _dy);
+        if (frameDrag.origSplitAnchors) updateTopoSplitCurvesForTranslation(frameDrag, _dx, _dy);
       } else {
         const { anim: _fa, origAnchors: _oa, origSegs: _os } = frameDrag;
         _fa.anchors.forEach((_, i) => { _fa.anchors[i] = new Cx(_oa[i].re + _dx, _oa[i].im + _dy); });
@@ -10481,6 +10587,7 @@ window.addEventListener('mousemove', e => {
           s.h1 = new Cx(_os[i].h1.re + _dx, _os[i].h1.im + _dy);
         });
         recompileAnim(_fa);
+        if (frameDrag.origSplitAnchors) updateTopoSplitCurvesForTranslation(frameDrag, _dx, _dy);
         updateSidebarInputs(_fa);
       }
       renderAnimList(); draw(); updateCursor();
@@ -10931,18 +11038,48 @@ window.addEventListener('mouseup', e => {
     renderAnimList(); draw(); updateCursor(); return;
   }
   if (rotateDrag) {
+    const _rotAnim = rotateDrag.anim;
     rotateDrag = null;
+    // Rebuild split curves and region fills after rotating — mirrors the resize-drag mouseup
+    // handling above (same condition, same skipSpatialMigration rationale: rotation moves
+    // everything, so the old absolute-position centroid used by spatial migration could land
+    // outside the new region; ordinal mapping is correct instead). Group/multi rotation isn't
+    // covered here, matching resize's existing scope — rotateDrag.anim is undefined for those.
+    if (_rotAnim && ((!isPrimitiveAnim(_rotAnim) && canFillAnim(_rotAnim)) ||
+        _rotAnim.regions?.length || _rotAnim._topoSplitCurves)) {
+      detectObjectTopology(_rotAnim, { skipSpatialMigration: true });
+    }
+    // See the matching comment in the resizeDrag mouseup handling above: pushUndo() at
+    // rotate-drag start schedules a deferred save that can fire while anim.regions is still
+    // emptied — re-save here so the corrected, rebuilt state is what actually persists.
+    saveProject();
     renderAnimList(); draw(); updateCursor(); return;
   }
   if (handleDrag) {
-    const _hdParent = animations.find(p => p.curves?.includes(handleDrag.anim));
+    const _hdAnim = handleDrag.anim;
+    const _hdParent = animations.find(p => p.curves?.includes(_hdAnim));
     if (_hdParent) detectObjectTopology(_hdParent);
+    // Standalone (non-merged) object: mirrors the resizeDrag/rotateDrag mouseup handling
+    // above — without this, a standalone curve's cached regions/_topoSplitCurves (fill,
+    // schematic node dots) never rebuild after a handle drag, and pushUndo()'s deferred
+    // save persists the stale pre-drag topology. skipSpatialMigration: region count doesn't
+    // change from a single handle drag, so ordinal mapping is correct — the default
+    // centroid-based migration can miss when the drag moves the region's centroid outside
+    // its old shape (same rationale as resize/rotate/translate above).
+    else if ((!isPrimitiveAnim(_hdAnim) && canFillAnim(_hdAnim)) || _hdAnim.regions?.length || _hdAnim._topoSplitCurves) {
+      detectObjectTopology(_hdAnim, { skipSpatialMigration: true }); saveProject();
+    }
     handleDrag = null;
     renderAnimList(); draw(); updateCursor(); return;
   }
   if (anchorDrag) {
-    const _adParent = animations.find(p => p.curves?.includes(anchorDrag.anim));
+    const _adAnim = anchorDrag.anim;
+    const _adParent = animations.find(p => p.curves?.includes(_adAnim));
     if (_adParent) detectObjectTopology(_adParent);
+    // Standalone (non-merged) object: see matching comment in the handleDrag branch above.
+    else if ((!isPrimitiveAnim(_adAnim) && canFillAnim(_adAnim)) || _adAnim.regions?.length || _adAnim._topoSplitCurves) {
+      detectObjectTopology(_adAnim, { skipSpatialMigration: true }); saveProject();
+    }
     anchorDrag = null;
     renderAnimList(); draw(); updateCursor(); return;
   }
@@ -11068,7 +11205,10 @@ window.addEventListener('mouseup', e => {
 
   if (frameDrag) {
     const wasTiny = Math.hypot(e.clientX - mouseDownClientX, e.clientY - mouseDownClientY) < 5;
-    const _fdMergedAnim = frameDrag.mergedCurves ? frameDrag.anim : null;
+    // origSplitAnchors is set for merged objects AND single self-intersecting curves
+    // alike (see beginObjectFrameDrag etc.) — either way, this object has separately
+    // stored fill-region boundary data that needs the same post-drag refresh.
+    const _fdTopoAnim = frameDrag.origSplitAnchors ? frameDrag.anim : null;
     if (wasTiny) {
       // Tiny click on frame: undo the translate and just exit edit mode
       undoStack.pop();
@@ -11076,11 +11216,11 @@ window.addEventListener('mouseup', e => {
       exitEditMode();
     } else {
       frameDrag = null;
-      // Recompute split curves and region fills after moving a merged object.
+      // Recompute split curves and region fills after moving an object with fill regions.
       // During drag, _topoSplitCurves holds stale compiled closures; rebuilding
       // here keeps the fill aligned with the outline after release.
       // skipSpatialMigration: a translation doesn't change topology — ordinal mapping is correct.
-      if (_fdMergedAnim) detectObjectTopology(_fdMergedAnim, { skipSpatialMigration: true });
+      if (_fdTopoAnim) detectObjectTopology(_fdTopoAnim, { skipSpatialMigration: true });
     }
     renderAnimList(); draw(); updateCursor(); return;
   }
@@ -11150,6 +11290,10 @@ canvas.addEventListener('wheel', e => {
 
 // ── Object window event handlers ──
 
+/* [DEAD-AUX-A] All listeners in this block (through the h-split-handle mousedown
+   below) are attached to the two AUX-window-only elements, or early-return
+   immediately because AUX_WINDOWS_ENABLED is permanently false. None of them
+   ever produce an observable effect today.
 objCanvas.addEventListener('mousedown', e => {
   if (!AUX_WINDOWS_ENABLED) return;
   e.preventDefault();
@@ -11776,6 +11920,7 @@ document.getElementById('h-split-handle').addEventListener('mousedown', e => {
   document.getElementById('h-split-handle').classList.add('dragging');
   e.preventDefault();
 });
+[/DEAD-AUX-A] */
 
 document.addEventListener('mousedown', e => {
   if (!rotationModeTarget) return;
@@ -12903,9 +13048,10 @@ function selectedObjectCanvasBounds(anim) {
     return { left: x - r, right: x + r, top: y - r, bottom: y + r };
   }
 
-  // For merged animations with arc deletions use split curves (visibility-marked) so the
-  // frame reflects only the visible shape, not the full extent of the source primitives.
-  if (anim.curves && anim._topoSplitCurves && anim.deletedArcs?.length) {
+  // For animations with arc deletions (merged, or a single self-intersecting curve) use split
+  // curves (visibility-marked) so the frame reflects only the visible shape, not the full
+  // extent of the source primitives.
+  if (anim._topoSplitCurves && anim.deletedArcs?.length) {
     let bounds = null;
     for (const splitCurve of anim._topoSplitCurves.values()) {
       for (const seg of splitCurve.segments) {
@@ -12993,9 +13139,10 @@ function selectedTopoArcsCanvasBounds(anim) {
   const { topoArcs } = computeObjectTopologyData(anim);
   let bounds = null;
   for (const arc of topoArcs.filter(a => selectedArcKeys.has(a.label))) {
-    // Merged objects: use split curve (arc index space matches _topoSplitCurves).
-    // Standalone freeforms: use original curve — split curve anchors/compiled go stale after drag.
-    const curve = (anim.curves ? anim._topoSplitCurves?.get(arc.curveId) : null)
+    // arc.fromIdx/toIdx index into the split-curve data (see detectObjectTopology), which
+    // exists for standalone self-intersecting curves too — try it first regardless of merge
+    // status, falling back to the live curve only if topology hasn't been computed.
+    const curve = anim._topoSplitCurves?.get(arc.curveId)
       ?? animCurves(anim).find(c => c.id === arc.curveId);
     if (!curve) continue;
     const { fromIdx, toIdx, wrapAround } = arc;
@@ -13140,9 +13287,10 @@ function objectMathBounds(anim) {
     return { left: center.re - r, right: center.re + r, bottom: center.im - r, top: center.im + r };
   }
 
-  // For merged animations with arc deletions, use the visibility-marked split curves so the
-  // frame shrinks to only the visible portions (deleted arcs are marked visible:false).
-  if (anim.curves && anim._topoSplitCurves && anim.deletedArcs?.length) {
+  // For animations with arc deletions (merged, or a single self-intersecting curve), use the
+  // visibility-marked split curves so the frame shrinks to only the visible portions
+  // (deleted arcs are marked visible:false).
+  if (anim._topoSplitCurves && anim.deletedArcs?.length) {
     let bounds = null;
     for (const splitCurve of anim._topoSplitCurves.values()) {
       for (const seg of splitCurve.segments) {
@@ -14883,6 +15031,15 @@ function beginRotationDragFromHit(rotateHit, mathX, mathY, flags = {}) {
         ...(rotateHit.anim.curves ? { mergedCurves: true, origStates: rotateHit.anim.curves.map(cloneTransformState) } : {}),
         ...flags,
       };
+      // Rotation (like resize) doesn't keep _topoSplitCurves in sync live during the drag —
+      // stash and clear the fill so a stale-positioned fill isn't shown while rotating; the
+      // mouseup handler below recomputes it once the rotation is finalized. Matches the
+      // resize-drag pattern (see resizeHit.anim handling above) for both merged objects and
+      // single self-intersecting curves.
+      if (!isPrimitiveAnim(rotateHit.anim)) {
+        if (rotateHit.anim.regions?.length) rotateHit.anim._savedPriorRegions = rotateHit.anim.regions;
+        rotateHit.anim.regions = [];
+      }
     }
   } else if (rotateHit.groupId != null) {
     const wheel = groupSelectionRotationWheel(rotateHit.groupId);
@@ -15743,15 +15900,29 @@ function drawCommittedAnimation(anim, { deferOverlay = false } = {}) {
       drawCurveFill(_fProxy, null, 1, isClosedFill ? [] : higherLayerBlockersFor(anim));
     }
   }
-  for (let i = 0; i < anim.segments.length; i++) {
-    const _as = getArcStyleForSegment(anim, anim.id, i);
+  // Use the split curve when available so that deleted-arc segments (visible=false) are
+  // respected — mirrors the anim.curves branch above, which already did this. Without it,
+  // a single self-intersecting curve's stroke ignored arc deletion entirely: detectObjectTopology
+  // correctly re-traced the fill regions around the hidden segment, but the outline kept drawing
+  // every original segment unconditionally, since it never consulted _topoSplitCurves at all.
+  // Resize/rotate don't keep _topoSplitCurves live during their drag (same reason the fill and
+  // node dots are hidden for that window above) — using it here would freeze the outline at its
+  // pre-drag shape instead of following the live resize/rotate, so fall back to the live anim
+  // segments during those specific drags, same tradeoff the anim.curves branch above makes.
+  const _inRotateDrag = !!(rotateDrag && rotateDrag.anim === anim);
+  const _stdSplitC = (!_inResizeDrag && !_inRotateDrag) ? (anim._topoSplitCurves?.get(anim.id) ?? null) : null;
+  const _stdRenderC = _stdSplitC ?? anim;
+  for (let i = 0; i < _stdRenderC.segments.length; i++) {
+    const _as = _stdSplitC
+      ? getArcStyleForSplitSegment(anim, anim.id, i)
+      : getArcStyleForSegment(anim, anim.id, i);
     const _outerSoft = _as?.outerSoftness ?? anim.outerSoftness ?? 0;
     const _innerSoft = _as?.innerSoftness ?? anim.innerSoftness ?? 0;
     if (_as && (_as.color || _as.thickness !== undefined || _as.opacity !== undefined)) {
-      drawSegment(anim, i, _as.color ?? null, 1, _as.thickness ?? null,
+      drawSegment(_stdRenderC, i, _as.color ?? null, 1, _as.thickness ?? null,
         _as.opacity !== undefined ? _as.opacity * clamp(anim.outlineOpacity ?? 1, 0, 1) * _globalCanvasDimFactor : null, _outerSoft, _innerSoft);
     } else {
-      drawSegment(anim, i, null, 1, null, null, _outerSoft, _innerSoft);
+      drawSegment(_stdRenderC, i, null, 1, null, null, _outerSoft, _innerSoft);
     }
   }
   if (!deferOverlay) drawSelectedObjectBounds(anim);
@@ -15893,7 +16064,9 @@ function drawAnimations() {
       drawPrimitive(segmentHover.anim, 8 * dpr, 0.22);
     } else {
       const seg = segmentHover.anim.segments[segmentHover.segIdx];
-      if (seg && seg.compiled && activeArcIndex(segmentHover.anim) !== segmentHover.segIdx) {
+      const _hovDeleted = editModeAnimId !== segmentHover.anim.id &&
+        isRawSegmentDeleted(segmentHover.anim, segmentHover.anim.id, segmentHover.segIdx);
+      if (seg && seg.compiled && !_hovDeleted && activeArcIndex(segmentHover.anim) !== segmentHover.segIdx) {
         const cw = zoomStrokeWidth(segmentHover.anim.thickness);
         drawCompiledCurve(seg.compiled, segmentHover.anim.color, cw + 8 * dpr, 0.22);
       }
@@ -16022,16 +16195,23 @@ function drawAnimations() {
       const _inEditMode = editModeAnimId === mainSel.id;
       if (_inEditMode) drawNonNodeAnchorDots(mainSel);
       const _arcEditActive = editNodesMode || drillObjectArc?.animId === mainSel.id;
-      if (mainSel.curves) drawNodeDots(mainSel);
+      // Node dots apply to any object with real topology data (merged, or a single
+      // self-intersecting curve) — not just merges. Also require anim.regions?.length: during
+      // a resize/rotate drag, regions is intentionally emptied (see resizeDrag/rotateDrag
+      // mousedown handling) because _topoSplitCurves positions go stale until the drag ends —
+      // hide the dots for that same window instead of showing them frozen in their old spots.
+      if (mainSel._topoSplitCurves && mainSel.regions?.length) drawNodeDots(mainSel);
       // Bézier handles for all selected arcs
       if (drillObjectArc?.animId === mainSel.id && selectedArcKeys.size > 0) {
         const { topoArcs: _allArcs } = computeObjectTopologyData(mainSel);
         const _arcsToShow = _allArcs.filter(a => selectedArcKeys.has(a.label));
         for (const _arc of _arcsToShow) {
-          let _handleCurve;
-          if (mainSel.curves) {
-            _handleCurve = mainSel._topoSplitCurves?.get(_arc.curveId) ?? null;
-          } else {
+          // arc.fromIdx/toIdx are indices into the split-curve data (see detectObjectTopology),
+          // which exists for standalone self-intersecting curves too — try it first regardless
+          // of merge status, only falling back to the live (unsplit) curve if topology hasn't
+          // been computed for some reason.
+          let _handleCurve = mainSel._topoSplitCurves?.get(_arc.curveId) ?? null;
+          if (!_handleCurve) {
             _handleCurve = (mainSel.closed && mainSel.segments.length >= mainSel.anchors.length)
               ? { ...mainSel, anchors: [...mainSel.anchors, mainSel.anchors[0]] }
               : mainSel;
@@ -19561,7 +19741,7 @@ function circleAngleAndSegment(ca, point, n = 12) {
 // position) and forceMerges pairs up the corresponding split anchors across curves so the
 // DCEL union-find merges them without relying on spatial proximity.
 function splitRawCurvesAtIntersections(rawCurves) {
-  if (rawCurves.length < 2) return { splitCurves: rawCurves, forceMerges: [] };
+  if (rawCurves.length < 1) return { splitCurves: rawCurves, forceMerges: [] };
 
   // Phase 1: collect all crossings and plan splits.
   const crossingRecords = [];
@@ -19574,6 +19754,76 @@ function splitRawCurvesAtIntersections(rawCurves) {
     if (!snapOverrides.has(curve.id)) snapOverrides.set(curve.id, new Map());
     snapOverrides.get(curve.id).set(anchorIdx, new Cx(pt.re, pt.im));
   };
+
+  // Phase 0: self-intersections within a single curve (e.g. an arcbuilder path that
+  // crosses over itself). The pair-based phases below only ever compare DIFFERENT
+  // curves (bi = ai + 1...), so a lone self-crossing curve (rawCurves.length === 1)
+  // would otherwise never get split at its own crossing points, leaving the DCEL
+  // face-tracer to walk the whole outline as one non-simple loop instead of N
+  // independent faces. Every segment pair is checked, including adjacent ones —
+  // an endpoint of the curve (start or end anchor) can be a genuine self-crossing
+  // against the very next/previous segment's body, which is a real topological node,
+  // not the trivial vertex the two segments share. Only that specific shared-vertex
+  // combination (tA≈1 on the earlier segment paired with tB≈0 on the later one, or
+  // the wrap-around equivalent for closed curves) is discarded per-hit below —
+  // everything else on an adjacent pair is kept.
+  for (const A of rawCurves) {
+    const nSeg = A.segments.length;
+    if (nSeg < 2) continue;
+    console.warn(`[selfx-struct] curve=${A.id} closed=${A.closed} anchors=${A.anchors.length} segs=${nSeg} uncompiled=[${A.segments.map((s,i)=>s?.compiled?null:i).filter(x=>x!==null).join(',')}] anchorPts=[${A.anchors.map(p=>`(${p.re.toFixed(1)},${p.im.toFixed(1)})`).join(' ')}]`);
+    const pairHits = [];
+    for (let sa = 0; sa < nSeg; sa++) {
+      if (!A.segments[sa]?.compiled) continue;
+      for (let sb = sa + 1; sb < nSeg; sb++) {
+        if (!A.segments[sb]?.compiled) continue;
+        const isAdjacent = sb === sa + 1;
+        const isWrapAdjacent = A.closed && sa === 0 && sb === nSeg - 1;
+        const hits = findCrossSegmentIntersections(A.segments[sa].compiled, A.segments[sb].compiled);
+        for (const { tA, tB, point } of hits) {
+          if (isAdjacent && tA >= 0.995 && tB <= 0.005) continue;
+          if (isWrapAdjacent && tA <= 0.005 && tB >= 0.995) continue;
+          const nearA = tA <= 0.005 || tA >= 0.995;
+          const nearB = tB <= 0.005 || tB >= 0.995;
+          const anchorIdxA_orig = tA >= 0.5 ? (sa + 1 < A.anchors.length ? sa + 1 : 0) : sa;
+          const anchorIdxB_orig = tB >= 0.5 ? (sb + 1 < A.anchors.length ? sb + 1 : 0) : sb;
+          pairHits.push({ sa, sb, tA, tB, nearA, nearB, anchorIdxA_orig, anchorIdxB_orig, point });
+        }
+      }
+    }
+    // Global dedup, same rationale as the cross-curve phase below.
+    const dedupedHits = [];
+    for (const hit of pairHits) {
+      const existing = dedupedHits.find(h =>
+        Math.hypot(h.point.re - hit.point.re, h.point.im - hit.point.im) < 0.5
+      );
+      if (existing) {
+        const hitScore = Math.min(hit.tA, 1 - hit.tA) + Math.min(hit.tB, 1 - hit.tB);
+        const exScore  = Math.min(existing.tA, 1 - existing.tA) + Math.min(existing.tB, 1 - existing.tB);
+        if (hitScore > exScore) Object.assign(existing, hit);
+      } else {
+        dedupedHits.push({ ...hit });
+      }
+    }
+    if (dedupedHits.length > 10) continue;
+    if (dedupedHits.length > 0) console.warn(`[selfx-diag] curve=${A.id} nSeg=${nSeg} hits=${dedupedHits.length}:`, dedupedHits.map(h => `sa=${h.sa} sb=${h.sb} tA=${h.tA.toFixed(4)} tB=${h.tB.toFixed(4)} nearA=${h.nearA} nearB=${h.nearB} pt=(${h.point.re.toFixed(2)},${h.point.im.toFixed(2)})`));
+    for (const { sa, sb, tA, tB, nearA, nearB, anchorIdxA_orig, anchorIdxB_orig, point } of dedupedHits) {
+      if (nearA) {
+        _addSnap(A, anchorIdxA_orig, point);
+      } else {
+        if (!splitPlan.has(A.id)) splitPlan.set(A.id, new Map());
+        if (!splitPlan.get(A.id).has(sa)) splitPlan.get(A.id).set(sa, []);
+        splitPlan.get(A.id).get(sa).push({ t: tA, point, exactPoint: point });
+      }
+      if (nearB) {
+        _addSnap(A, anchorIdxB_orig, point);
+      } else {
+        if (!splitPlan.has(A.id)) splitPlan.set(A.id, new Map());
+        if (!splitPlan.get(A.id).has(sb)) splitPlan.get(A.id).set(sb, []);
+        splitPlan.get(A.id).get(sb).push({ t: tB, point, exactPoint: point });
+      }
+      crossingRecords.push({ A, B: A, sa, sb, tA, tB, nearA, nearB, anchorIdxA_orig, anchorIdxB_orig });
+    }
+  }
 
   // Phase 1a: analytical intersections for circle-circle pairs (exact geometry).
   // When the intersection is near a segment boundary (t < 0.05 or t > 0.95), snap the
@@ -19737,6 +19987,13 @@ function splitRawCurvesAtIntersections(rawCurves) {
       if (inferred) {
         const updatedCa = { ...c._circleArc, center: inferred.center, rx: inferred.rx, ry: inferred.ry };
         cForSplit = cForSplit === c ? { ...c, _circleArc: updatedCa } : { ...cForSplit, _circleArc: updatedCa };
+      } else {
+        // Anchors no longer sit on a uniform circle (e.g. a node was manually dragged out of
+        // place) — leaving the stale _circleArc in place would make addRegionBoundaryToPathLike
+        // draw an exact arc at the OLD circle's center/radius for this curve, ignoring the
+        // actual edited shape entirely. Clear it so rendering falls back to sampling the real
+        // (edited) Bézier segments, same as any other freeform curve.
+        cForSplit = cForSplit === c ? { ...c, _circleArc: null } : { ...cForSplit, _circleArc: null };
       }
     }
     splitResults.set(c.id, splitCurveAtTs(cForSplit, splitPlan.get(c.id)));
@@ -19832,12 +20089,14 @@ function detectObjectTopology(anim, { skipSpatialMigration = false } = {}) {
       const sc = anim._topoSplitCurves.get(d.curveId);
       if (!sc) continue;
       const nS = sc.segments.length;
+      let _markedCount = 0;
       for (let s = 0; s < nS; s++) {
         if (!sc.segments[s]) continue;
         const inRange = d.wrapAround ? (s >= d.fromIdx || s < d.toIdx)
                                      : (s >= d.fromIdx && s < d.toIdx);
-        if (inRange) sc.segments[s] = { ...sc.segments[s], visible: false };
+        if (inRange) { sc.segments[s] = { ...sc.segments[s], visible: false }; _markedCount++; }
       }
+      console.warn(`[selfx-arcdiag] deletedArc curveId=${d.curveId} fi=${d.fromIdx} ti=${d.toIdx} wrap=${!!d.wrapAround} nSeg=${nS} markedInvisible=${_markedCount}`);
     }
   }
 
@@ -19895,6 +20154,28 @@ function detectObjectTopology(anim, { skipSpatialMigration = false } = {}) {
       for (const b of curves) {
         if (b === a || !b.closed) continue;
         for (let j = 0; j < b.anchors.length; j++) {
+          const pj = b.anchors[j];
+          if (Math.hypot(pj.re - pi.re, pj.im - pi.im) < EPSILON)
+            ufUnion(ki, keyToNode.get(`${b.id}:${j}`));
+        }
+      }
+    }
+  }
+  // Cross-curve open-endpoint-onto-open-endpoint vertex merge: two OPEN curves' own
+  // endpoints coinciding (e.g. several arc-builder segments merged end-to-end into a
+  // closed loop, snapped together by snapMergedCorners) is a genuine intentional join.
+  // Restricted to endpoint-vs-endpoint only (never endpoint-vs-interior-anchor) so this
+  // can't reproduce the interior-anchor false-positive that the closed-curve pass above
+  // was narrowed to avoid.
+  for (const a of curves) {
+    if (a.closed) continue;
+    for (const i of [0, a.anchors.length - 1]) {
+      if (!isOpenEndpoint(a, i)) continue;
+      const pi = a.anchors[i], ki = keyToNode.get(`${a.id}:${i}`);
+      for (const b of curves) {
+        if (b === a || b.closed) continue;
+        for (const j of [0, b.anchors.length - 1]) {
+          if (!isOpenEndpoint(b, j)) continue;
           const pj = b.anchors[j];
           if (Math.hypot(pj.re - pi.re, pj.im - pi.im) < EPSILON)
             ufUnion(ki, keyToNode.get(`${b.id}:${j}`));
@@ -20075,6 +20356,10 @@ function detectObjectTopology(anim, { skipSpatialMigration = false } = {}) {
     anim.fillColor = null;
     anim.fillOpacity = 0;
   }
+  console.warn(`[selfx-regions] anim=${anim.id} regionCount=${anim.regions.length}:`, anim.regions.map(r => {
+    const c = _sampleRegionCentroid(r, curvesMap);
+    return `id=${r.id} fill=${r.fillColor ?? 'none'} holes=${r.holeBoundaries?.length ?? 0} cent=${c ? `(${c[0].toFixed(1)},${c[1].toFixed(1)})` : 'n/a'}`;
+  }));
 }
 
 // Returns { essentialPoints: [{num, pos}], topoArcs: [{label, fromNum, toNum, curveId, fromIdx, toIdx}] }
@@ -20221,7 +20506,7 @@ function computeObjectTopologyData(anim) {
   // Essential = open-curve endpoint OR interior junction OR user-promoted anchor.
   // Corner detection is removed; closed curves use anchor 0 as default when no other essential exists.
   const endpointRoots = new Set();
-  const _rootCurves = new Map();
+  const _rootPoints = new Map();
   for (let j = 0; j < pts.length; j++) {
     const { c, i } = pts[j];
     if (fullyCoveredIds.has(c.id)) continue;
@@ -20245,12 +20530,24 @@ function computeObjectTopologyData(anim) {
     if ((!prevVis && !nextVis && !isOpenEndpoint) || endpointSegDeleted) continue;
     const root = find(j);
     if (!c.closed && (i === 0 || i === c.anchors.length - 1)) endpointRoots.add(root);
-    if (!_rootCurves.has(root)) _rootCurves.set(root, new Set());
-    _rootCurves.get(root).add(c);
+    if (!_rootPoints.has(root)) _rootPoints.set(root, []);
+    _rootPoints.get(root).push({ c, i });
     if (c.promotedAnchors?.[i]) endpointRoots.add(root);
   }
-  for (const [root, cs] of _rootCurves) {
-    if (cs.size >= 2) endpointRoots.add(root);
+  for (const [root, points] of _rootPoints) {
+    const uniqueCurves = new Set(points.map(p => p.c));
+    // Cross-curve intersection: two or more distinct curves meet at this location.
+    if (uniqueCurves.size >= 2) { endpointRoots.add(root); continue; }
+    // Self-intersection: the SAME curve visits this location more than once (e.g. an
+    // arcbuilder path crossing its own body) — except the trivial case of a closed
+    // curve's start anchor coinciding with its own virtual closing anchor (index 0 and
+    // the last index), which is a bookkeeping artifact, not a real crossing.
+    if (points.length >= 2) {
+      const [p0, p1] = points;
+      const isClosingSeamPair = points.length === 2 && p0.c === p1.c &&
+        ((p0.i === 0 && p1.i === p0.c.anchors.length - 1) || (p1.i === 0 && p0.i === p0.c.anchors.length - 1));
+      if (!isClosingSeamPair) endpointRoots.add(root);
+    }
   }
   // For closed curves: anchor 0 is always a default node unless it is already an
   // endpoint root in its own right (open-curve endpoint or self-promoted).
@@ -20344,11 +20641,9 @@ function computeObjectTopologyData(anim) {
         return essentialPoints.filter(ep => activeNums.has(ep.num));
       })()
     : essentialPoints;
-  if (anim.deletedArcs?.length && !anim._diagTopoLogged) {
-    anim._diagTopoLogged = true;
+  if (anim.deletedArcs?.length) {
     const _nRemoved = topoArcs.length - filteredArcs.length;
-    if (_nRemoved > anim.deletedArcs.length)
-      console.warn('[topo] filteredArcs removed', _nRemoved, 'arcs but only', anim.deletedArcs.length, 'are in deletedArcs — possible index mismatch. allArcs:', topoArcs.map(a => `${a.label}(c=${a.curveId},fi=${a.fromIdx},ti=${a.toIdx})`).join(' | '), 'deleted:', JSON.stringify(anim.deletedArcs.map(d => ({ c: d.curveId, fi: d.fromIdx, ti: d.toIdx }))));
+    console.warn(`[selfx-arcdiag] deletedArcs=${_nRemoved}/${anim.deletedArcs.length} matched. allArcs:`, topoArcs.map(a => `${a.label}(c=${a.curveId},fi=${a.fromIdx},ti=${a.toIdx})`).join(' | '), 'deletedArcs:', JSON.stringify(anim.deletedArcs.map(d => ({ c: d.curveId, fi: d.fromIdx, ti: d.toIdx, wrap: d.wrapAround }))));
   }
   return { essentialPoints: filteredEssentialPoints, topoArcs: filteredArcs };
 }
@@ -20802,11 +21097,29 @@ function addRegionBoundaryToPathLike(target, boundary, curvesMap) {
       const isCircle = Math.abs(ca.rx - ca.ry) < 1e-9;
       const [ccx, ccy] = toCanvas(ca.center.re, ca.center.im);
       const rx_c = ca.rx * scale, ry_c = ca.ry * scale;
-      const startAnchor = anim.anchors[fwd ? sMin : sMax];
-      const endAnchor   = anim.anchors[fwd ? sMax : sMin];
-      if (startAnchor && endAnchor) {
-        const [sax, say] = toCanvas(startAnchor.re, startAnchor.im);
-        const [eax, eay] = toCanvas(endAnchor.re,   endAnchor.im);
+      // Read the endpoint position from the adjacent segment's live compiled closure, not
+      // anim.anchors[idx] — anim here is the curvesMap/_topoSplitCurves entry, whose anchors
+      // array is a frozen clone taken at the last full detectObjectTopology (the "virtual
+      // closing anchor" step rebuilds it as [...anchors, anchors[0]]). During a live drag
+      // (before the next detectObjectTopology at mouseup), that clone doesn't see per-frame
+      // anchor mutations, while .compiled IS rebuilt fresh every frame by recompileAnim on
+      // the shared segment object — so sampling it here keeps this check accurate mid-drag.
+      const canvasPointAtAnchorIdx = idx => {
+        const segAtIdx = anim.segments[idx];
+        if (segAtIdx?.compiled) return compiledCanvasPoint(segAtIdx.compiled, 0);
+        const segBefore = anim.segments[idx - 1];
+        return segBefore?.compiled ? compiledCanvasPoint(segBefore.compiled, 1) : null;
+      };
+      const startPt = canvasPointAtAnchorIdx(fwd ? sMin : sMax);
+      const endPt   = canvasPointAtAnchorIdx(fwd ? sMax : sMin);
+      // Live-drag guard: if either endpoint has been dragged off the recorded circle/ellipse
+      // (stale ca not yet recomputed by detectObjectTopology, which only runs at drag mouseup),
+      // fall through to the normal Bézier-sampled path below for this segment instead of
+      // drawing a stale exact arc that ignores the in-progress edit.
+      const _onEllipseCanvas = p => p && Math.abs(Math.hypot((p[0] - ccx) / rx_c, (p[1] - ccy) / ry_c) - 1) < 0.02;
+      if (startPt && endPt && _onEllipseCanvas(startPt) && _onEllipseCanvas(endPt)) {
+        const [sax, say] = startPt;
+        const [eax, eay] = endPt;
         let startAngle, endAngle;
         if (isCircle) {
           startAngle = Math.atan2(say - ccy, sax - ccx);
@@ -23738,10 +24051,14 @@ function drawObjectSchematic(canvasEl, anim, opts = {}) {
 
   const visualPrimitives = [];
   const _schSplitMap = anim._topoSplitCurves;
-  // Only use split map for merged objects (anim.curves). For standalone freeforms,
-  // _topoSplitCurves anchors are not updated during drag and become stale, causing
-  // the schematic to mix old anchor positions with translated handles → chaos.
-  const _useSchSplitMap = !!(_schSplitMap?.size && anim.curves);
+  // Use the split map whenever it exists — for merged objects AND single self-intersecting
+  // curves, both of which need it to respect deleted-arc visibility (see the stroke loop
+  // below, which skips seg.visible===false). The one exception is mid-resize/rotate: neither
+  // keeps _topoSplitCurves live during their drag (same reason the main-canvas fill/nodes/
+  // outline are hidden or fall back to the live curve during that window), so using it here
+  // would freeze the schematic at the pre-drag shape.
+  const _schInResizeOrRotate = !!((resizeDrag && resizeDrag.anim === anim) || (rotateDrag && rotateDrag.anim === anim));
+  const _useSchSplitMap = !!(_schSplitMap?.size && !_schInResizeOrRotate);
   let curves;
   if (_useSchSplitMap) {
     curves = [..._schSplitMap.values()].filter(c => !isTextAnim(c));
@@ -23803,7 +24120,12 @@ function drawObjectSchematic(canvasEl, anim, opts = {}) {
 
 
   const { essentialPoints, topoArcs } = computeObjectTopologyData(anim);
-  const curvesMap = _useSchSplitMap ? _schSplitMap : new Map(curves.map(c => [c.id, c]));
+  // Region boundaries (region.boundary) always index into the intersection-split curve data
+  // (see detectObjectTopology), regardless of whether this is a merged object or a single
+  // self-intersecting freeform — buildTopologyCurvesMap is the one shared, already-correct
+  // source for that mapping (same one drawObjectRegionFillsForAnim uses for the main canvas
+  // fill), so region fills here match what's actually drawn on canvas.
+  const curvesMap = buildTopologyCurvesMap(anim);
 
   const selArcLabels = opts.selectedArcLabels ?? new Set();
   const hovArcLabel  = opts.hoveredArcLabel ?? null;
@@ -23946,10 +24268,15 @@ function drawObjectSchematic(canvasEl, anim, opts = {}) {
     ctx.restore();
   }
 
-  // 4. Node dots (small, no labels) — only for merged objects; standalone freeforms have one
-  // arbitrary node (anchor 0) that is not meaningful in the schematic, and its position comes
-  // from stale _topoSplitCurves after drag, so it appears outside the circle.
-  const _showSchematicNodes = !!anim.curves || hovNodeNum >= 0;
+  // 4. Node dots (small, no labels). A single essential point is just the meaningless default
+  // anchor-0 fallback for a closed curve with no real crossings (see computeObjectTopologyData) —
+  // skip that case. Two or more means genuine topology: open-curve endpoints, or real
+  // self/cross-curve intersections, regardless of whether this is a merged object or a single
+  // self-intersecting curve. Also require anim.regions?.length: during a resize/rotate drag,
+  // regions is intentionally emptied until the drag ends (see resizeDrag/rotateDrag mousedown
+  // handling), since _topoSplitCurves positions go stale mid-drag — hide the dots for that
+  // window rather than showing them frozen in their pre-drag spots.
+  const _showSchematicNodes = (essentialPoints.length >= 2 && anim.regions?.length) || hovNodeNum >= 0;
   if (_showSchematicNodes) {
     const _dotR = 3 * dpr;
     ctx.save();
@@ -26648,11 +26975,14 @@ function draw() {
     if (freeformPenCapture) drawFreeformPenOverlay();
     positionCanvasTextEditor();
   }
-  if (AUX_WINDOWS_ENABLED && currentMode === 'animations') { drawObjectWindow(); drawIsolationWindow(); }
+  /* [DEAD-AUX-A] AUX_WINDOWS_ENABLED permanently false. */
 }
 
 // ── Object window helpers ──
 
+// [DEAD-AUX-A retracted] fitObjWindow (called from enterEditMode and elsewhere,
+// unconditionally, not just from the AUX-window-only call site) depends on this —
+// it is NOT safe to remove without also editing 7 other call sites. Restored.
 function getObjWindowAnims() {
   if (tilesDrillPath.length > 0 && editModeAnimId === null && selectedId === null) {
     return allDescendantAnims(currentDrillGroupId()).filter(a => a.visible && !a.inPlacementMode);
@@ -26688,6 +27018,10 @@ function animsMathBounds(anims) {
   return isFinite(minX) ? { minX, maxX, minY, maxY } : null;
 }
 
+// [DEAD-AUX-A retracted] These early-return immediately (flag permanently false),
+// but enterEditMode and other live selection code call fitObjWindow/fitIsolationWindow
+// unconditionally in several places — not safe to remove without editing those too.
+// Restored; the AUX_WINDOWS_ENABLED guard inside each still makes them all no-ops.
 function fitObjWindow() {
   if (!AUX_WINDOWS_ENABLED) return;
   if (suppressNextFitObjWindow) { suppressNextFitObjWindow = false; return; }
@@ -26904,6 +27238,9 @@ updateToolPanel();
 
 resize();
 loadFromShareParam();
+// Initial synchronous setup is complete and the correct layout has been drawn — safe to
+// reveal the page now, with no flash of the pre-setup DOM state.
+document.getElementById('app-loading-overlay')?.remove();
 </script>
 </body>
 </html>
