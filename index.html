@@ -4609,7 +4609,7 @@ function restoreSnapshot(snap) {
   // after the first pass. The first pass runs inside .map() before the animations array is
   // fully established; a second attempt with the completed array consistently succeeds.
   for (const a of animations) {
-    if (!a.regions.length && canFillAnim(a) && !isPrimitiveAnim(a)) detectObjectTopology(a);
+    if (!a.regions.length && mightBecomeFillable(a) && !isPrimitiveAnim(a)) detectObjectTopology(a);
   }
   cleanupSingletonGroups();
   if (snapSelectedId !== null && animations.some(a => a.id === snapSelectedId)) selectedId = snapSelectedId;
@@ -4885,17 +4885,29 @@ function directChildItems(groupId) {
   return items;
 }
 
-function getDrillPrefix() {
-  if (tilesDrillPath.length === 0) return '';
+function getDrillPrefix(path = tilesDrillPath) {
+  if (path.length === 0) return '';
   let prefix = '';
   let parentId = null;
-  for (const gid of tilesDrillPath) {
+  for (const gid of path) {
     const items = directChildItems(parentId);
     const idx = items.findIndex(it => it.type === 'group' && it.item.id === gid);
     prefix += (idx + 1) + '.';
     parentId = gid;
   }
   return prefix;
+}
+
+// The object detail panel's number must reflect where the object actually lives in the
+// group hierarchy, not wherever the tiles view currently happens to be drilled into —
+// those can disagree (e.g. selecting an object via a path that doesn't drill into its
+// group), which previously made the panel show a stale flat-list index instead of the
+// object's real group-relative number.
+function objectDetailLabelNumber(anim) {
+  const ownGroupId = objectGroupId(anim);
+  const items = directChildItems(ownGroupId);
+  const idx = items.findIndex(it => it.type === 'anim' && it.item.id === anim.id);
+  return idx >= 0 ? getDrillPrefix(groupPathFromRoot(ownGroupId)) + (idx + 1) : animations.indexOf(anim) + 1;
 }
 
 function selectFromScene(anim) {
@@ -5685,6 +5697,18 @@ function canFillAnim(anim) {
     (!isPrimitiveAnim(anim) && !isTextAnim(anim) && !!anim.closed && anim.segments?.some(seg => !!seg));
 }
 
+// canFillAnim requires anim.regions to already be populated to recognize an open
+// self-intersecting curve as fillable — but regions only get populated BY running
+// detection, so a curve whose first detection attempt found nothing can never be
+// reconsidered by canFillAnim alone (confirmed live: an open, self-intersecting curve
+// with a genuine ~1-unit-area region stayed permanently stuck at "no regions" because
+// every retry site checked canFillAnim first). Retry call sites use this instead: it
+// additionally covers open, standalone, not-yet-detected curves so a retry actually runs.
+function mightBecomeFillable(anim) {
+  return canFillAnim(anim) || (!isPrimitiveAnim(anim) && !isTextAnim(anim) && !anim.curves &&
+    !anim.closed && anim.segments?.some(seg => !!seg));
+}
+
 function isDotAnim(anim) {
   return !!anim && !isPrimitiveAnim(anim) && !isTextAnim(anim) && !isPolylineAnim(anim) && anim.anchors.length === 1 && anim.segments.length === 0;
 }
@@ -6405,7 +6429,7 @@ function snapPlacementEndpointToEdge(excludeAnimId, mathX, mathY, thresholdPx = 
   if (!hit) return null;
   splitSegmentAtT(hit.curve, hit.segIdx, hit.t);
   const inserted = hit.curve.anchors[hit.segIdx + 1];
-  if (hit.anim.regions?.length) detectObjectTopology(hit.anim);
+  if (mightBecomeFillable(hit.anim)) detectObjectTopology(hit.anim);
   return cloneCx(inserted);
 }
 
@@ -7790,7 +7814,19 @@ function buildTopologyCurvesMap(anim) {
     // unsplit paths would break those indices, so return the split map directly.
     // For single-primitive objects: regenerate from current anchors so fills track
     // the shape when it moves before topology is re-detected.
-    if (!curves.some(c => isPrimitiveAnim(c)) || curves.length > 1) return anim._topoSplitCurves;
+    if (curves.length > 1) return anim._topoSplitCurves;
+    if (!curves.some(c => isPrimitiveAnim(c))) {
+      // Single non-primitive curve with no actual self-intersection split (the common case):
+      // _topoSplitCurves holds exactly one stale pre-drag entry. Rotation/translation don't
+      // change segment count or boundary indices, only anchor positions, so it's safe to swap
+      // in the live curve's current anchors — same rationale as the primitive case above, just
+      // without needing primitiveToTopologyPath since there's no parametric shape to re-derive.
+      if (anim._topoSplitCurves.size !== 1) return anim._topoSplitCurves;
+      const c = curves[0];
+      const needsClosingAnchor = c.segments.length >= c.anchors.length && c.anchors.length >= 2;
+      const fresh = needsClosingAnchor ? { ...c, anchors: [...c.anchors, c.anchors[0]] } : c;
+      return new Map([[c.id, fresh]]);
+    }
     const map = new Map(anim._topoSplitCurves);
     for (const c of curves) {
       if (!isPrimitiveAnim(c)) continue;
@@ -10292,11 +10328,12 @@ window.addEventListener('mousemove', e => {
   if (rotateDrag) {
     const angle = Math.atan2(mathY - rotateDrag.center.im, mathX - rotateDrag.center.re);
     applyRotationDelta(rotateDrag, angle - rotateDrag.startAngle);
-    const detail = document.getElementById('object-detail');
-    const scrollTop = detail ? detail.scrollTop : 0;
-    renderAnimList();
-    if (detail) detail.scrollTop = scrollTop;
-    draw(); return;
+    // Unlike resize, rotation doesn't need a live side-panel refresh mid-drag (no resize
+    // handles/dimensions shown there change) — renderAnimList() rebuilds the whole panel,
+    // including every object's thumbnail, which is too expensive to do on every mousemove.
+    // The mouseup handler below already calls it once when the drag ends.
+    draw();
+    return;
   }
 
   // Non-edit rubber-band: mousedown skipped all hit tests and set pendingRubberBand.
@@ -11066,7 +11103,7 @@ window.addEventListener('mouseup', e => {
     // change from a single handle drag, so ordinal mapping is correct — the default
     // centroid-based migration can miss when the drag moves the region's centroid outside
     // its old shape (same rationale as resize/rotate/translate above).
-    else if ((!isPrimitiveAnim(_hdAnim) && canFillAnim(_hdAnim)) || _hdAnim.regions?.length || _hdAnim._topoSplitCurves) {
+    else if ((!isPrimitiveAnim(_hdAnim) && mightBecomeFillable(_hdAnim)) || _hdAnim.regions?.length || _hdAnim._topoSplitCurves) {
       detectObjectTopology(_hdAnim, { skipSpatialMigration: true }); saveProject();
     }
     handleDrag = null;
@@ -11077,7 +11114,7 @@ window.addEventListener('mouseup', e => {
     const _adParent = animations.find(p => p.curves?.includes(_adAnim));
     if (_adParent) detectObjectTopology(_adParent);
     // Standalone (non-merged) object: see matching comment in the handleDrag branch above.
-    else if ((!isPrimitiveAnim(_adAnim) && canFillAnim(_adAnim)) || _adAnim.regions?.length || _adAnim._topoSplitCurves) {
+    else if ((!isPrimitiveAnim(_adAnim) && mightBecomeFillable(_adAnim)) || _adAnim.regions?.length || _adAnim._topoSplitCurves) {
       detectObjectTopology(_adAnim, { skipSpatialMigration: true }); saveProject();
     }
     anchorDrag = null;
@@ -14132,6 +14169,11 @@ function cloneTransformState(anim) {
     origAnchorLocked: anim.anchorLocked ? [...anim.anchorLocked] : [],
     origThickness: anim.thickness ?? 2,
     origArcThicknesses,
+    origPatternAngle: anim.patternAngle ?? 0,
+    // Region-based objects store their own patternAngle per region (drawRegionPattern /
+    // drawRegionCustomPattern read region.patternAngle, not anim.patternAngle) — captured
+    // by id since rotation doesn't change region topology/ordering.
+    origRegionPatternAngles: (anim.regions ?? []).map(r => ({ id: r.id, angle: r.patternAngle ?? 0 })),
   };
 }
 
@@ -14195,6 +14237,15 @@ function applyPointTransformFromState(state, transformPoint, options = {}) {
     return;
   }
 
+  if (options.rotationDelta && state.origPatternAngle !== undefined) {
+    anim.patternAngle = state.origPatternAngle - options.rotationDelta;
+  }
+  if (options.rotationDelta && state.origRegionPatternAngles?.length && anim.regions?.length) {
+    const _origById = new Map(state.origRegionPatternAngles.map(r => [r.id, r.angle]));
+    for (const region of anim.regions) {
+      if (_origById.has(region.id)) region.patternAngle = _origById.get(region.id) - options.rotationDelta;
+    }
+  }
   anim.segments = origSegs.map(seg => transformResizeSeg(seg, transformPoint));
   recompileAnim(anim);
 }
@@ -14992,7 +15043,7 @@ function applyRotationDelta(drag, delta) {
     }
     return;
   }
-  const { anim, center, origRotation, origAnchors, origSegs } = drag;
+  const { anim, center, origRotation, origAnchors, origSegs, origPatternAngle, origRegionPatternAngles } = drag;
   const kind = animKind(anim);
   if (isTextAnim(anim)) {
     anim.rotation = origRotation + delta;
@@ -15004,6 +15055,16 @@ function applyRotationDelta(drag, delta) {
   }
 
   anim.rotation = origRotation;
+  // patternAngle is consumed directly as a canvas-space angle (y-down), while delta is a
+  // math-space rotation (y-up) — same sign inversion as the ctx.rotate(-animRotation(anim))
+  // calls used elsewhere for canvas-space rendering, so it must be negated here too.
+  if (origPatternAngle !== undefined) anim.patternAngle = origPatternAngle - delta;
+  if (origRegionPatternAngles?.length && anim.regions?.length) {
+    const _origById = new Map(origRegionPatternAngles.map(r => [r.id, r.angle]));
+    for (const region of anim.regions) {
+      if (_origById.has(region.id)) region.patternAngle = _origById.get(region.id) - delta;
+    }
+  }
   anim.anchors = origAnchors.map(pt => rotateMathPoint(pt, center, delta));
   if (!isPrimitiveAnim(anim)) {
     anim.segments = origSegs.map(seg => seg ? ({
@@ -18244,7 +18305,7 @@ function appendColorExpansion(parent, anim) {
         a => {
           anim.gradientAngle = a;
           syncObjectFillToDetectedRegions(anim, { gradientAngle: anim.gradientAngle });
-          saveProject(); draw();
+          draw();
         });
       panel.appendChild(wheelRow);
     }
@@ -18289,7 +18350,7 @@ function appendColorExpansion(parent, anim) {
         appendDirectionWheel(wheelRow, () => anim.patternAngle ?? 0, a => {
           anim.patternAngle = a;
           syncObjectFillToDetectedRegions(anim, { patternAngle: anim.patternAngle });
-          saveProject(); draw();
+          draw();
         });
         panel.appendChild(wheelRow);
         appendSliderRow(panel, 'Spacing', 0.01, 0.5, 0.01, getPatternSpacingFrac(anim),
@@ -18350,7 +18411,7 @@ function appendColorExpansion(parent, anim) {
         appendDirectionWheel(cpWheelRow, () => anim.patternAngle ?? 0, a => {
           anim.patternAngle = a;
           syncObjectFillToDetectedRegions(anim, { patternAngle: anim.patternAngle });
-          saveProject(); draw();
+          draw();
         });
         panel.appendChild(cpWheelRow);
         appendSliderRow(panel, 'Spacing', 0.01, 0.5, 0.01, getPatternSpacingFrac(anim),
@@ -20274,7 +20335,7 @@ function detectObjectTopology(anim, { skipSpatialMigration = false } = {}) {
       else { for (let s = sMax-1; s >= sMin; s--) { const sg = a.segments[s]; if (sg?.compiled) [...sampleCompiledAdaptive(sg.compiled)].reverse().forEach(accum); } }
     }
     area /= 2;
-    if (area >= 0 || Math.abs(area) < 4) continue;
+    if (area >= 0 || Math.abs(area) < 0.01) continue;
     anim.regions.push(makeDetectedRegion(regionId, face, (oldCurvesMap && !skipSpatialMigration) ? null : priorRegions[regionId]));
     regionId++;
   }
@@ -21069,7 +21130,7 @@ function detectRegionsForGroup(groupId) {
       else { for (let s = sMax-1; s >= sMin; s--) { const sg = anim.segments[s]; if (sg?.compiled) [...sampleCompiledAdaptive(sg.compiled)].reverse().forEach(accum); } }
     }
     area /= 2;
-    if (area >= 0 || Math.abs(area) < 4) continue; // discard outer face (positive) and degenerate faces
+    if (area >= 0 || Math.abs(area) < 0.01) continue; // discard outer face (positive) and degenerate faces
     grp.regions.push(makeDetectedRegion(regionId, face, priorRegions[regionId]));
     regionId++;
   }
@@ -22078,7 +22139,7 @@ function drawRegionPattern(ctx, region, curvesMap, opacity) {
   if (!patColor || patColor === region.fillColor) patColor = '#000000';
   const c2 = parseColorToRgb(patColor);
   if (c2) {
-    const rgba = rgbaCss(c2, region.gradientToOpacity ?? opacity);
+    const rgba = rgbaCss(c2, region.gradientToOpacity || opacity);
     const bounds = computeRegionCanvasBounds(region, curvesMap);
     if (bounds) {
       const cx = (bounds.left + bounds.right) / 2, cy = (bounds.top + bounds.bottom) / 2;
@@ -22139,10 +22200,11 @@ function drawCurvePattern(anim) {
   const c1 = parseColorToRgb(animFillColor(anim));
   if (c1) { ctx.fillStyle = rgbaCss(c1, opacity); ctx.globalAlpha = 1; ctx.fill(); }
 
-  const patColor = anim.gradientToColor;
-  const c2 = patColor ? parseColorToRgb(patColor) : null;
+  let patColor = anim.gradientToColor;
+  if (!patColor || patColor === animFillColor(anim)) patColor = '#000000';
+  const c2 = parseColorToRgb(patColor);
   if (c2) {
-    const rgba = rgbaCss(c2, anim.gradientToOpacity ?? opacity);
+    const rgba = rgbaCss(c2, anim.gradientToOpacity || opacity);
     const bounds = selectedObjectCanvasBounds(anim);
     if (bounds) {
       const cx = (bounds.left + bounds.right) / 2, cy = (bounds.top + bounds.bottom) / 2;
@@ -24824,9 +24886,7 @@ function renderAnimListLegacy() {
   leftGroup.className = 'detail-header-left';
   const numSpan = document.createElement('span');
   numSpan.className = 'detail-num';
-  const _detailItems = directChildItems(currentDrillGroupId());
-  const _detailIdx = _detailItems.findIndex(it => it.type === 'anim' && it.item.id === anim.id);
-  const objectLabelNumber = _detailIdx >= 0 ? getDrillPrefix() + (_detailIdx + 1) : animations.indexOf(anim) + 1;
+  const objectLabelNumber = objectDetailLabelNumber(anim);
   numSpan.textContent = `Object ${objectLabelNumber}`;
   const _topoActive = drillObjectArc?.animId === anim.id || (selectedRegionIds.size > 0 && selectedId === anim.id);
   if (_topoActive) {
@@ -25232,7 +25292,7 @@ function renderAnimListLegacy() {
       objectDetailTab = t.toLowerCase();
       lastOutlineFillTab = objectDetailTab;
       if (objectDetailTab === 'fill') {
-        if (!(anim.regions?.length) && canFillAnim(anim) && !isPrimitiveAnim(anim)) {
+        if (!(anim.regions?.length) && mightBecomeFillable(anim) && !isPrimitiveAnim(anim)) {
           detectObjectTopology(anim);
           draw();
           saveProject();
@@ -25259,7 +25319,7 @@ function renderAnimListLegacy() {
   // immediately re-detect topology mid-drag, using in-transit geometry and losing the fill
   // colors before the resize's own mouseup rebuild ever gets a chance to restore them.
   const _inResizeDragForPanel = !!(resizeDrag && resizeDrag.anim === anim);
-  if (objectDetailTab === 'fill' && !anim.regions?.length && canFillAnim(anim) && !isPrimitiveAnim(anim) && !_inResizeDragForPanel) {
+  if (objectDetailTab === 'fill' && !anim.regions?.length && mightBecomeFillable(anim) && !isPrimitiveAnim(anim) && !_inResizeDragForPanel) {
     detectObjectTopology(anim);
     saveProject();
   }
@@ -25674,7 +25734,7 @@ function renderAnimListLegacy() {
             _pWRow.appendChild(_pWLbl);
             appendDirectionWheel(_pWRow,
               () => (anim.regions?.[0]?.gradientAngle ?? anim.gradientAngle ?? Math.PI / 4),
-              a => { _primSync({ gradientAngle: a }); saveProject(); draw(); });
+              a => { _primSync({ gradientAngle: a }); draw(); });
             _fillWrap.appendChild(_pWRow);
           }
 
@@ -25800,7 +25860,7 @@ function renderAnimListLegacy() {
             _pPWRow.appendChild(_pPWLbl);
             appendDirectionWheel(_pPWRow,
               () => (anim.regions?.[0]?.patternAngle ?? anim.patternAngle ?? 0),
-              a => { _primSync({ patternAngle: a }); saveProject(); draw(); });
+              a => { _primSync({ patternAngle: a }); draw(); });
             _fillWrap.appendChild(_pPWRow);
             appendSliderRow(_fillWrap, 'Spacing', 0.01, 0.5, 0.01, getPatternSpacingFrac(anim.regions?.[0] ?? anim),
               v => `${Math.round(v * 100)}%`, v => { _primSync({ patternSpacing: parseFloat(v) }); saveProject(); draw(); },
@@ -25853,7 +25913,7 @@ function renderAnimListLegacy() {
             _cpWRow.appendChild(_cpWLbl);
             appendDirectionWheel(_cpWRow,
               () => (anim.regions?.[0]?.patternAngle ?? anim.patternAngle ?? 0),
-              a => { _primSync({ patternAngle: a }); saveProject(); draw(); });
+              a => { _primSync({ patternAngle: a }); draw(); });
             _fillWrap.appendChild(_cpWRow);
             appendSliderRow(_fillWrap, 'Spacing', 0.01, 0.5, 0.01, getPatternSpacingFrac(anim.regions?.[0] ?? anim),
               v => `${Math.round(v * 100)}%`, v => { _primSync({ patternSpacing: parseFloat(v) }); saveProject(); draw(); },
@@ -26029,7 +26089,7 @@ function renderAnimListLegacy() {
           _wRow.className = 'direction-wheel-row';
           const _wLbl = document.createElement('span'); _wLbl.className = 'direction-wheel-label'; _wLbl.textContent = 'Direction';
           _wRow.appendChild(_wLbl);
-          appendDirectionWheel(_wRow, () => _activeReg.gradientAngle ?? Math.PI / 4, a => { _applyReg({ gradientAngle: a }); saveProject(); draw(); });
+          appendDirectionWheel(_wRow, () => _activeReg.gradientAngle ?? Math.PI / 4, a => { _applyReg({ gradientAngle: a }); draw(); });
           _fillWrap.appendChild(_wRow);
         }
 
@@ -26064,7 +26124,7 @@ function renderAnimListLegacy() {
             _pWRow.className = 'direction-wheel-row'; _pWRow.style.marginTop = '4px';
             const _pWLbl = document.createElement('span'); _pWLbl.className = 'direction-wheel-label'; _pWLbl.textContent = 'Direction';
             _pWRow.appendChild(_pWLbl);
-            appendDirectionWheel(_pWRow, () => _activeReg.patternAngle ?? 0, a => { _applyReg({ patternAngle: a }); saveProject(); draw(); });
+            appendDirectionWheel(_pWRow, () => _activeReg.patternAngle ?? 0, a => { _applyReg({ patternAngle: a }); draw(); });
             _fillWrap.appendChild(_pWRow);
             appendSliderRow(_fillWrap, 'Spacing', 0.01, 0.5, 0.01, getPatternSpacingFrac(_activeReg),
               v => `${Math.round(v * 100)}%`, v => { _applyReg({ patternSpacing: parseFloat(v) }); saveProject(); draw(); },
@@ -26115,7 +26175,7 @@ function renderAnimListLegacy() {
             _mrWRow.className = 'direction-wheel-row'; _mrWRow.style.marginTop = '4px';
             const _mrWLbl = document.createElement('span'); _mrWLbl.className = 'direction-wheel-label'; _mrWLbl.textContent = 'Angle';
             _mrWRow.appendChild(_mrWLbl);
-            appendDirectionWheel(_mrWRow, () => _activeReg.patternAngle ?? 0, a => { _applyReg({ patternAngle: a }); saveProject(); draw(); });
+            appendDirectionWheel(_mrWRow, () => _activeReg.patternAngle ?? 0, a => { _applyReg({ patternAngle: a }); draw(); });
             _fillWrap.appendChild(_mrWRow);
             appendSliderRow(_fillWrap, 'Spacing', 0.01, 0.5, 0.01, getPatternSpacingFrac(_activeReg),
               v => `${Math.round(v * 100)}%`, v => { _applyReg({ patternSpacing: parseFloat(v) }); saveProject(); draw(); },
@@ -26620,9 +26680,7 @@ function renderAnimListDraftUnused() {
   leftGroup.className = 'detail-header-left';
   const numSpan = document.createElement('span');
   numSpan.className = 'detail-num';
-  const _detailItems = directChildItems(currentDrillGroupId());
-  const _detailIdx = _detailItems.findIndex(it => it.type === 'anim' && it.item.id === anim.id);
-  numSpan.textContent = _detailIdx >= 0 ? getDrillPrefix() + (_detailIdx + 1) : animations.indexOf(anim) + 1;
+  numSpan.textContent = objectDetailLabelNumber(anim);
   const thumbDiv = document.createElement('div');
   thumbDiv.className = 'detail-thumb';
   const thumbCanvas = document.createElement('canvas');
