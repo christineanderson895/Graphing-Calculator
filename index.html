@@ -14240,9 +14240,10 @@ function applyPointTransformFromState(state, transformPoint, options = {}) {
   if (options.rotationDelta && state.origPatternAngle !== undefined) {
     anim.patternAngle = state.origPatternAngle - options.rotationDelta;
   }
-  if (options.rotationDelta && state.origRegionPatternAngles?.length && anim.regions?.length) {
+  const _regionsForAngle = anim.regions?.length ? anim.regions : anim._savedPriorRegions;
+  if (options.rotationDelta && state.origRegionPatternAngles?.length && _regionsForAngle?.length) {
     const _origById = new Map(state.origRegionPatternAngles.map(r => [r.id, r.angle]));
-    for (const region of anim.regions) {
+    for (const region of _regionsForAngle) {
       if (_origById.has(region.id)) region.patternAngle = _origById.get(region.id) - options.rotationDelta;
     }
   }
@@ -15059,9 +15060,13 @@ function applyRotationDelta(drag, delta) {
   // math-space rotation (y-up) — same sign inversion as the ctx.rotate(-animRotation(anim))
   // calls used elsewhere for canvas-space rendering, so it must be negated here too.
   if (origPatternAngle !== undefined) anim.patternAngle = origPatternAngle - delta;
-  if (origRegionPatternAngles?.length && anim.regions?.length) {
+  // anim.regions is emptied for the duration of a rotate drag (see beginRotationDragFromHit) and
+  // the real region objects live on anim._savedPriorRegions instead — same objects, just a
+  // different array reference, so mutating them here is what the fallback renderer actually reads.
+  const _regionsForAngle = anim.regions?.length ? anim.regions : anim._savedPriorRegions;
+  if (origRegionPatternAngles?.length && _regionsForAngle?.length) {
     const _origById = new Map(origRegionPatternAngles.map(r => [r.id, r.angle]));
-    for (const region of anim.regions) {
+    for (const region of _regionsForAngle) {
       if (_origById.has(region.id)) region.patternAngle = _origById.get(region.id) - delta;
     }
   }
@@ -15852,6 +15857,12 @@ function drawCommittedAnimation(anim, { deferOverlay = false } = {}) {
   // via ctx.arc/ellipse, but only when regions is empty. Stale region fills on primitives
   // are tolerable (same as pre-fix behavior) because drawPrimitive still draws a correct outline.
   const _inResizeDrag = !!(resizeDrag && resizeDrag.anim === anim);
+  // Rotation empties anim.regions for the drag's duration (see beginRotationDragFromHit) for the
+  // same reason resize does: stale split-curve/clip geometry would show a misaligned fill.
+  // Fallback rendering below needs to know about both drags so it can pull the real fill/pattern
+  // data back out of anim._savedPriorRegions instead of silently using anim's stale top-level
+  // fillStyle/fillColor (which are never kept in sync once a region-based fill/pattern is set).
+  const _inRotateDrag = !!(rotateDrag && rotateDrag.anim === anim);
   const _skipRegionFill = (_inResizeDrag && !isPrimitiveAnim(anim)) ||
     (frameDrag?.mergedCurves && frameDrag.anim === anim && frameDrag.hasMoved && !frameDrag.origSplitAnchors);
   if (!_skipRegionFill) drawObjectRegionFillsForAnim(anim);
@@ -15882,10 +15893,11 @@ function drawCommittedAnimation(anim, { deferOverlay = false } = {}) {
         if (proxy.anchors.length === 1 && proxy.segments.length === 0) drawDot(proxy);
         if (!anim.regions?.length && canFillAnim(proxy)) {
           // A region-based merged object's actual fill lives on anim.regions[i].fillColor, never
-          // on proxy/anim.fillColor — during a resize drag anim.regions is temporarily emptied
-          // (see resize mousedown), so without this the fill just silently draws nothing instead
-          // of falling back to anim.fillColor like the never-topologized case below does.
-          const _fillSrc = _inResizeDrag ? anim._savedPriorRegions?.[0] : null;
+          // on proxy/anim.fillColor — during a resize or rotate drag anim.regions is temporarily
+          // emptied (see resize mousedown / beginRotationDragFromHit), so without this the fill
+          // just silently draws nothing instead of falling back to anim.fillColor like the
+          // never-topologized case below does.
+          const _fillSrc = (_inResizeDrag || _inRotateDrag) ? anim._savedPriorRegions?.[0] : null;
           const _fProxy = _fillSrc?.fillColor ? { ...proxy,
             fillColor: _fillSrc.fillColor, fillOpacity: _fillSrc.fillOpacity, fillStyle: _fillSrc.fillStyle,
             gradientToColor: _fillSrc.gradientToColor, gradientToOpacity: _fillSrc.gradientToOpacity,
@@ -15934,14 +15946,14 @@ function drawCommittedAnimation(anim, { deferOverlay = false } = {}) {
   if (anim.anchors.length === 1 && anim.segments.length === 0) drawDot(anim);
   // Skip direct-fill paths when regions exist — drawObjectRegionFills handles those,
   // with anim.fillColor as fallback if any region.fillColor is null.
-  // Exception: during a resize drag, regions are stale, so bypass the guard and use
+  // Exception: during a resize or rotate drag, regions are stale, so bypass the guard and use
   // the live compiled segments directly (same pattern as the region-fill skip above).
-  if (canFillAnim(anim) && (!anim.regions?.length || _inResizeDrag)) {
+  if (canFillAnim(anim) && (!anim.regions?.length || _inResizeDrag || _inRotateDrag)) {
     // A region-based object's actual fill color/style lives on region.fillColor, not
-    // anim.fillColor (which is never updated once regions exist) — during a resize drag
-    // anim.regions is temporarily emptied, so pull from the pre-drag stash instead, or the
+    // anim.fillColor (which is never updated once regions exist) — during a resize or rotate
+    // drag anim.regions is temporarily emptied, so pull from the pre-drag stash instead, or the
     // color momentarily flickers back to the object's original (pre-edit) fill.
-    const _fillSrc = anim.regions?.[0] ?? (_inResizeDrag ? anim._savedPriorRegions?.[0] : null);
+    const _fillSrc = anim.regions?.[0] ?? ((_inResizeDrag || _inRotateDrag) ? anim._savedPriorRegions?.[0] : null);
     const _fProxy = _fillSrc?.fillColor ? { ...anim,
       fillColor: _fillSrc.fillColor, fillOpacity: _fillSrc.fillOpacity, fillStyle: _fillSrc.fillStyle,
       gradientToColor: _fillSrc.gradientToColor, gradientToOpacity: _fillSrc.gradientToOpacity,
@@ -15970,7 +15982,6 @@ function drawCommittedAnimation(anim, { deferOverlay = false } = {}) {
   // node dots are hidden for that window above) — using it here would freeze the outline at its
   // pre-drag shape instead of following the live resize/rotate, so fall back to the live anim
   // segments during those specific drags, same tradeoff the anim.curves branch above makes.
-  const _inRotateDrag = !!(rotateDrag && rotateDrag.anim === anim);
   const _stdSplitC = (!_inResizeDrag && !_inRotateDrag) ? (anim._topoSplitCurves?.get(anim.id) ?? null) : null;
   const _stdRenderC = _stdSplitC ?? anim;
   for (let i = 0; i < _stdRenderC.segments.length; i++) {
@@ -22251,14 +22262,24 @@ function drawCurvePattern(anim) {
 }
 
 function _applyCustomPatternTile(drawCtx, tileCanvas, bounds, angle, spacingFrac, opacity = 1) {
-  const diagHalf = Math.hypot(bounds.right - bounds.left, bounds.bottom - bounds.top) / 2;
-  const targetSize = Math.max(2 * devicePixelRatio, spacingFrac * diagHalf);
-  const tileMaxDim = Math.max(tileCanvas.width, tileCanvas.height);
-  const s = tileMaxDim > 0 ? targetSize / tileMaxDim : 1;
+  const boundsW = bounds.right - bounds.left, boundsH = bounds.bottom - bounds.top;
+  // Scale X and Y independently from the object's own current width/height (not a single
+  // diagonal-derived scalar) so a side-handle drag that stretches only one axis stretches the
+  // tile along that same axis, instead of nudging the tile size uniformly in both directions.
+  // A uniform/corner resize still scales both axes together since width and height grow together.
+  const targetSizeX = Math.max(2 * devicePixelRatio, spacingFrac * boundsW);
+  const targetSizeY = Math.max(2 * devicePixelRatio, spacingFrac * boundsH);
+  const sx = tileCanvas.width > 0 ? targetSizeX / tileCanvas.width : 1;
+  const sy = tileCanvas.height > 0 ? targetSizeY / tileCanvas.height : 1;
   const pattern = drawCtx.createPattern(tileCanvas, 'repeat');
   if (!pattern) return;
   const angleDeg = angle * 180 / Math.PI;
-  pattern.setTransform(new DOMMatrix().rotateSelf(angleDeg).scaleSelf(s, s));
+  // createPattern tiles from the canvas's fixed (0,0) origin by default — anchor it to the
+  // object's own center instead (recomputed fresh from live bounds every frame) so the tiling
+  // rotates/scales about the shape and pans/moves/resizes with it, instead of staying nailed
+  // to a canvas-space position while the clip shape moves independently over it.
+  const cx = (bounds.left + bounds.right) / 2, cy = (bounds.top + bounds.bottom) / 2;
+  pattern.setTransform(new DOMMatrix().translateSelf(cx, cy).rotateSelf(angleDeg).scaleSelf(sx, sy));
   drawCtx.fillStyle = pattern;
   drawCtx.globalAlpha = opacity;
   drawCtx.fillRect(bounds.left - 2, bounds.top - 2, bounds.right - bounds.left + 4, bounds.bottom - bounds.top + 4);
