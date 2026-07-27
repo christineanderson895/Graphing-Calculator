@@ -4337,6 +4337,8 @@ let freeformPenTolerance = 2; // CSS pixels, used by RDP simplification
 let lockHover    = null; // {anim, anchorIdx} | null — interior anchor lock toggle (legacy arc-drill context)
 let anchorIconHover = null; // 'lock' | null — hovered icon in the anchor icon cluster
 let _anchorIconPositions = null; // { lock? } — canvas hit zones, set during draw()
+let joinIconHoverKey = null; // string | null — key of the touching/joined anchor cluster currently hovered
+let _joinIconPositions = []; // [{cluster, anim, cx, cy, r}] — canvas hit zones, set during draw()
 let editNodesMode = false;         // true while user is in "edit nodes" mode (add or remove non-topo anchors)
 let customPatternPickMode = null;  // {animId?, regionId?, onPick(pickedAnim)} | null
 let editNodesSubset = new Set();   // arc labels restricting Edit Nodes scope when entered from arc selection
@@ -5330,16 +5332,19 @@ function mergeObjects(ids) {
     if (src.curves) {
       allCurves.push(...src.curves);
     } else {
-      const _rectPath = animKind(src) === 'rectangle' ? primitiveToTopologyPath(src) : null;
+      // Every primitive kind gets converted to a real, per-vertex path on merge (not just
+      // rectangles) so its corners become genuine independent anchors — editable, joinable,
+      // and consistent with how hand-drawn curves already behave once merged.
+      const _primPath = isPrimitiveAnim(src) ? primitiveToTopologyPath(src) : null;
       allCurves.push({
         id: src.id,
         color: src.color,
-        kind:       _rectPath ? _rectPath.kind    : animKind(src),
-        closed:     _rectPath ? _rectPath.closed   : !!src.closed,
-        rotation:   _rectPath ? 0                  : (src.rotation ?? 0),
-        anchors:    _rectPath ? _rectPath.anchors  : src.anchors,
-        segments:   _rectPath ? _rectPath.segments : src.segments,
-        anchorLocked: _rectPath ? _rectPath.anchors.map(() => false) : (src.anchorLocked ? [...src.anchorLocked] : []),
+        kind:       _primPath ? _primPath.kind    : animKind(src),
+        closed:     _primPath ? _primPath.closed   : !!src.closed,
+        rotation:   _primPath ? 0                  : (src.rotation ?? 0),
+        anchors:    _primPath ? _primPath.anchors  : src.anchors,
+        segments:   _primPath ? _primPath.segments : src.segments,
+        anchorLocked: _primPath ? _primPath.anchors.map(() => false) : (src.anchorLocked ? [...src.anchorLocked] : []),
         anchorLabels: src.anchorLabels ? [...src.anchorLabels] : [],
         fillColor: src.regions?.[0]?.fillColor ?? src.fillColor ?? null,
         outlineOpacity: src.outlineOpacity ?? 1,
@@ -5428,16 +5433,13 @@ function mergeObjects(ids) {
       }
       return _inside;
     };
-    console.log('[merge-fill] sources:', sources.map(_s => `id=${_s.id.toFixed(0)} fill=${_s.regions?.[0]?.fillColor ?? _s.fillColor ?? 'none'} segs=${_s.segments?.length}`));
-    console.log('[merge-fill] splitMap ids:', [..._migrSplitMap.keys()].map(k => k.toFixed(0)));
-    console.log('[merge-fill] regions:', merged.regions.length, 'src count:', sources.length);
+    const _srcGroups = new Map(); // source anim → [merged region, ...] it was assigned to
     for (const _mr of merged.regions) {
       if (_mr.fillColor) continue;
       // Centroid check: fast path that works when the perimeter centroid falls cleanly inside
       // exactly one source (non-overlapping regions, or large crescents).
       const _cent = _sampleRegionCentroid(_mr, _migrSplitMap);
       let _hits = _cent ? sources.filter(_src => _ptInSrc(_cent[0], _cent[1], _src)) : [];
-      const _centHits = _hits.length;
       // Arc-count fallback: when the perimeter centroid falls inside 0 or 2+ sources (e.g.
       // high-overlap crescents whose centroid sits in the intersection zone), use boundary
       // segment ownership instead. The source contributing the strict majority (>50%) of
@@ -5445,7 +5447,6 @@ function mergeObjects(ids) {
       // intersection of multiple sources and is left unfilled.
       // This approach is robust to DCEL traversal direction — the traversal can go the "long
       // way" around a circle arc but the dominant-arc owner is still correct either way.
-      let _bndLog = 'no-fallback';
       if (_hits.length !== 1) {
         // Exterior-segment fallback: for each boundary edge, sample the midpoint of its middle
         // segment and check if it lies OUTSIDE all other sources. A crescent region has its outer
@@ -5477,13 +5478,11 @@ function mergeObjects(ids) {
             if (_cnt * 2 > _extTotal) { _arcOwner = sources.find(_s => _s.id === _sid); break; }
           }
         }
-        if (_arcOwner) { _hits = [_arcOwner]; _bndLog = `extCount:hit(src=${_arcOwner.id.toFixed(0)})`; }
-        else _bndLog = 'extCount:tie';
+        if (_arcOwner) _hits = [_arcOwner];
       }
       const _hsrc = _hits.length === 1 ? _hits[0] : null;
       const _hr = _hsrc?.regions?.[0];
       const _srcFill = _hr?.fillColor ?? _hsrc?.fillColor;
-      console.log(`[merge-fill] region bnd=${_mr.boundary.map(e=>e.animId.toFixed(0)).join(',')} | centHits=${_centHits} | ${_bndLog} → fill=${_srcFill??'none'}`);
       if (!_hsrc || !_srcFill) continue;
       _mr.fillColor = _srcFill;
       _mr.fillOpacity = _hr?.fillOpacity ?? _hsrc.fillOpacity ?? 0.3;
@@ -5496,6 +5495,41 @@ function mergeObjects(ids) {
       _mr.patternSpacing = _hr?.patternSpacing ?? _hsrc.patternSpacing;
       _mr.customPatternSourceId = _hr?.customPatternSourceId ?? _hsrc.customPatternSourceId ?? null;
       _mr.customPatternMode = _hr?.customPatternMode ?? _hsrc.customPatternMode ?? 'mask';
+      if (!_srcGroups.has(_hsrc)) _srcGroups.set(_hsrc, []);
+      _srcGroups.get(_hsrc).push(_mr);
+    }
+    // Contour-gradient's manual boundary split is stored as anchor-position "nodes" (stable
+    // across recomputes) plus a derived arc list. A source that ended up owning MULTIPLE merged
+    // regions was split by the merge (e.g. the new curve attaches to its boundary at two
+    // points) — every fragment must get bit-for-bit identical fill1Arcs/fill1Nodes/fill2Arcs/
+    // fill2Nodes, not each independently re-resolved against its own smaller boundary, or they
+    // end up with different arcs and drawContourGradientRegions' shared-boundary-signature
+    // clustering (what makes split fragments blend seamlessly across their new shared seam)
+    // never activates. But copying the stored arcs verbatim is ALSO wrong here: the merge that
+    // caused the split typically inserts new anchors into the very curve fill1Arcs/fill2Arcs
+    // reference (wherever the new curve attaches), shifting every anchor index after that point
+    // — reindexContourArcsByCurve re-derives the indices against that curve's own current
+    // anchors directly (using the saved positions), independent of any one fragment's boundary,
+    // so it's computed once per source and applied identically to every fragment. A source that
+    // owns exactly one region is the ordinary case — no split occurred, so reconcileContourArcs
+    // against that single region's boundary just corrects for the same kind of index drift.
+    for (const [_hsrc, _mrs] of _srcGroups) {
+      const _hr = _hsrc.regions?.[0];
+      if (!_hr?.fill1Nodes && !_hr?.fill2Nodes) continue;
+      if (_mrs.length > 1) {
+        const _rf1 = reindexContourArcsByCurve(_hr.fill1Arcs ?? null, _hr.fill1Nodes ?? null, _migrSplitMap);
+        const _rf2 = reindexContourArcsByCurve(_hr.fill2Arcs ?? null, _hr.fill2Nodes ?? null, _migrSplitMap);
+        for (const _mr of _mrs) {
+          _mr.fill1Arcs = _rf1.arcs; _mr.fill1Nodes = _rf1.nodes;
+          _mr.fill2Arcs = _rf2.arcs; _mr.fill2Nodes = _rf2.nodes;
+        }
+      } else {
+        const _mr = _mrs[0];
+        const _rf1 = reconcileContourArcs(_hr.fill1Arcs ?? null, _hr.fill1Nodes ?? null, _mr.boundary, _migrSplitMap);
+        const _rf2 = reconcileContourArcs(_hr.fill2Arcs ?? null, _hr.fill2Nodes ?? null, _mr.boundary, _migrSplitMap);
+        _mr.fill1Arcs = _rf1.arcs; _mr.fill1Nodes = _rf1.nodes;
+        _mr.fill2Arcs = _rf2.arcs; _mr.fill2Nodes = _rf2.nodes;
+      }
     }
   }
   renderAnimList(); draw(); saveProject();
@@ -5731,6 +5765,285 @@ function alignAnchorHandlesOnLock(anim, anchorIdx) {
 function setAnchorLocked(anim, anchorIdx, locked) {
   if (!anim.anchorLocked) anim.anchorLocked = [];
   anim.anchorLocked[anchorIdx] = !!locked;
+}
+
+// ── Joined anchors ──────────────────────────────────────────────────────────
+// A "join" has no persisted data of its own: two anchors are joined exactly when they sit
+// at the identical math-space position, which the existing topology engine (see
+// computeObjectTopologyData's union-find) already treats as one shared node for rendering
+// and fills. Joining/unjoining is therefore just moving anchors to (or slightly off of)
+// exact coincidence — position is the single source of truth, so it rides along for free
+// on every mechanism that already persists anchor positions (undo, save/load, duplicate).
+
+function nodeDotTouchRadiusPx() {
+  return 6 * devicePixelRatio;
+}
+
+// Two anchors on the same curve directly connected by a segment (including the wraparound
+// closing segment of a ring-closed curve) are naturally close whenever the curve is small or
+// zoomed out — that's not a joining opportunity, just the shape's own geometry.
+function isDirectlyAdjacentSameCurve(m1, m2) {
+  if (m1.curve !== m2.curve) return false;
+  const c = m1.curve, n = c.anchors.length;
+  const diff = Math.abs(m1.anchorIdx - m2.anchorIdx);
+  if (diff === 1) return true;
+  if (c.closed && c.segments.length === n && diff === n - 1) return true;
+  // Loop-closed curves (anchors.length = segments.length + 1, e.g. every primitive converted
+  // to a real path on merge) carry a virtual closing anchor that duplicates the start point —
+  // that coincidence is bookkeeping, not something the user can meaningfully join/unjoin.
+  const lr = findLoopRange(c);
+  if (lr && ((m1.anchorIdx === lr.loopStart && m2.anchorIdx === lr.loopEnd) ||
+             (m2.anchorIdx === lr.loopStart && m1.anchorIdx === lr.loopEnd))) return true;
+  return false;
+}
+
+// Move one anchor of a curve, keeping its loop-closing virtual duplicate (if it has one) in
+// sync — otherwise a curve whose own start/end coincidence is unrelated to the join being
+// performed would silently pop open when that anchor moves.
+function setCurveAnchorPosition(curve, anchorIdx, pos) {
+  const lr = findLoopRange(curve);
+  curve.anchors[anchorIdx] = pos;
+  if (lr) {
+    if (anchorIdx === lr.loopStart) curve.anchors[lr.loopEnd] = new Cx(pos.re, pos.im);
+    else if (anchorIdx === lr.loopEnd) curve.anchors[lr.loopStart] = new Cx(pos.re, pos.im);
+  }
+}
+
+function clusterKey(cluster) {
+  return cluster.members.map(m => `${m.curve.id}:${m.anchorIdx}`).sort().join('|');
+}
+
+// Find clusters of 2+ non-adjacent anchors within one object (same curve, or sibling curves
+// of a merged object) whose rendered dots visually overlap on screen. A cluster is "joined"
+// when every member already sits at the exact same position; otherwise it's "touching" —
+// close enough to invite joining but not yet exact.
+function findTouchingAnchorClusters(anim) {
+  if (!anim || isPrimitiveAnim(anim) || isTextAnim(anim)) return [];
+  const curves = animCurves(anim).filter(c => !isPrimitiveAnim(c) && !isTextAnim(c) && c.anchors?.length);
+  const pts = [];
+  for (const c of curves) {
+    for (let i = 0; i < c.anchors.length; i++) {
+      if (c.anchors[i]) pts.push({ curve: c, anchorIdx: i });
+    }
+  }
+  const n = pts.length;
+  if (n < 2) return [];
+  const uf = pts.map((_, i) => i);
+  const find = i => { while (uf[i] !== i) { uf[i] = uf[uf[i]]; i = uf[i]; } return i; };
+  const union = (a, b) => { a = find(a); b = find(b); if (a !== b) uf[b] = a; };
+  const canvasPts = pts.map(p => toCanvas(p.curve.anchors[p.anchorIdx].re, p.curve.anchors[p.anchorIdx].im));
+  const TOUCH = nodeDotTouchRadiusPx() * 2;
+  for (let a = 0; a < n; a++) {
+    for (let b = a + 1; b < n; b++) {
+      if (isDirectlyAdjacentSameCurve(pts[a], pts[b])) continue;
+      const dx = canvasPts[a][0] - canvasPts[b][0], dy = canvasPts[a][1] - canvasPts[b][1];
+      if (Math.hypot(dx, dy) <= TOUCH) union(a, b);
+    }
+  }
+  const groups = new Map();
+  for (let i = 0; i < n; i++) {
+    const r = find(i);
+    if (!groups.has(r)) groups.set(r, []);
+    groups.get(r).push(pts[i]);
+  }
+  const EPS = 1e-6;
+  const clusters = [];
+  for (const members of groups.values()) {
+    if (members.length < 2) continue;
+    const first = members[0].curve.anchors[members[0].anchorIdx];
+    const joined = members.every(m => {
+      const a = m.curve.anchors[m.anchorIdx];
+      return Math.hypot(a.re - first.re, a.im - first.im) < EPS;
+    });
+    let sumRe = 0, sumIm = 0;
+    for (const m of members) { const a = m.curve.anchors[m.anchorIdx]; sumRe += a.re; sumIm += a.im; }
+    clusters.push({ members, pos: new Cx(sumRe / members.length, sumIm / members.length), joined });
+  }
+  return clusters;
+}
+
+// The topology engine labels each arc/node fresh on every recompute, purely from curve
+// traversal order — the label string itself carries no stable identity back to a curveId.
+// If a drill-down arc/region selection on this object is left in place across a topology
+// recompute, a label like "A-A" can silently end up pointing at a different sibling curve
+// than the one the user actually selected, snapping the selection frame to the wrong shape
+// with no click involved. Clearing it is the safe response: worst case the user re-selects,
+// rather than editing (or just looking at) the wrong curve without realizing it.
+function invalidateStaleArcDrillFor(anim) {
+  if (drillObjectArc?.animId !== anim.id) return;
+  drillObjectArc = null;
+  selectedArcKeys = new Set();
+  for (const c of animCurves(anim)) c.activeSegments = new Set();
+}
+
+// Weld every member of a touching cluster to one exact shared position, then re-run topology
+// so the existing single-node rendering/fill machinery picks up the new coincidence.
+function joinAnchorCluster(anim, cluster) {
+  const target = cluster.members[0].curve.anchors[cluster.members[0].anchorIdx];
+  for (const m of cluster.members) {
+    setCurveAnchorPosition(m.curve, m.anchorIdx, new Cx(target.re, target.im));
+    recompileAnim(m.curve);
+  }
+  detectObjectTopology(anim);
+  invalidateStaleArcDrillFor(anim);
+}
+
+// Split an already-joined cluster back into independent anchors, nudged just far enough
+// apart to break exact coincidence while staying visually overlapping — the icon carries the
+// state, not the distance between the dots.
+function unjoinAnchorCluster(anim, cluster) {
+  const NUDGE = (nodeDotTouchRadiusPx() * 0.6) / scale;
+  cluster.members.forEach((m, i) => {
+    if (i === 0) return;
+    const angle = (2 * Math.PI * i) / cluster.members.length;
+    const a = m.curve.anchors[m.anchorIdx];
+    setCurveAnchorPosition(m.curve, m.anchorIdx, new Cx(a.re + Math.cos(angle) * NUDGE, a.im + Math.sin(angle) * NUDGE));
+    recompileAnim(m.curve);
+  });
+  detectObjectTopology(anim);
+  invalidateStaleArcDrillFor(anim);
+}
+
+// A joined node can be shared by several curves; locking it locks all of them together so
+// the whole shared point is stiff, not just whichever curve's anchor happened to be clicked.
+function setJoinedAnchorLocked(anim, curve, anchorIdx, locked) {
+  const pos = curve.anchors[anchorIdx];
+  if (!pos) return;
+  const EPS = 1e-6;
+  for (const c of animCurves(anim)) {
+    if (isPrimitiveAnim(c) || isTextAnim(c)) continue;
+    for (let i = 0; i < c.anchors.length; i++) {
+      const a = c.anchors[i];
+      if (a && Math.hypot(a.re - pos.re, a.im - pos.im) < EPS) setAnchorLocked(c, i, locked);
+    }
+  }
+}
+
+// ── Joined edges ────────────────────────────────────────────────────────────
+// Mirrors the anchor-join philosophy: a segment's rendered shape is purely a function of its
+// two endpoint anchors and its own two handles (eccentricity is inert in this renderer), so
+// two segments are "joined" exactly when all four of those points coincide — no persisted
+// link, just position. Two independently-drawn shapes sharing an edge are very often wound
+// in opposite directions (e.g. a rectangle's bottom edge vs. the rectangle above it's top
+// edge), so matching has to check both orientations.
+
+function segmentEndpoints(curve, segIdx) {
+  return [curve.anchors[segIdx], curve.anchors[segIdx + 1]];
+}
+
+function edgePairKey(pair) {
+  const a = `${pair.segA.curve.id}:${pair.segA.segIdx}`;
+  const b = `${pair.segB.curve.id}:${pair.segB.segIdx}`;
+  return a < b ? `edge:${a}|${b}` : `edge:${b}|${a}`;
+}
+
+// Find pairs of whole segments (same curve or sibling curves of a merged object) whose four
+// defining points nearly coincide, in whichever winding direction is the closer match.
+function findTouchingSegmentPairs(anim) {
+  if (!anim || isPrimitiveAnim(anim) || isTextAnim(anim)) return [];
+  const curves = animCurves(anim).filter(c => !isPrimitiveAnim(c) && !isTextAnim(c) && c.segments?.length);
+  const segs = [];
+  for (const c of curves) {
+    for (let i = 0; i < c.segments.length; i++) {
+      const seg = c.segments[i];
+      if (!seg) continue;
+      const [a0, a1] = segmentEndpoints(c, i);
+      if (!a0 || !a1) continue;
+      segs.push({ curve: c, segIdx: i, seg, a0, a1 });
+    }
+  }
+  const TOUCH = nodeDotTouchRadiusPx() * 2;
+  const dCanvas = (p, q) => {
+    const [px, py] = toCanvas(p.re, p.im), [qx, qy] = toCanvas(q.re, q.im);
+    return Math.hypot(px - qx, py - qy);
+  };
+  const EPS = 1e-6;
+  const pairs = [];
+  for (let i = 0; i < segs.length; i++) {
+    for (let j = i + 1; j < segs.length; j++) {
+      const s1 = segs[i], s2 = segs[j];
+      if (s1.curve === s2.curve && s1.segIdx === s2.segIdx) continue;
+      const fwdEnd = Math.max(dCanvas(s1.a0, s2.a0), dCanvas(s1.a1, s2.a1));
+      const revEnd = Math.max(dCanvas(s1.a0, s2.a1), dCanvas(s1.a1, s2.a0));
+      const reversed = revEnd < fwdEnd;
+      if ((reversed ? revEnd : fwdEnd) > TOUCH) continue;
+      const h1a = s1.seg.h0, h1b = s1.seg.h1;
+      const h2a = reversed ? s2.seg.h1 : s2.seg.h0;
+      const h2b = reversed ? s2.seg.h0 : s2.seg.h1;
+      if (Math.max(dCanvas(h1a, h2a), dCanvas(h1b, h2b)) > TOUCH) continue;
+      const s2a0 = reversed ? s2.a1 : s2.a0, s2a1 = reversed ? s2.a0 : s2.a1;
+      const joined =
+        Math.hypot(s1.a0.re - s2a0.re, s1.a0.im - s2a0.im) < EPS &&
+        Math.hypot(s1.a1.re - s2a1.re, s1.a1.im - s2a1.im) < EPS &&
+        Math.hypot(h1a.re - h2a.re, h1a.im - h2a.im) < EPS &&
+        Math.hypot(h1b.re - h2b.re, h1b.im - h2b.im) < EPS;
+      let pos;
+      try {
+        const r = s1.seg.compiled ? s1.seg.compiled(0, 0.5, {}) : null;
+        pos = (r && isFinite(r.re) && isFinite(r.im)) ? new Cx(r.re, r.im) : null;
+      } catch { pos = null; }
+      if (!pos) pos = new Cx((s1.a0.re + s1.a1.re) / 2, (s1.a0.im + s1.a1.im) / 2);
+      pairs.push({
+        segA: { curve: s1.curve, segIdx: s1.segIdx },
+        segB: { curve: s2.curve, segIdx: s2.segIdx },
+        reversed, pos, joined,
+      });
+    }
+  }
+  return pairs;
+}
+
+// Weld both endpoints and both handles of segB onto segA's, joining the whole edge — and,
+// as a side effect, both of its corner anchors — in one action.
+function joinSegmentPair(anim, pair) {
+  const { segA, segB, reversed } = pair;
+  const curveA = segA.curve, curveB = segB.curve;
+  const a0 = curveA.anchors[segA.segIdx], a1 = curveA.anchors[segA.segIdx + 1];
+  const bIdx0 = reversed ? segB.segIdx + 1 : segB.segIdx;
+  const bIdx1 = reversed ? segB.segIdx : segB.segIdx + 1;
+  setCurveAnchorPosition(curveB, bIdx0, new Cx(a0.re, a0.im));
+  setCurveAnchorPosition(curveB, bIdx1, new Cx(a1.re, a1.im));
+  const segAObj = curveA.segments[segA.segIdx], segBObj = curveB.segments[segB.segIdx];
+  if (reversed) {
+    segBObj.h0 = new Cx(segAObj.h1.re, segAObj.h1.im);
+    segBObj.h1 = new Cx(segAObj.h0.re, segAObj.h0.im);
+  } else {
+    segBObj.h0 = new Cx(segAObj.h0.re, segAObj.h0.im);
+    segBObj.h1 = new Cx(segAObj.h1.re, segAObj.h1.im);
+  }
+  recompileAnim(curveA);
+  recompileAnim(curveB);
+  detectObjectTopology(anim);
+  invalidateStaleArcDrillFor(anim);
+}
+
+// Split a joined edge back apart. Only segB's own handles are nudged — its corner anchors
+// are left exactly where they are, since a corner can be shared with other edges too, and
+// disjoining this one edge shouldn't disturb a coincidence that may still matter elsewhere.
+function unjoinSegmentPair(anim, pair) {
+  const curveB = pair.segB.curve;
+  const segBObj = curveB.segments[pair.segB.segIdx];
+  const NUDGE = (nodeDotTouchRadiusPx() * 0.6) / scale;
+  segBObj.h0 = new Cx(segBObj.h0.re + NUDGE, segBObj.h0.im + NUDGE);
+  segBObj.h1 = new Cx(segBObj.h1.re + NUDGE, segBObj.h1.im + NUDGE);
+  recompileAnim(curveB);
+  detectObjectTopology(anim);
+  invalidateStaleArcDrillFor(anim);
+}
+
+// If (curve, segIdx) is currently part of an exactly-joined edge pair, return the partner
+// segment info (with side mapping) so a handle drag can propagate to it live.
+function findJoinedEdgePartner(anim, curve, segIdx) {
+  for (const pair of findTouchingSegmentPairs(anim)) {
+    if (!pair.joined) continue;
+    if (pair.segA.curve === curve && pair.segA.segIdx === segIdx) {
+      return { curve: pair.segB.curve, segIdx: pair.segB.segIdx, reversed: pair.reversed };
+    }
+    if (pair.segB.curve === curve && pair.segB.segIdx === segIdx) {
+      return { curve: pair.segA.curve, segIdx: pair.segA.segIdx, reversed: pair.reversed };
+    }
+  }
+  return null;
 }
 
 function activePlacementTool() {
@@ -6266,10 +6579,21 @@ function enterEditMode(anim, activeSegs) {
 
 function exitEditMode() {
   clearSelectionShearGuides();
+  // drillObjectArc is cleared below, but selectedArcKeys (a Set of bare label strings like
+  // "A-A") was not — and labels are generic and reused across different objects, so a stale
+  // label left over here can accidentally match a different object's arc later, making
+  // selectTopologyArc treat what looks like a fresh click as "already selected, toggle off."
+  // Also reset activeSegments on the object being left, to match clearTopoFeatureSelection's
+  // more thorough cleanup used elsewhere.
+  if (editModeAnimId != null) {
+    const _prevAnim = animations.find(a => a.id === editModeAnimId);
+    if (_prevAnim) for (const c of animCurves(_prevAnim)) c.activeSegments = new Set();
+  }
   editModeAnimId = null;
   openColorMenuAnimId = null;
   openColorMenuGroupId = null;
   drillObjectArc = null;
+  selectedArcKeys = new Set();
   selectedObjectNode = null;
   selectedRegionIds = new Set();
   finishCanvasTextEdit(false);
@@ -6479,18 +6803,15 @@ function finalizePlacement(anim) {
   placementPreviewPos = null;
   resetFreeformPlacementPathTracking();
   detectObjectTopology(anim);
+  // Leave the freshly-completed object merely selected (whole-object frame), not drilled
+  // into edit mode on some arc — a second click, same as for any other object, is what
+  // enters edit mode. Auto-drilling into "the first arc" used to happen here, but that
+  // list has no meaningful order (it's just whichever arc the topology scan reaches
+  // first), so for some shapes — e.g. a self-intersecting curve where the "first" arc is
+  // an incidental short connector — it silently left the object drilled into a tiny,
+  // easy-to-mistake-for-a-bug sliver instead of showing the whole shape.
   enterEditMode(anim, new Set());
   exitEditMode();
-  // Auto-select the first arc so handles are visible immediately after placement
-  {
-    const { topoArcs } = computeObjectTopologyData(anim);
-    if (topoArcs.length > 0) {
-      const _fa = topoArcs[0];
-      drillObjectArc = { animId: anim.id, label: _fa.label, curveId: _fa.curveId, fromIdx: _fa.fromIdx, toIdx: _fa.toIdx, wrapAround: !!_fa.wrapAround };
-      selectedArcKeys = new Set([_fa.label]);
-      objectDetailTab = 'outline';
-    }
-  }
   currentTool = 'select';
   updateToolPanel();
   renderAnimList(); draw(); updateCursor();
@@ -7551,6 +7872,8 @@ function updateCursor() {
     canvas.style.cursor = _editNodeAnchorHover ? 'pointer' : 'crosshair';
   } else if (anchorIconHover !== null) {
     canvas.style.cursor = 'pointer';
+  } else if (joinIconHoverKey !== null) {
+    canvas.style.cursor = 'pointer';
   } else if (anchorHover || handleHover || lockHover) {
     canvas.style.cursor = 'grab';
   } else if (frameHover) {
@@ -7676,7 +7999,12 @@ function queryHandleHover(mathX, mathY) {
         handlePairs.push({ segIdx: si, side: 'h1' });
       }
     };
-    if (fromIdx > toIdx) {
+    // Must check the explicit wrapAround flag, not infer it from fromIdx > toIdx — a closed
+    // curve with no other topology nodes has exactly one whole-loop arc with fromIdx === toIdx
+    // (see computeObjectTopologyData's single-node case), which fromIdx > toIdx misses
+    // entirely, silently producing zero handle pairs and making every visible handle on that
+    // curve permanently unhittable while it's the active arc.
+    if (drillObjectArc.wrapAround) {
       // Wrap-around arc: covers [fromIdx, segments.length) ∪ [0, toIdx)
       for (let si = fromIdx; si < curve.segments.length; si++) _addSeg(si);
       for (let si = 0; si < toIdx; si++) _addSeg(si);
@@ -9310,6 +9638,17 @@ canvas.addEventListener('mousedown', e => {
     updateCursor(); draw(); return;
   }
 
+  // ── Join / unjoin icon ──
+  for (const p of _joinIconPositions) {
+    if (Math.hypot(cx - p.cx, cy - p.cy) <= p.r) {
+      e.preventDefault();
+      pushUndo();
+      p.onClick();
+      joinIconHoverKey = null;
+      renderAnimList(); draw(); return;
+    }
+  }
+
   // ── Lock toggle ──
   const lockHit = lockHover ?? queryLockHover(cx, cy);
   if (lockHit) {
@@ -9458,6 +9797,7 @@ canvas.addEventListener('mousedown', e => {
           return false;
         }
         // Extra adjacent handles (outside [fromIdx, toIdx)) must not block arc-body clicks.
+        if (drillObjectArc.wrapAround) return true; // whole curve is one arc — every segment belongs to it
         return _qh.segIdx >= fromIdx && _qh.segIdx < toIdx;
       })();
       if (!_overInteractive) {
@@ -9643,6 +9983,14 @@ canvas.addEventListener('mousedown', e => {
           const _primInSeg = _prim.anchorIdx > 0 ? _prim.anim.segments[_prim.anchorIdx - 1] : null;
           const _primNextAnch = _prim.anim.anchors[_prim.anchorIdx + 1] ?? null;
           const _primPrevAnch = _prim.anchorIdx > 0 ? _prim.anim.anchors[_prim.anchorIdx - 1] : null;
+          // Same lock-freeze fields as the plain anchor-drag construction below — this is a
+          // second, separate place an anchorDrag gets built (entered when the dragged anchor
+          // is itself a topology "essential point", which for an OPEN curve always includes
+          // both endpoints), and it was missing these, so dragging an open curve's endpoint
+          // next to a locked interior anchor fell through to the old unconditional
+          // rigid/straight branches that rewrite the locked anchor's own handle.
+          const _primNextLocked = !!(_primNextAnch && isAnchorLocked(_prim.anim, _prim.anchorIdx + 1));
+          const _primPrevLocked = !!(_primPrevAnch && isAnchorLocked(_prim.anim, _prim.anchorIdx - 1));
           anchorDrag = {
             anim: _prim.anim, anchorIdx: _prim.anchorIdx, startMathX: mathX, startMathY: mathY,
             origAnchor: _primOrig, origH0: _primH0, origH1: _primH1,
@@ -9655,6 +10003,8 @@ canvas.addEventListener('mousedown', e => {
             inRigid: _primPrevAnch ? isSegmentRigid(_prim.anim, _prim.anchorIdx - 1) : false,
             nextAnchor: _primNextAnch ? cloneCx(_primNextAnch) : null,
             prevAnchor: _primPrevAnch ? cloneCx(_primPrevAnch) : null,
+            nextLocked: _primNextLocked,
+            prevLocked: _primPrevLocked,
             coincidentAnchors: _nodeAnchors.slice(1).map(({ anim: _ca, anchorIdx: _cai }) => {
               const _caOrig = cloneCx(_ca.anchors[_cai]);
               const _caOutSeg = _ca.segments[_cai];
@@ -9697,6 +10047,13 @@ canvas.addEventListener('mousedown', e => {
 
       if (_doArc) {
         e.preventDefault();
+        // A plain click selects just this arc — selectTopologyArc itself only ever adds/
+        // toggles, so clear any different prior selection first, otherwise clicking a second
+        // shape unions it with the first instead of replacing it.
+        if (!selectedArcKeys.has(_bestArcHit.label) && selectedArcKeys.size > 0) {
+          drillObjectArc = null; selectedArcKeys = new Set();
+          for (const _c of animCurves(_topoAnim)) _c.activeSegments = new Set();
+        }
         selectTopologyArc(_topoAnim, _bestArcHit);
         renderAnimList(); draw(); updateCursor(); return;
       }
@@ -9821,7 +10178,9 @@ canvas.addEventListener('mousedown', e => {
     const _icNormIdx = _icAnim.closed ? _icIdx % _icS : _icIdx;
     e.preventDefault();
     pushUndo();
-    setAnchorLocked(_icAnim, _icNormIdx, !isAnchorLocked(_icAnim, _icNormIdx));
+    const _icParentId = drillObjectArc?.animId ?? selectedId ?? editModeAnimId;
+    const _icParent = animations.find(a => a.id === _icParentId) ?? _icAnim;
+    setJoinedAnchorLocked(_icParent, _icAnim, _icNormIdx, !isAnchorLocked(_icAnim, _icNormIdx));
     saveProject(); renderAnimList(); draw(); updateCursor();
     anchorIconHover = (_anchorIconPositions?.lock && Math.hypot(cx - _anchorIconPositions.lock.cx, cy - _anchorIconPositions.lock.cy) <= _anchorIconPositions.lock.r) ? 'lock' : null;
     return;
@@ -9864,6 +10223,12 @@ canvas.addEventListener('mousedown', e => {
     const _inSeg = anchorIdx > 0 ? aHitAnim.segments[anchorIdx - 1] : null;
     const _nextAnch = aHitAnim.anchors[anchorIdx + 1] ?? null;
     const _prevAnch = anchorIdx > 0 ? aHitAnim.anchors[anchorIdx - 1] : null;
+    // Rigid/straight reshaping of a neighboring segment rewrites the far handle that
+    // sits at the neighbor anchor — which would change that anchor's angle. If the
+    // neighbor is locked, its angle must not move at all, so its handle is left frozen
+    // (the segment touching the dragged anchor is allowed to go non-straight instead).
+    const _nextLocked = !!(_nextAnch && isAnchorLocked(aHitAnim, anchorIdx + 1));
+    const _prevLocked = !!(_prevAnch && isAnchorLocked(aHitAnim, anchorIdx - 1));
     anchorDrag = {
       anim: aHitAnim, anchorIdx, startMathX: mathX, startMathY: mathY,
       origAnchor, origH0, origH1, linkedIdx, linkedOrigH0, linkedOrigH1,
@@ -9875,16 +10240,22 @@ canvas.addEventListener('mousedown', e => {
       inRigid: _prevAnch ? isSegmentRigid(aHitAnim, anchorIdx - 1) : false,
       nextAnchor: _nextAnch ? cloneCx(_nextAnch) : null,
       prevAnchor: _prevAnch ? cloneCx(_prevAnch) : null,
+      nextLocked: _nextLocked,
+      prevLocked: _prevLocked,
       coincidentAnchors: [],
     };
     const _topoParentId = drillObjectArc?.animId ?? selectedId;
     if (_topoParentId) {
       const _parentAnim = animations.find(a => a.id === _topoParentId);
-      if (_parentAnim?.curves) {
+      if (_parentAnim) {
         const _pos = aHitAnim.anchors[anchorIdx];
         for (const _sib of animCurves(_parentAnim)) {
-          if (_sib === aHitAnim) continue;
           for (let _ai = 0; _ai < _sib.anchors.length; _ai++) {
+            // Skip the anchor actually being dragged, and any anchor directly connected to
+            // it by a segment — a joined (coincident) anchor is never path-adjacent to the
+            // one it's joined with, so this only excludes ordinary curve geometry.
+            if (_sib === aHitAnim && _ai === anchorIdx) continue;
+            if (isDirectlyAdjacentSameCurve({ curve: aHitAnim, anchorIdx }, { curve: _sib, anchorIdx: _ai })) continue;
             const _sa = _sib.anchors[_ai];
             if (_sa && Math.hypot(_sa.re - _pos.re, _sa.im - _pos.im) < 1e-2) {
               const _saOrig = cloneCx(_sa);
@@ -9980,10 +10351,16 @@ canvas.addEventListener('mousedown', e => {
         _lockedAngleOffset = _oa - _ma;
       }
     }
+    // If this segment is currently joined to another (see the edge-join feature), capture
+    // the partner now so the mousemove handler can carry the drag over to it live.
+    const _topoParentIdH = drillObjectArc?.animId ?? selectedId;
+    const _parentAnimH = _topoParentIdH ? animations.find(a => a.id === _topoParentIdH) : null;
+    const _joinedPartner = _parentAnimH ? findJoinedEdgePartner(_parentAnimH, hAnim, hSegIdx) : null;
     handleDrag = {
       anim: hAnim, segIdx: hSegIdx, side: hSide, anchorIdx: _hAnchorIdx,
       wasCorner: _hWasCorner,
       lockedAngleOffset: _lockedAngleOffset,
+      joinedPartner: _joinedPartner,
     };
     updateCursor(); draw(); return;
   }
@@ -10367,6 +10744,18 @@ window.addEventListener('mousemove', e => {
     // 0.99 mid-drag. Smooth anchors (wasCorner=false) swing normally.
     swingOppositeHandle(anim, anchorIdx, side === 'h0', handleDrag.lockedAngleOffset ?? Math.PI);
     recompileAnim(anim);
+    // If this segment's edge is joined to another, carry the moved handle over to the
+    // partner's matching side so the whole edge keeps moving as one instead of splitting
+    // apart the moment either curve's own handle is dragged.
+    if (handleDrag.joinedPartner) {
+      const { curve: _pCurve, segIdx: _pSegIdx, reversed: _pReversed } = handleDrag.joinedPartner;
+      const _pSide = _pReversed ? (side === 'h0' ? 'h1' : 'h0') : side;
+      const _pSeg = _pCurve.segments[_pSegIdx];
+      if (_pSeg) {
+        _pSeg[_pSide] = new Cx(snapped.re, snapped.im);
+        recompileAnim(_pCurve);
+      }
+    }
     updateSidebarInputs(anim);
     draw(); return;
   }
@@ -10400,31 +10789,10 @@ window.addEventListener('mousemove', e => {
       }
       if (bestPt) { snapX = bestPt.re; snapY = bestPt.im; }
     }
-    // Weld snap: when dragging inside a merged object, snap to any sibling anchor.
-    // Skip anchors that are already coincident with the dragged node (they lag one frame
-    // behind and would otherwise snap the primary anchor back to its previous position).
-    const _weldParent = animations.find(p => p.curves?.includes(anim));
-    if (_weldParent) {
-      const _weldThresh = 12 / scale;
-      let _weldBest = _weldThresh, _weldPt = null;
-      const _skipKeys = new Set(
-        (anchorDrag.coincidentAnchors ?? []).map(cc => `${cc.anim.id}:${cc.anchorIdx}`)
-      );
-      for (const _sib of _weldParent.curves) {
-        if (_sib === anim || isPrimitiveAnim(_sib) || isTextAnim(_sib)) continue;
-        for (let _ai = 0; _ai < _sib.anchors.length; _ai++) {
-          if (_skipKeys.has(`${_sib.id}:${_ai}`)) continue;
-          const _sa = _sib.anchors[_ai];
-          if (!_sa) continue;
-          // Skip anchors at the dragged node's original position — they are coincident
-          // with the primary but may lag one frame, causing snap-back if not excluded.
-          if (Math.hypot(_sa.re - anchorDrag.origAnchor.re, _sa.im - anchorDrag.origAnchor.im) < 2 / scale) continue;
-          const _d = Math.hypot(_sa.re - snapX, _sa.im - snapY);
-          if (_d < _weldBest) { _weldBest = _d; _weldPt = _sa; }
-        }
-      }
-      if (_weldPt) { snapX = _weldPt.re; snapY = _weldPt.im; }
-    }
+    // Note: dragging an anchor inside a merged object no longer auto-snaps to exact
+    // coincidence with a sibling anchor. That used to happen invisibly here, which is
+    // exactly the silent-linking behavior the join icon is meant to replace — getting
+    // close now shows the join icon; only clicking it welds to exact coincidence.
     const sdx = snapX - origAnchor.re, sdy = snapY - origAnchor.im;
     anim.anchors[anchorIdx] = new Cx(snapX, snapY);
     if (linkedIdx !== null) {
@@ -10437,28 +10805,43 @@ window.addEventListener('mousemove', e => {
       const isInterior = origH0 !== null && origH1 !== null;
       // Outgoing segment (anchorIdx → anchorIdx+1): update h0 and h1
       if (anim.segments[anchorIdx]) {
-        if (anchorDrag.outRigid && anchorDrag.nextAnchor && origH0 !== null) {
+        if (!anchorDrag.nextLocked && anchorDrag.outRigid && anchorDrag.nextAnchor && origH0 !== null) {
           const p1 = anchorDrag.nextAnchor, snapPt = new Cx(snapX, snapY), orig0 = anchorDrag.origAnchor;
           anim.segments[anchorIdx].h0 = scaleHandleRigid(origH0, p1, orig0, snapPt);
           if (anchorDrag.origOutH1 !== null) anim.segments[anchorIdx].h1 = scaleHandleRigid(anchorDrag.origOutH1, p1, orig0, snapPt);
-        } else if (anchorDrag.outStraight && anchorDrag.nextAnchor) {
+        } else if (!anchorDrag.nextLocked && anchorDrag.outStraight && anchorDrag.nextAnchor) {
           const p1 = anchorDrag.nextAnchor;
           anim.segments[anchorIdx].h0 = new Cx(snapX + (p1.re - snapX) / 3, snapY + (p1.im - snapY) / 3);
           anim.segments[anchorIdx].h1 = new Cx(snapX + 2 * (p1.re - snapX) / 3, snapY + 2 * (p1.im - snapY) / 3);
+        } else if (anchorDrag.nextLocked && anchorDrag.nextAnchor && origH0 !== null) {
+          // Neighbor is locked: its own handle (h1 of this segment) must stay frozen so its
+          // angle never moves. Pivot h0's proportional re-aim on that frozen handle (the
+          // nearest fixed control point) rather than the neighbor's anchor — the anchor is
+          // much farther away, so pivoting on it turns a large drag into an exaggerated swing.
+          const pivot = anchorDrag.origOutH1 ?? anchorDrag.nextAnchor;
+          const snapPt = new Cx(snapX, snapY), orig0 = anchorDrag.origAnchor;
+          anim.segments[anchorIdx].h0 = scaleHandleRigid(origH0, pivot, orig0, snapPt);
         } else if (origH0 !== null) {
           anim.segments[anchorIdx].h0 = new Cx(origH0.re + sdx, origH0.im + sdy);
         }
       }
       // Incoming segment (anchorIdx-1 → anchorIdx): update h0 and h1
       if (anchorIdx > 0 && anim.segments[anchorIdx - 1]) {
-        if (anchorDrag.inRigid && anchorDrag.prevAnchor && origH1 !== null) {
+        if (!anchorDrag.prevLocked && anchorDrag.inRigid && anchorDrag.prevAnchor && origH1 !== null) {
           const p0 = anchorDrag.prevAnchor, snapPt = new Cx(snapX, snapY), orig0 = anchorDrag.origAnchor;
           if (anchorDrag.origInH0 !== null) anim.segments[anchorIdx - 1].h0 = scaleHandleRigid(anchorDrag.origInH0, p0, orig0, snapPt);
           anim.segments[anchorIdx - 1].h1 = scaleHandleRigid(origH1, p0, orig0, snapPt);
-        } else if (anchorDrag.inStraight && anchorDrag.prevAnchor) {
+        } else if (!anchorDrag.prevLocked && anchorDrag.inStraight && anchorDrag.prevAnchor) {
           const p0 = anchorDrag.prevAnchor;
           anim.segments[anchorIdx - 1].h0 = new Cx(p0.re + (snapX - p0.re) / 3, p0.im + (snapY - p0.im) / 3);
           anim.segments[anchorIdx - 1].h1 = new Cx(p0.re + 2 * (snapX - p0.re) / 3, p0.im + 2 * (snapY - p0.im) / 3);
+        } else if (anchorDrag.prevLocked && anchorDrag.prevAnchor && origH1 !== null) {
+          // Neighbor is locked: its own handle (h0 of this segment) must stay frozen. Pivot
+          // h1's proportional re-aim on that frozen handle (nearest fixed control point)
+          // rather than the neighbor's anchor, for the same reason as the outgoing case.
+          const pivot = anchorDrag.origInH0 ?? anchorDrag.prevAnchor;
+          const snapPt = new Cx(snapX, snapY), orig0 = anchorDrag.origAnchor;
+          anim.segments[anchorIdx - 1].h1 = scaleHandleRigid(origH1, pivot, orig0, snapPt);
         } else if (origH1 !== null) {
           anim.segments[anchorIdx - 1].h1 = new Cx(origH1.re + sdx, origH1.im + sdy);
         }
@@ -10659,19 +11042,24 @@ window.addEventListener('mousemove', e => {
       newSideActionHover = querySideActionButtonHover(cx, cy);
       newRotationHover = newSideActionHover ? null : queryRotationWheelHover(cx, cy);
       newResizeHover  = (newSideActionHover || newRotationHover) ? null : queryResizeHandleHover(cx, cy);
-      newFrameHover   = (newSideActionHover || newRotationHover || newResizeHover) ? null : queryFrameBorderHover(cx, cy, 0);
-      newLockHover    = (newSideActionHover || newRotationHover || newResizeHover || newFrameHover) ? null : queryLockHover(cx, cy);
-      newAnchorHover  = (newSideActionHover || newRotationHover || newResizeHover || newFrameHover || newLockHover) ? null : queryAnchorHover(mathX, mathY);
+      newLockHover    = (newSideActionHover || newRotationHover || newResizeHover) ? null : queryLockHover(cx, cy);
+      newAnchorHover  = (newSideActionHover || newRotationHover || newResizeHover || newLockHover) ? null : queryAnchorHover(mathX, mathY);
+      // Frame-border band, computed from the raw (non-extended) anchor hit so a control point
+      // sitting right on the bounding-box edge wins over the surrounding "move the frame" band —
+      // but a genuine frame-border hit here is also used below to block the anchor keep-alive
+      // fallback from resurrecting a stale hand cursor once the mouse has actually left the node.
+      newFrameHover   = (newSideActionHover || newRotationHover || newResizeHover || newLockHover || newAnchorHover) ? null : queryFrameBorderHover(cx, cy, 0);
       // Keep anchorHover alive when cursor slides from anchor toward/onto icon cluster.
       if (!newAnchorHover && anchorHover && !anchorDrag) {
         // Check icon hit zones from last draw (valid between draw frames).
         if (_anchorIconPositions?.lock) {
           const _ip = _anchorIconPositions.lock;
-          if (Math.hypot(cx - _ip.cx, cy - _ip.cy) <= _ip.r) newAnchorHover = anchorHover;
+          if (Math.hypot(cx - _ip.cx, cy - _ip.cy) <= _ip.r) { newAnchorHover = anchorHover; newFrameHover = null; }
         }
         // Extend proximity to cover the gap between anchor (7px threshold) and icons (≤36px away).
-        // This keeps anchorHover alive even after _anchorIconPositions is cleared by draw().
-        if (!newAnchorHover) {
+        // Skipped once a genuine frame-border hit is present — moving away from the node into
+        // the frame's "move" band must always win there, not get masked by this wide fallback.
+        if (!newAnchorHover && !newFrameHover) {
           const _pA = anchorHover.anim.anchors[anchorHover.anchorIdx];
           if (_pA) {
             const [_pax, _pay] = toCanvas(_pA.re, _pA.im);
@@ -10828,7 +11216,23 @@ window.addEventListener('mousemove', e => {
       hoveredRegionId = null; hoveredRegionGroupId = null; regionHoverChanged = true;
     }
 
-    if (changed) { updateCursor(); draw(); }
+    // Join-icon hover: an independent overlay, decoupled from the anchor/lock/frame priority
+    // chain above since it never competes with those for the cursor — it only needs to know
+    // whether the mouse sits over one of the icons drawn during the last frame.
+    let newJoinIconHoverKey = null;
+    if (!anchorDrag && !handleDrag) {
+      for (const p of _joinIconPositions) {
+        if (Math.hypot(cx - p.cx, cy - p.cy) <= p.r) { newJoinIconHoverKey = p.key; break; }
+        // Also trigger by hovering the node/edge itself, not just the icon's offset position —
+        // otherwise a joined pair's icon can only ever be found by first landing exactly on
+        // a spot the user has no reason to know about.
+        if (p.geometryHit?.(cx, cy)) { newJoinIconHoverKey = p.key; break; }
+      }
+    }
+    const joinIconHoverChanged = newJoinIconHoverKey !== joinIconHoverKey;
+    joinIconHoverKey = newJoinIconHoverKey;
+
+    if (changed || joinIconHoverChanged) { updateCursor(); draw(); }
     else if (regionHoverChanged) { draw(); }
   }
 });
@@ -10964,6 +11368,12 @@ window.addEventListener('mouseup', e => {
           if (!(selectedArcKeys.size > 0 && _nearArc2)) _doReg2 = true;
         }
         if (_doArc2) {
+          // See the matching comment at the primary click-handling copy of this logic above:
+          // a plain click replaces the selection rather than unioning with it.
+          if (!selectedArcKeys.has(_bestArcHit2.label) && selectedArcKeys.size > 0) {
+            drillObjectArc = null; selectedArcKeys = new Set();
+            for (const _c of animCurves(_topoAnim)) _c.activeSegments = new Set();
+          }
           selectTopologyArc(_topoAnim, _bestArcHit2);
           renderAnimList(); draw(); updateCursor(); return;
         }
@@ -12624,6 +13034,15 @@ function drawSegment(anim, segIdx, colorOverride = null, opacityScale = 1, thick
   if (seg.visible === false) {
     if (editModeAnimId !== anim.id) return;
     drawCompiledCurve(seg.compiled, color, cw * 0.4, 0.18 * opacityScale);
+    return;
+  }
+  // A curve disabled from topology stays fully visible (unlike a hidden/deleted arc) but
+  // reads visually as "not structurally part of the drawing" — dashed and dimmed, always,
+  // not just in edit mode.
+  if (anim.topologyDisabled) {
+    ctx.setLineDash([4 * dpr, 4 * dpr]);
+    drawCompiledCurve(seg.compiled, color, cw, opacity * 0.5);
+    ctx.setLineDash([]);
     return;
   }
   const eccGhostActive = isEccGhostActive(anim, segIdx);
@@ -15471,11 +15890,12 @@ function drawNonNodeAnchorDots(mainSel) {
   }
 }
 
-// Find the best angle (radians) to place the anchor icon cluster — away from other anchors and arc strokes.
-function findAnchorIconAngle(mainSel, anchorCx, anchorCy) {
+// Find the best angle (radians) to place the anchor icon cluster — away from other anchors,
+// arc strokes, and any other icon(s) already placed nearby this frame (avoidPoints: [[x,y],...]).
+function findAnchorIconAngle(mainSel, anchorCx, anchorCy, avoidPoints = []) {
   const dpr = devicePixelRatio;
   const D = 28 * dpr;
-  const ANCHOR_R = 50 * dpr, STROKE_R = 38 * dpr, MARGIN = 16 * dpr;
+  const ANCHOR_R = 50 * dpr, STROKE_R = 38 * dpr, MARGIN = 16 * dpr, ICON_AVOID_R = 40 * dpr;
   const W = canvas.width, H = canvas.height;
 
   const otherAnchors = [];
@@ -15511,6 +15931,10 @@ function findAnchorIconAngle(mainSel, anchorCx, anchorCy) {
       const d = Math.hypot(strokePts[j] - px, strokePts[j+1] - py);
       if (d < STROKE_R) score += (STROKE_R - d);
     }
+    for (const [ox, oy] of avoidPoints) {
+      const d = Math.hypot(ox - px, oy - py);
+      if (d < ICON_AVOID_R) score += (ICON_AVOID_R - d) * 3;
+    }
     if (score < bestScore) { bestScore = score; bestAngle = angle; }
   }
   return bestAngle;
@@ -15519,7 +15943,7 @@ function findAnchorIconAngle(mainSel, anchorCx, anchorCy) {
 // Draw the lock icon near the hovered anchor. Also updates _anchorIconPositions for mousemove hit-testing.
 function drawAnchorIconCluster(anchorCx, anchorCy, isLocked, mainSel) {
   const dpr = devicePixelRatio;
-  const angle = findAnchorIconAngle(mainSel, anchorCx, anchorCy);
+  const angle = findAnchorIconAngle(mainSel, anchorCx, anchorCy, _joinIconPositions.map(p => [p.cx, p.cy]));
   const D = 28 * dpr;
   const icx = anchorCx + Math.cos(angle) * D, icy = anchorCy + Math.sin(angle) * D;
   const ICON_R = 8 * dpr;
@@ -15557,6 +15981,109 @@ function drawAnchorIconCluster(anchorCx, anchorCy, isLocked, mainSel) {
   ctx.restore();
 
   _anchorIconPositions = { lock: { cx: icx, cy: icy, r: ICON_R + 2 * dpr } };
+}
+
+// Draw the icon for a touching or already-joined anchor cluster: two separated rings, always
+// — this reads as what clicking the icon leads to (the nodes end up apart), which happens to
+// be the right picture whether that's the current state (not yet joined) or the result of
+// clicking to disjoin an already-joined pair.
+function drawChainLinkIcon(icx, icy, joined, isHov, dpr) {
+  const ICON_R = 8 * dpr;
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(icx, icy, ICON_R, 0, Math.PI * 2);
+  ctx.fillStyle = isHov ? '#45475a' : '#313244';
+  ctx.fill();
+  ctx.strokeStyle = isHov ? '#cdd6f4' : '#7f849c';
+  ctx.lineWidth = 1.5 * dpr;
+  ctx.stroke();
+
+  const col = '#f38ba8';
+  const ringR = ICON_R * 0.34;
+  const gap = ringR * 1.5;
+  ctx.strokeStyle = col;
+  ctx.lineWidth = Math.max(1.4 * dpr, ringR * 0.42);
+  ctx.beginPath(); ctx.arc(icx - gap, icy, ringR, 0, Math.PI * 2); ctx.stroke();
+  ctx.beginPath(); ctx.arc(icx + gap, icy, ringR, 0, Math.PI * 2); ctx.stroke();
+  ctx.restore();
+}
+
+// Draw the always-visible "not yet joined" icon for every touching anchor cluster or edge
+// pair on the selected/edited object, plus the hover-only "joined" icon for whichever one
+// the cursor currently sits over. Populates _joinIconPositions for click/hover hit-testing.
+function drawJoinIcons(anim) {
+  _joinIconPositions = [];
+  if (!anim || isPrimitiveAnim(anim) || isTextAnim(anim)) return;
+  const dpr = devicePixelRatio;
+  const D = 24 * dpr; // offset distance so the icon sits beside the geometry, not on top of it
+  // Radius for the "hovering near the node/edge" trigger below — sized to reach all the way
+  // past the icon itself (regardless of which direction it landed at), not just the node's
+  // own small touch radius. Otherwise there's a dead zone between the node and the icon
+  // where neither hit-test matches, and the icon flickers off while the cursor crosses it.
+  const HOVER_REACH = D + 8 * dpr + 3 * dpr;
+
+  const placeIcon = (key, pos, joined, onClick, geometryHit) => {
+    const isHov = joinIconHoverKey === key;
+    const [baseCx, baseCy] = toCanvas(pos.re, pos.im);
+    const _avoid = _joinIconPositions.map(p => [p.cx, p.cy]);
+    if (_anchorIconPositions?.lock) _avoid.push([_anchorIconPositions.lock.cx, _anchorIconPositions.lock.cy]);
+    const angle = findAnchorIconAngle(anim, baseCx, baseCy, _avoid);
+    const icx = baseCx + Math.cos(angle) * D, icy = baseCy + Math.sin(angle) * D;
+    // Always record the hit-zone, even when not drawn right now (joined + not hovered) —
+    // otherwise the mousemove hover check has nothing to detect proximity against, and a
+    // joined pair's icon could never be discovered by hovering near it in the first place.
+    // geometryHit lets hovering the actual node/edge (not just the offset icon) count too.
+    _joinIconPositions.push({ key, cx: icx, cy: icy, r: 8 * dpr + 3 * dpr, onClick, geometryHit });
+    if (joined && !isHov) return;
+    drawChainLinkIcon(icx, icy, joined, isHov, dpr);
+  };
+
+  const edgePairs = findTouchingSegmentPairs(anim);
+  // A full-edge match already joins both of its corner anchors as part of the same action —
+  // showing separate corner icons there too would be three icons for one decision, so hide
+  // any anchor cluster that's fully explained by one edge's pair of endpoints. A rectangle
+  // (or any loop-closed shape) carries a virtual closing anchor that duplicates its own
+  // anchor 0 — if a shared corner happens to land exactly on that anchor, the touching
+  // cluster there picks up the duplicate as an extra member, so it must be marked absorbed
+  // too, or the corner icon would wrongly survive there while correctly disappearing at the
+  // shape's other corner.
+  const absorbedAnchors = new Set();
+  const markAbsorbed = (curve, idx) => {
+    absorbedAnchors.add(`${curve.id}:${idx}`);
+    const lr = findLoopRange(curve);
+    if (lr) {
+      if (idx === lr.loopStart) absorbedAnchors.add(`${curve.id}:${lr.loopEnd}`);
+      else if (idx === lr.loopEnd) absorbedAnchors.add(`${curve.id}:${lr.loopStart}`);
+    }
+  };
+  for (const ep of edgePairs) {
+    markAbsorbed(ep.segA.curve, ep.segA.segIdx);
+    markAbsorbed(ep.segA.curve, ep.segA.segIdx + 1);
+    const bIdx0 = ep.reversed ? ep.segB.segIdx + 1 : ep.segB.segIdx;
+    const bIdx1 = ep.reversed ? ep.segB.segIdx : ep.segB.segIdx + 1;
+    markAbsorbed(ep.segB.curve, bIdx0);
+    markAbsorbed(ep.segB.curve, bIdx1);
+  }
+
+  const clusters = findTouchingAnchorClusters(anim).filter(cl =>
+    !cl.members.every(m => absorbedAnchors.has(`${m.curve.id}:${m.anchorIdx}`))
+  );
+  for (const cl of clusters) {
+    const [nodeCx, nodeCy] = toCanvas(cl.pos.re, cl.pos.im);
+    placeIcon(
+      clusterKey(cl), cl.pos, cl.joined,
+      () => (cl.joined ? unjoinAnchorCluster(anim, cl) : joinAnchorCluster(anim, cl)),
+      (hcx, hcy) => Math.hypot(hcx - nodeCx, hcy - nodeCy) <= HOVER_REACH
+    );
+  }
+  for (const ep of edgePairs) {
+    const [midCx, midCy] = toCanvas(ep.pos.re, ep.pos.im);
+    placeIcon(
+      edgePairKey(ep), ep.pos, ep.joined,
+      () => (ep.joined ? unjoinSegmentPair(anim, ep) : joinSegmentPair(anim, ep)),
+      (hcx, hcy) => Math.hypot(hcx - midCx, hcy - midCy) <= HOVER_REACH
+    );
+  }
 }
 
 function drawTopoFeatureSelectionBounds(anim) {
@@ -16264,8 +16791,11 @@ function drawAnimations() {
     const mainSel = mainSelId != null ? animations.find(a => a.id === mainSelId) : null;
     if (mainSel && isAnimEffectivelyVisible(mainSel) && !mainSel.inPlacementMode) {
       drawSelectedObjectBounds(mainSel);
-      const _inEditMode = editModeAnimId === mainSel.id;
-      if (_inEditMode) drawNonNodeAnchorDots(mainSel);
+      // Show every anchor as soon as the object is selected, not only once it's specifically
+      // in edit mode — mainSel here is already either the edit-mode object or the merely-
+      // selected one, so there's no reason to make the user deselect and reselect just to
+      // see the rest of a shape's nodes.
+      drawNonNodeAnchorDots(mainSel);
       const _arcEditActive = editNodesMode || drillObjectArc?.animId === mainSel.id;
       // Node dots apply to any object with real topology data (merged, or a single
       // self-intersecting curve) — not just merges. Also require anim.regions?.length: during
@@ -16273,6 +16803,7 @@ function drawAnimations() {
       // mousedown handling) because _topoSplitCurves positions go stale until the drag ends —
       // hide the dots for that same window instead of showing them frozen in their old spots.
       if (mainSel._topoSplitCurves && mainSel.regions?.length) drawNodeDots(mainSel);
+      if (!anchorDrag && !handleDrag && !resizeDrag && !rotateDrag && !frameDrag) drawJoinIcons(mainSel);
       // Bézier handles for all selected arcs
       if (drillObjectArc?.animId === mainSel.id && selectedArcKeys.size > 0) {
         const { topoArcs: _allArcs } = computeObjectTopologyData(mainSel);
@@ -17913,9 +18444,11 @@ function appendRegionColorExpansion(parent, region, group) {
           e.stopPropagation();
           if (!canSet) return;
           pushUndo();
-          const edges = contourModeEdgesForActiveSelection(region, activeMode, getCurvesMapForContourMode());
-          if (activeMode.side === 'b1') region.fill1Arcs = edges.length ? edges : null;
-          else region.fill2Arcs = edges.length ? edges : null;
+          const _cvm = getCurvesMapForContourMode();
+          const edges = contourModeEdgesForActiveSelection(region, activeMode, _cvm);
+          const _nodes = edges.length ? contourModeNodePositions(region, activeMode, _cvm) : null;
+          if (activeMode.side === 'b1') { region.fill1Arcs = edges.length ? edges : null; region.fill1Nodes = _nodes; }
+          else { region.fill2Arcs = edges.length ? edges : null; region.fill2Nodes = _nodes; }
           contourSelectMode = null;
           saveProject(); renderAnimList(); draw();
         });
@@ -19535,7 +20068,12 @@ function collapseCoincidentHalfEdges(activeHalfEdges, curvesMap, keyToNode) {
   return kept;
 }
 
-function makeDetectedRegion(id, boundary, prior = null) {
+function makeDetectedRegion(id, boundary, prior = null, curvesMap = null) {
+  // A manually-picked contour boundary (fill1Arcs/fill2Arcs) is indexed into anchor
+  // positions that can shift on this very recompute (see reconcileContourArcs) — re-resolve
+  // it against the fresh boundary/curvesMap rather than carrying stale indices forward.
+  const _fill1 = curvesMap ? reconcileContourArcs(prior?.fill1Arcs ?? null, prior?.fill1Nodes ?? null, boundary, curvesMap) : null;
+  const _fill2 = curvesMap ? reconcileContourArcs(prior?.fill2Arcs ?? null, prior?.fill2Nodes ?? null, boundary, curvesMap) : null;
   return {
     id,
     boundary,
@@ -19554,8 +20092,10 @@ function makeDetectedRegion(id, boundary, prior = null) {
     patternSpacing: prior?.patternSpacing,
     customPatternSourceId: prior?.customPatternSourceId ?? null,
     customPatternMode: prior?.customPatternMode ?? 'mask',
-    fill1Arcs: prior?.fill1Arcs ?? null,
-    fill2Arcs: prior?.fill2Arcs ?? null,
+    fill1Arcs: _fill1 ? _fill1.arcs : (prior?.fill1Arcs ?? null),
+    fill2Arcs: _fill2 ? _fill2.arcs : (prior?.fill2Arcs ?? null),
+    fill1Nodes: _fill1 ? _fill1.nodes : (prior?.fill1Nodes ?? null),
+    fill2Nodes: _fill2 ? _fill2.nodes : (prior?.fill2Nodes ?? null),
   };
 }
 
@@ -20267,6 +20807,13 @@ function detectObjectTopology(anim, { skipSpatialMigration = false } = {}) {
   // One half-edge pair per compiled segment; skip self-loops (closing arc when first=last anchor).
   const halfEdges = [];
   for (const a of curves) {
+    // A curve disabled from topology stays a normal, selectable curve for arc-labeling and
+    // editing purposes (computeObjectTopologyData, built from the live anim.curves, never
+    // sees this exclusion) — it just contributes no half-edges here, so it can never act as a
+    // region separator. Excluding it earlier (e.g. from `curves` itself) would also make its
+    // own endpoints invisible to essential-point/junction detection, wrongly making it
+    // unselectable — this is the one place the exclusion belongs.
+    if (a.topologyDisabled) continue;
     for (let s = 0; s < a.segments.length; s++) {
       if (!a.segments[s]?.compiled) continue;
       if (a.segments[s]?.visible === false) continue;
@@ -20347,7 +20894,7 @@ function detectObjectTopology(anim, { skipSpatialMigration = false } = {}) {
     }
     area /= 2;
     if (area >= 0 || Math.abs(area) < 0.01) continue;
-    anim.regions.push(makeDetectedRegion(regionId, face, (oldCurvesMap && !skipSpatialMigration) ? null : priorRegions[regionId]));
+    anim.regions.push(makeDetectedRegion(regionId, face, (oldCurvesMap && !skipSpatialMigration) ? null : priorRegions[regionId], curvesMap));
     regionId++;
   }
   assignRegionHoles(anim.regions, curvesMap);
@@ -20359,41 +20906,80 @@ function detectObjectTopology(anim, { skipSpatialMigration = false } = {}) {
   // (e.g. undo/redo where _topoSplitCurves was not serialized).
   if (!skipSpatialMigration && priorRegions.length > 0 && oldCurvesMap) {
     const _newPaths = anim.regions.map(nr => buildRegionPath(nr, curvesMap));
-    const _migLog = [];
+    const _oldPaths = priorRegions.map(pr => pr.fillColor ? buildRegionPath(pr, oldCurvesMap) : null);
+    // Phase 1: figure out which new region(s) each old filled region maps to, WITHOUT touching
+    // fill1Arcs/fill2Arcs yet. A region can map to several new regions when it was split (e.g.
+    // re-enabling a previously topology-disabled curve that used to sit inside it) — old→new
+    // centroid containment only ever finds the first match (an old region has one centroid), so
+    // a reversed new→old pass catches any remaining unclaimed fragments of the same split.
+    const _groups = priorRegions.map(() => []); // parallel to priorRegions: new regions claiming each
     for (let _pi = 0; _pi < priorRegions.length; _pi++) {
       const _pr = priorRegions[_pi];
       if (!_pr.fillColor) continue;
       const _prCent = _sampleRegionCentroid(_pr, oldCurvesMap);
-      if (!_prCent) { _migLog.push(`prior[${_pi}] fill=${_pr.fillColor} → NO CENTROID`); continue; }
-      let _matched = -1;
+      if (!_prCent) continue;
       for (let _ni = 0; _ni < anim.regions.length; _ni++) {
+        if (ctx.isPointInPath(_newPaths[_ni], _prCent[0], _prCent[1])) { _groups[_pi].push(_ni); break; }
+      }
+    }
+    const _claimed = new Set(_groups.flat());
+    for (let _ni = 0; _ni < anim.regions.length; _ni++) {
+      if (_claimed.has(_ni)) continue;
+      const _nrCent = _sampleRegionCentroid(anim.regions[_ni], curvesMap);
+      if (!_nrCent) continue;
+      for (let _pi = 0; _pi < priorRegions.length; _pi++) {
+        if (!_oldPaths[_pi]) continue;
+        if (ctx.isPointInPath(_oldPaths[_pi], _nrCent[0], _nrCent[1])) { _groups[_pi].push(_ni); break; }
+      }
+    }
+    // Phase 2: apply the fill. A clean 1-to-1 match re-resolves fill1Arcs/fill2Arcs against the
+    // new boundary (handles ordinary index drift from an unrelated edit). A 1-to-many split
+    // needs every resulting fragment to end up bit-for-bit identical (see reindexContourArcsByCurve
+    // and the shared-boundary-signature clustering comment on drawContourGradientRegions) — but
+    // simply copying the stored arcs verbatim would be wrong too, since whatever caused the split
+    // (e.g. re-enabling a topology-disabled curve) can itself insert new anchors into the very
+    // curve those arcs reference, shifting indices after that point. reindexContourArcsByCurve
+    // re-derives the indices against that curve's own current anchors directly, independent of
+    // any one fragment's boundary, computed once per source and applied to every fragment alike.
+    for (let _pi = 0; _pi < priorRegions.length; _pi++) {
+      const _pr = priorRegions[_pi];
+      const _newIdxs = _groups[_pi];
+      if (!_newIdxs.length) continue;
+      const _isSplit = _newIdxs.length > 1;
+      const _fill1 = _isSplit
+        ? reindexContourArcsByCurve(_pr.fill1Arcs ?? null, _pr.fill1Nodes ?? null, curvesMap)
+        : null;
+      const _fill2 = _isSplit
+        ? reindexContourArcsByCurve(_pr.fill2Arcs ?? null, _pr.fill2Nodes ?? null, curvesMap)
+        : null;
+      for (const _ni of _newIdxs) {
         const nr = anim.regions[_ni];
-        if (nr.fillColor) continue; // already claimed
-        if (ctx.isPointInPath(_newPaths[_ni], _prCent[0], _prCent[1])) {
-          nr.fillColor = _pr.fillColor;
-          nr.fillOpacity = _pr.fillOpacity;
-          nr.fillStyle = _pr.fillStyle;
-          nr.gradientToColor = _pr.gradientToColor;
-          nr.gradientToOpacity = _pr.gradientToOpacity;
-          nr.gradientAngle = _pr.gradientAngle;
-          nr.gradientStart = _pr.gradientStart;
-          nr.gradientEnd = _pr.gradientEnd;
-          nr.gradC1Knobs = _pr.gradC1Knobs;
-          nr.gradC2Knobs = _pr.gradC2Knobs;
-          nr.patternType = _pr.patternType;
-          nr.patternAngle = _pr.patternAngle;
-          nr.patternSpacing = _pr.patternSpacing;
-          nr.customPatternSourceId = _pr.customPatternSourceId ?? null;
-          nr.customPatternMode = _pr.customPatternMode ?? 'mask';
-          nr.fill1Arcs = _pr.fill1Arcs ?? null;
-          nr.fill2Arcs = _pr.fill2Arcs ?? null;
-          _matched = _ni; break;
+        nr.fillColor = _pr.fillColor;
+        nr.fillOpacity = _pr.fillOpacity;
+        nr.fillStyle = _pr.fillStyle;
+        nr.gradientToColor = _pr.gradientToColor;
+        nr.gradientToOpacity = _pr.gradientToOpacity;
+        nr.gradientAngle = _pr.gradientAngle;
+        nr.gradientStart = _pr.gradientStart;
+        nr.gradientEnd = _pr.gradientEnd;
+        nr.gradC1Knobs = _pr.gradC1Knobs;
+        nr.gradC2Knobs = _pr.gradC2Knobs;
+        nr.patternType = _pr.patternType;
+        nr.patternAngle = _pr.patternAngle;
+        nr.patternSpacing = _pr.patternSpacing;
+        nr.customPatternSourceId = _pr.customPatternSourceId ?? null;
+        nr.customPatternMode = _pr.customPatternMode ?? 'mask';
+        if (_isSplit) {
+          nr.fill1Arcs = _fill1.arcs; nr.fill1Nodes = _fill1.nodes;
+          nr.fill2Arcs = _fill2.arcs; nr.fill2Nodes = _fill2.nodes;
+        } else {
+          const _rf1 = reconcileContourArcs(_pr.fill1Arcs ?? null, _pr.fill1Nodes ?? null, nr.boundary, curvesMap);
+          const _rf2 = reconcileContourArcs(_pr.fill2Arcs ?? null, _pr.fill2Nodes ?? null, nr.boundary, curvesMap);
+          nr.fill1Arcs = _rf1.arcs; nr.fill1Nodes = _rf1.nodes;
+          nr.fill2Arcs = _rf2.arcs; nr.fill2Nodes = _rf2.nodes;
         }
       }
-      _migLog.push(`prior[${_pi}] fill=${_pr.fillColor} cent=(${_prCent[0].toFixed(1)},${_prCent[1].toFixed(1)}) → new[${_matched}]`);
     }
-    if (_migLog.length) console.log('[spatial-migr]', _migLog.join(' | '), '| xform:', ctx.getTransform?.().a?.toFixed(2));
-    console.log('[spatial-migr] final fills:', anim.regions.map((r,i) => `[${i}]${r.fillColor??'none'}`).join(' '));
   }
   if (anim.regions.length > 0) {
     // If this is first-time detection (no prior regions) but the anim had a direct fill,
@@ -20672,6 +21258,19 @@ function computeObjectTopologyData(anim) {
     for (let i = 0; i < c.anchors.length; i++) {
       if (endpointRoots.has(find(offset + i))) essIdxs.push(i);
     }
+    // A loop-closed curve's virtual closing anchor (last index) sits at the exact same
+    // position as its own start (index 0) by construction — the same find-root, not a second
+    // distinct essential point. If both ended up flagged essential together (which they always
+    // do, since they share a root), drop the trailing duplicate so a simple closed shape with
+    // one real essential point takes the clean single-node path instead of being split into a
+    // bogus two-node arc structure that mis-covers its own segments.
+    if (essIdxs.length >= 2 && c.closed) {
+      const lastIdx = c.anchors.length - 1;
+      if (essIdxs[0] === 0 && essIdxs[essIdxs.length - 1] === lastIdx &&
+          find(offset + 0) === find(offset + lastIdx)) {
+        essIdxs.pop();
+      }
+    }
     if (essIdxs.length >= 2) {
       for (let k = 0; k + 1 < essIdxs.length; k++) {
         const fi = essIdxs[k], ti = essIdxs[k + 1];
@@ -20692,12 +21291,16 @@ function computeObjectTopologyData(anim) {
         }
       }
     } else if (essIdxs.length === 1 && c.closed) {
-      // Single node on a closed curve: one looping arc back to itself
+      // Single node on a closed curve: one looping arc back to itself, covering every segment
+      // exactly once. Must use the same wrap-around convention as the multi-node case above
+      // (fromIdx === toIdx here, both equal to the one essential index) — a plain [fromIdx,
+      // toIdx) range with toIdx = fi + anchors.length is not a valid segment index and silently
+      // truncates (or nearly empties) this curve's hit-testable/drawable range whenever fi != 0.
       const fi = essIdxs[0];
       const fromNum = rootToNum.get(find(offset + fi));
       if (fromNum !== undefined) {
         const letter = nodeNumToLetter(fromNum);
-        topoArcs.push({ label: _uniqueLabel(`${letter}-${letter}`), fromNum, toNum: fromNum, curveId: c.id, fromIdx: fi, toIdx: fi + c.anchors.length });
+        topoArcs.push({ label: _uniqueLabel(`${letter}-${letter}`), fromNum, toNum: fromNum, curveId: c.id, fromIdx: fi, toIdx: fi, wrapAround: true });
       }
     }
     offset += c.anchors.length;
@@ -21434,6 +22037,139 @@ function contourModeEdgesForActiveSelection(region, mode, curvesMap) {
   return contourModeEdgesFromNodes(boundary, nodes, curvesMap);
 }
 
+// Math-space positions of the junction nodes the user actually clicked to define a contour
+// boundary (mode.nodeIndices). This is the real identity of a picked boundary; the expanded
+// edge list stored in fill1Arcs/fill2Arcs is just a materialization of it, indexed into
+// whichever curve anchors existed at click time — those indices shift whenever an unrelated
+// edit inserts a new intersection point earlier in the same curve. Persisting these positions
+// alongside the edge list is what lets reconcileContourArcs re-derive a correct edge list
+// after a topology recompute, instead of the edges silently going stale.
+function contourModeNodePositions(region, mode, curvesMap) {
+  if (mode?.isCenterPoint) return null;
+  const boundary = contourBoundaryForMode(region, mode);
+  const expanded = expandedContourBoundary(boundary, curvesMap);
+  const groups = computeEffectiveArcGroups(expanded, curvesMap);
+  const nodes = mode?.nodeIndices ?? [];
+  const positions = [];
+  for (const ni of nodes) {
+    const g = groups[ni];
+    if (!g) return null;
+    const edge = expanded[g.startExpIdx];
+    const a = curvesMap.get(edge.animId)?.anchors?.[edge.startIdx];
+    if (!a?.ok?.()) return null;
+    positions.push({ re: a.re, im: a.im });
+  }
+  return positions;
+}
+
+// Re-resolve a stored contour boundary (fill1Arcs/fill2Arcs) against a freshly-rebuilt
+// topology, using the junction positions captured when it was set. Falls back to carrying
+// the arcs forward unchanged when there's no position data to re-resolve from — a
+// center-point pick (immune to index drift; it only ever references an animId) or older
+// saved data from before this fix existed.
+//
+// If a stored position can no longer be found on THIS region's own current boundary, that
+// means the region was split (e.g. a curve that used to be topology-disabled got re-enabled,
+// dividing one region into several) — the two saved points no longer both belong to the same
+// fragment. Rather than clearing the boundary, carry the original arcs/nodes forward verbatim,
+// unresolved against this fragment's own boundary. This is safe specifically because
+// drawContourGradientRegions/computeContourGradientGeometry already cluster sibling regions
+// that reference the identical arc signature and paint their shared blend field once before
+// clipping each region to its own shape (see the clustering comment there) — so every fragment
+// descending from the same original region ends up with the exact same fill1Arcs/fill2Arcs and
+// renders as one seamless gradient across the invisible/dashed seam between them, rather than
+// each fragment trying (and failing) to independently re-derive its own local split.
+//
+// Deliberately matches against the raw expanded edge list, NOT computeEffectiveArcGroups —
+// that grouping's fine/coarse granularity depends on whether the region's boundary currently
+// has any real junctions anywhere on it (e.g. merging in an unrelated new curve/region can
+// flip an entire untouched boundary from fine to coarse), so a position that was a valid
+// group-start under the old grouping can silently stop being one under the new grouping even
+// though the anchor itself never moved. The expanded edge list's granularity is always
+// per-anchor regardless of grouping mode, so it's the stable thing to match against.
+function reconcileContourArcs(priorArcs, priorNodes, newBoundary, newCurvesMap) {
+  if (!priorArcs) return { arcs: null, nodes: null };
+  if (!priorNodes) return { arcs: priorArcs, nodes: null };
+  const expanded = expandedContourBoundary(newBoundary, newCurvesMap);
+  const N = expanded.length;
+  if (!N) return { arcs: priorArcs, nodes: priorNodes };
+  const EPS = 1e-3;
+  const newExpIndices = [];
+  for (const pos of priorNodes) {
+    let best = -1, bestDist = EPS;
+    for (let ei = 0; ei < N; ei++) {
+      const edge = expanded[ei];
+      const a = newCurvesMap.get(edge.animId)?.anchors?.[edge.startIdx];
+      if (!a?.ok?.()) continue;
+      const d = Math.hypot(a.re - pos.re, a.im - pos.im);
+      if (d < bestDist) { bestDist = d; best = ei; }
+    }
+    if (best < 0) return { arcs: priorArcs, nodes: priorNodes };
+    newExpIndices.push(best);
+  }
+  // Walk forward through the expanded edge list from each matched index to the next, the
+  // same way contourModeEdgesFromNodes walks group indices — just at finer granularity.
+  const result = [];
+  const seen = new Set();
+  for (let i = 0; i < newExpIndices.length - 1; i++) {
+    const from = newExpIndices[i], to = newExpIndices[i + 1];
+    let k = from, steps = 0;
+    while ((k !== to || steps === 0) && steps < N) {
+      if (!seen.has(k)) { seen.add(k); result.push(expanded[k]); }
+      k = (k + 1) % N;
+      steps++;
+    }
+  }
+  return result.length ? { arcs: result, nodes: priorNodes } : { arcs: null, nodes: null };
+}
+
+// When a region SPLITS into several fragments (a merge, or re-enabling a topology-disabled
+// curve), every fragment must get bit-for-bit identical fill1Arcs/fill2Arcs (see the split
+// handling in mergeObjects/detectObjectTopology) — reconcileContourArcs can't be used directly
+// there since it resolves against one specific fragment's own boundary and fails whenever the
+// two saved points don't both live on that fragment. But copying the stored arcs verbatim is
+// also wrong: the very merge that caused the split typically also inserts new anchors into the
+// curve fill1Arcs/fill2Arcs reference (wherever the new curve attaches), shifting every anchor
+// index after that point — so the OLD indices, unmodified, now point at the wrong stretch of
+// the curve. This re-derives the indices directly against that curve's own current anchor list
+// (using the saved positions, exactly like reconcileContourArcs does), completely independent
+// of any region's boundary — so it works regardless of which fragment ends up owning which
+// part of the arc. Assumes fill1Arcs/fill2Arcs reference a single curve (true whenever they were
+// set before any merge, since only one curve existed then); if they somehow span several curve
+// ids already, this leaves them unchanged rather than risk misindexing across curves.
+function reindexContourArcsByCurve(priorArcs, priorNodes, curvesMap) {
+  if (!priorArcs?.length || !priorNodes?.length) return { arcs: priorArcs ?? null, nodes: priorNodes ?? null };
+  const animId = priorArcs[0].animId;
+  if (priorArcs.some(e => e.animId !== animId)) return { arcs: priorArcs, nodes: priorNodes };
+  const curve = curvesMap.get(animId);
+  if (!curve?.anchors?.length) return { arcs: priorArcs, nodes: priorNodes };
+  const EPS = 1e-3;
+  const newIdxs = [];
+  for (const pos of priorNodes) {
+    let best = -1, bestDist = EPS;
+    for (let i = 0; i < curve.anchors.length; i++) {
+      const a = curve.anchors[i];
+      if (!a?.ok?.()) continue;
+      const d = Math.hypot(a.re - pos.re, a.im - pos.im);
+      if (d < bestDist) { bestDist = d; best = i; }
+    }
+    if (best < 0) return { arcs: priorArcs, nodes: priorNodes };
+    newIdxs.push(best);
+  }
+  const N = curve.segments.length;
+  if (!N) return { arcs: priorArcs, nodes: priorNodes };
+  const result = [];
+  for (let i = 0; i < newIdxs.length - 1; i++) {
+    const from = newIdxs[i], to = newIdxs[i + 1];
+    let k = from, steps = 0;
+    while ((k !== to || steps === 0) && steps < N) {
+      result.push({ animId, startIdx: k, endIdx: k + 1 });
+      k = (k + 1) % N;
+      steps++;
+    }
+  }
+  return result.length ? { arcs: result, nodes: priorNodes } : { arcs: priorArcs, nodes: priorNodes };
+}
 
 function getCurvesMapForContourMode() {
   const m = contourSelectMode;
@@ -21758,7 +22494,10 @@ function computeContourGradientGeometry(contourRegions, curvesMap) {
     // two, is what actually closes the gap. Arbitrarily but deterministically pick the first
     // region encountered for a given signature as the extender.
     const extendBoundary1 = !!(g1?.length > 1 && g1[0] === entry);
-    result.set(entry.region, { pts1: entry.pts1, pts2: entry.pts2, D, clusterId: find(i), extendBoundary1 });
+    result.set(entry.region, {
+      pts1: entry.pts1, pts2: entry.pts2, D, clusterId: find(i), extendBoundary1,
+      sig1: entry.sig1, sig2: entry.sig2,
+    });
   });
   return result;
 }
@@ -21882,8 +22621,20 @@ function drawContourGradientRegions(ctx, contourGeom, colorFor, curvesMap) {
     // Draw every quad crisply, with no filter — ctx.filter applies to each individual draw call,
     // not once to the finished image, so setting it here would blur every one of the ~800 quads
     // separately as it's composited, shrinking each one's own effective coverage.
+    // A region that split into several fragments gives every fragment identical pts1/pts2/colors
+    // (see reindexContourArcsByCurve) so they clip seamlessly out of one shared blend — but that
+    // means drawing the quads once per fragment paints the exact same semi-transparent pixels
+    // multiple times, and source-over compositing of the same translucent color onto itself
+    // doesn't no-op, it darkens/brightens (double coverage). Dedupe by the full (sig1, sig2,
+    // resolved color) combination so a true duplicate only gets drawn once per cluster; two
+    // regions that legitimately share just ONE side (the "footprint" case, differing on the
+    // other side and/or in color) still each draw their own distinct quads as before.
+    const _drawnKeys = new Set();
     for (const { region, geom } of members) {
       const { color1, opacity1, color2, opacity2, gradStops } = colorFor(region);
+      const _key = `${geom.sig1} ${geom.sig2} ${color1} ${opacity1} ${color2} ${opacity2} ${JSON.stringify(gradStops)}`;
+      if (_drawnKeys.has(_key)) continue;
+      _drawnKeys.add(_key);
       drawTwoBoundaryBlendQuads(octx, geom.pts1, geom.pts2, color1, opacity1, color2, opacity2, gradStops, geom.D, geom.extendBoundary1);
     }
     // Blur exactly once, here, as the whole assembled offscreen image is composited onto the
@@ -21893,11 +22644,32 @@ function drawContourGradientRegions(ctx, contourGeom, colorFor, curvesMap) {
     // this, blur would soften the region's own silhouette right along with the internal quad seams
     // it's meant to smooth, making the whole shape look feathered instead of just the interior fade.
     ctx.filter = `blur(${(1.8 * devicePixelRatio).toFixed(2)}px)`;
-    for (const { region } of members) {
+    // Members that share a boundary signature came from the SAME original region, split by an
+    // internal curve (e.g. a merge, or re-enabling a topology-disabled curve) — their boundaries
+    // exactly tile the original undivided shape. Clipping each one separately requires that tiling
+    // to line up with zero gap at the internal seam, which the blend-quad sampling can't always
+    // guarantee (a sharp/narrow concave notch right at the seam can fall between two of the ~200
+    // sample points, leaving a real unpainted gap). Combining every member's boundary into one
+    // path and clipping ONCE avoids the seam entirely: adjoining DCEL faces trace their shared
+    // internal edge in opposite directions, so under the nonzero winding rule that edge's
+    // contribution cancels out, leaving exactly the original outline with no internal seam to
+    // line up at all. Falls back to per-region clipping if any member has holes, since combining
+    // hole-punched paths under one nonzero rule isn't a simple union anymore.
+    const _canCombine = members.length > 1 && members.every(({ region }) => !region.holeBoundaries?.length);
+    if (_canCombine) {
+      const combined = new Path2D();
+      for (const { region } of members) addRegionBoundaryToPathLike(combined, region.boundary, curvesMap);
       ctx.save();
-      ctx.clip(buildRegionPath(region, curvesMap), regionFillRule(region));
+      ctx.clip(combined, 'nonzero');
       ctx.drawImage(offscreen, 0, 0);
       ctx.restore();
+    } else {
+      for (const { region } of members) {
+        ctx.save();
+        ctx.clip(buildRegionPath(region, curvesMap), regionFillRule(region));
+        ctx.drawImage(offscreen, 0, 0);
+        ctx.restore();
+      }
     }
     ctx.filter = 'none';
   }
@@ -24924,16 +25696,35 @@ function renderAnimListLegacy() {
   // Right: color + hide + delete
   const rightGroup = document.createElement('div');
   rightGroup.className = 'detail-header-right';
+  // When drilled into one sub-curve of a multi-curve (merged) object, the same button/slot
+  // repurposes to toggle that curve's participation in topology (region separation) instead
+  // of hiding the whole object — there's nothing else on a single curve to "disable".
+  const _drilledCurve = (drillObjectArc?.animId === anim.id && animCurves(anim).length > 1)
+    ? animCurves(anim).find(c => c.id === drillObjectArc.curveId) : null;
   const visBtn = document.createElement('button');
-  visBtn.className = 'anim-icon-btn anim-vis-btn' + (!anim.visible ? ' is-hidden' : '');
-  visBtn.title = anim.visible ? 'Hide' : 'Show';
-  visBtn.appendChild(makeVisibilityIcon(anim.visible));
-  visBtn.addEventListener('click', e => {
-    e.stopPropagation(); pushUndo();
-    anim.visible = !anim.visible;
-    openColorMenuAnimId = null;
-    renderAnimList(); draw();
-  });
+  if (_drilledCurve) {
+    const _isDisabled = !!_drilledCurve.topologyDisabled;
+    visBtn.className = 'anim-icon-btn anim-vis-btn' + (_isDisabled ? ' is-hidden' : '');
+    visBtn.title = _isDisabled ? 'Enable in topology' : 'Disable from topology';
+    visBtn.appendChild(makeVisibilityIcon(!_isDisabled));
+    visBtn.addEventListener('click', e => {
+      e.stopPropagation(); pushUndo();
+      _drilledCurve.topologyDisabled = !_isDisabled;
+      detectObjectTopology(anim);
+      clearTopoFeatureSelection();
+      saveProject(); renderAnimList(); draw();
+    });
+  } else {
+    visBtn.className = 'anim-icon-btn anim-vis-btn' + (!anim.visible ? ' is-hidden' : '');
+    visBtn.title = anim.visible ? 'Hide' : 'Show';
+    visBtn.appendChild(makeVisibilityIcon(anim.visible));
+    visBtn.addEventListener('click', e => {
+      e.stopPropagation(); pushUndo();
+      anim.visible = !anim.visible;
+      openColorMenuAnimId = null;
+      renderAnimList(); draw();
+    });
+  }
   const delBtn = document.createElement('button');
   delBtn.className = 'anim-icon-btn anim-delete-btn';
   delBtn.title = 'Delete'; delBtn.textContent = '×';
@@ -25793,9 +26584,11 @@ function renderAnimListLegacy() {
                 e.stopPropagation();
                 if (!_pCanSet) return;
                 pushUndo();
-                const _pEdges = contourModeEdgesForActiveSelection(_primReg, _pCm, getCurvesMapForContourMode());
-                if (_pCm.side === 'b1') _primReg.fill1Arcs = _pEdges.length ? _pEdges : null;
-                else _primReg.fill2Arcs = _pEdges.length ? _pEdges : null;
+                const _pCvm = getCurvesMapForContourMode();
+                const _pEdges = contourModeEdgesForActiveSelection(_primReg, _pCm, _pCvm);
+                const _pNodes = _pEdges.length ? contourModeNodePositions(_primReg, _pCm, _pCvm) : null;
+                if (_pCm.side === 'b1') { _primReg.fill1Arcs = _pEdges.length ? _pEdges : null; _primReg.fill1Nodes = _pNodes; }
+                else { _primReg.fill2Arcs = _pEdges.length ? _pEdges : null; _primReg.fill2Nodes = _pNodes; }
                 contourSelectMode = null;
                 saveProject(); renderAnimList(); draw();
               });
@@ -26237,9 +27030,11 @@ function renderAnimListLegacy() {
               e.stopPropagation();
               if (!_canSet) return;
               pushUndo();
-              const _edges = contourModeEdgesForActiveSelection(_activeReg, _cm, getCurvesMapForContourMode());
-              if (_cm.side === 'b1') _activeReg.fill1Arcs = _edges.length ? _edges : null;
-              else _activeReg.fill2Arcs = _edges.length ? _edges : null;
+              const _cvm2 = getCurvesMapForContourMode();
+              const _edges = contourModeEdgesForActiveSelection(_activeReg, _cm, _cvm2);
+              const _nodes2 = _edges.length ? contourModeNodePositions(_activeReg, _cm, _cvm2) : null;
+              if (_cm.side === 'b1') { _activeReg.fill1Arcs = _edges.length ? _edges : null; _activeReg.fill1Nodes = _nodes2; }
+              else { _activeReg.fill2Arcs = _edges.length ? _edges : null; _activeReg.fill2Nodes = _nodes2; }
               contourSelectMode = null;
               saveProject(); renderAnimList(); draw();
             });
