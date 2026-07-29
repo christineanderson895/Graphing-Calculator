@@ -1905,9 +1905,18 @@
           <circle cx="17" cy="7" r="1.8"></circle>
         </svg>
       </button>
-      <button class="tool-btn" data-tool="freeform" title="Freeform Pen" aria-label="Freeform Pen">
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M5 15c2.4-6.5 5.2 5.5 8-1.5 1.2-3 3.2-4.2 6-3"></path>
+      <button class="tool-btn" data-tool="stylus" title="Stylus" aria-label="Stylus">
+        <svg viewBox="0 0 24 24" aria-hidden="true" style="stroke-width:1.2">
+          <!-- Pencil half, centered within the left half (x:0-12) of the box. -->
+          <g transform="translate(-0.535,3.205)">
+            <path d="M0.57,1.91 L3.43,0.09 L11.83,13.29 L12.5,17.5 L9.0,15.11 Z"></path>
+            <path d="M2.15,4.4 L5.01,2.56"></path>
+          </g>
+          <!-- Brush half, centered within the right half (x:12-24) of the box. -->
+          <g transform="translate(-0.29,2.675)">
+            <path d="M12.94,1.37 L16.06,0.03 L21.18,11.98 L18.06,13.32 Z"></path>
+            <path d="M18.06,13.32 Q17.4,16.08 22.18,18.62 Q23.64,13.4 21.18,11.98 Z" fill="currentColor"></path>
+          </g>
         </svg>
       </button>
       <button class="tool-btn" data-tool="shape" title="Shape" aria-label="Shape">
@@ -1970,11 +1979,7 @@
           <button id="default-color-trigger" type="button" aria-expanded="false">None</button>
         </div>
         <div id="default-color-picker" class="settings-color-picker"></div>
-        <div class="settings-row">
-          <label for="default-thickness">Default Thickness</label>
-          <input id="default-thickness" type="range" min="1" max="10" step="1" />
-          <span class="settings-value" id="default-thickness-val"></span>
-        </div>
+        <!-- Default Thickness control relocated to the Pencil sub-panel of the Stylus tool. -->
         <div class="settings-row">
           <label for="grid-strength">Grid Strength</label>
           <input id="grid-strength" type="range" min="0" max="100" step="5" />
@@ -2093,7 +2098,9 @@ const PROJECT_FILL_STYLE_VERSION = 2;
 const SNAP_STRENGTH_VALUES = [0, 1, 2, 5, 10, 20, 50, 100];
 const DEFAULT_GLOBAL_SETTINGS = {
   defaultThickness: 4,
+  defaultBrushThickness: 40, // CSS px, ribbon width — a separate, much wider range than defaultThickness
   defaultColor: null,
+  stylusOpacity: 1, // Pencil/Brush-only opacity, separate from defaultColor since it has no shape-placement counterpart
   gridStrength: 0,
   axisStrength: 0,
   snapStrength: 0,
@@ -2105,6 +2112,13 @@ const GRAPH_COLORS = ['#f38ba8','#a6e3a1','#89b4fa','#fab387','#f9e2af','#cba6f7
 
 // ── Animation mode colors & object kinds ──
 const DEFAULT_COLORS = ['#ef4444','#f97316','#eab308','#22c55e','#14b8a6','#3b82f6','#8b5cf6','#ec4899'];
+// Pencil/Brush's color, resolved the same way in every place it's needed: the sidebar picker's
+// seed, the live in-progress stroke preview, and the committed stroke's actual color. Kept as one
+// function so those three can never drift apart the way the preview and commit colors used to
+// (the preview used to hardcode a placeholder lavender instead of reading this).
+function stylusDefaultColor() {
+  return normalizeColorString(globalSettings.defaultColor) || DEFAULT_COLORS[0];
+}
 const PRIMITIVE_KINDS = new Set(['line', 'rectangle', 'circle', 'ellipse', 'triangle']);
 const SHAPE_TOOL_KINDS = ['rectangle', 'circle', 'triangle'];
 const POLYLINE_KIND = 'polyline';
@@ -2141,6 +2155,16 @@ const FREEFORM_PEN_CURSOR = (() => {
   return `url("data:image/svg+xml;base64,${btoa(svg)}") 2 22, crosshair`;
 })();
 
+// Deliberately NOT the same silhouette family as the pencil cursor above (thin uniform stick +
+// small tip accent) — at cursor size that read as "a pencil" regardless of the accent shape.
+// Instead: thin handle flaring into a wide, solid-colored bristle head at the tip, since a
+// pencil's whole body stays thin and its color accent is at the BACK (eraser end), never the
+// point. A flared, filled head at the drawing tip is the one silhouette a pencil can't produce.
+const BRUSH_CURSOR = (() => {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M22,2 L24,4 L10,16 L8,14 Z" fill="#ffffff" stroke="#000000" stroke-width="1.2" stroke-linejoin="round"/><path d="M8,14 L10,16 L4,23 L1,19 Z" fill="#f38ba8" stroke="#000000" stroke-width="1" stroke-linejoin="round"/></svg>`;
+  return `url("data:image/svg+xml;base64,${btoa(svg)}") 2 21, crosshair`;
+})();
+
 // ── SVG namespace ──
 const SVG_NS = 'http://www.w3.org/2000/svg';
 </script>
@@ -2157,7 +2181,17 @@ let penOverlay = document.getElementById('pen-overlay');
 let penOverlayCtx = penOverlay.getContext('2d');
 
 let originX = 0, originY = 0;
-let scale = 60;
+const DEFAULT_SCALE = 60;
+// Zoom is capped to 1000x in either direction from the default. Without a cap, a fixed
+// math-space "same point" epsilon (used throughout the topology engine, e.g. detectObjectTopology
+// and computeObjectTopologyData's EPSILON = 1e-6) stops meaning anything close to "the same
+// point" on screen — at high enough zoom that tiny math-space distance spans many visible
+// pixels. At this cap, 1e-6 math units is still well under a pixel even at max zoom, and
+// unjoinAnchorCluster's nudge (scaled by 1/scale) stays safely above that epsilon too.
+const MIN_SCALE = DEFAULT_SCALE / 1000;
+const MAX_SCALE = DEFAULT_SCALE * 1000;
+function clampScale(s) { return Math.min(MAX_SCALE, Math.max(MIN_SCALE, s)); }
+let scale = DEFAULT_SCALE;
 let dragging = false, dragStartX, dragStartY, dragOriginX, dragOriginY;
 let currentMode = 'animations';
 let mouseDownClientX = 0, mouseDownClientY = 0;
@@ -2223,7 +2257,9 @@ function normalizeGlobalSettings(raw = {}) {
     : raw.snapStrength ?? DEFAULT_GLOBAL_SETTINGS.snapStrength;
   return {
     defaultThickness: Math.round(clamp(Number(raw.defaultThickness ?? DEFAULT_GLOBAL_SETTINGS.defaultThickness), 1, 10)),
+    defaultBrushThickness: Math.round(clamp(Number(raw.defaultBrushThickness ?? DEFAULT_GLOBAL_SETTINGS.defaultBrushThickness), 10, 100)),
     defaultColor: normalizeColorString(raw.defaultColor),
+    stylusOpacity: clamp(Number(raw.stylusOpacity ?? DEFAULT_GLOBAL_SETTINGS.stylusOpacity), 0, 1),
     gridStrength: Math.round(clamp(Number(raw.gridStrength ?? DEFAULT_GLOBAL_SETTINGS.gridStrength), 0, 100) / 5) * 5,
     axisStrength: Math.round(clamp(Number(raw.axisStrength ?? DEFAULT_GLOBAL_SETTINGS.axisStrength), 0, 100) / 5) * 5,
     snapStrength: nearestSnapStrength(Number(rawSnapStrength)),
@@ -2266,7 +2302,7 @@ function loadProject() {
     if (viewport) {
       if (typeof viewport.originX === 'number') originX = viewport.originX;
       if (typeof viewport.originY === 'number') originY = viewport.originY;
-      if (typeof viewport.scale === 'number') scale = viewport.scale;
+      if (typeof viewport.scale === 'number') scale = clampScale(viewport.scale);
     }
     if (typeof ci === 'number') animColorIdx = ci;
     if (snap) {
@@ -2304,7 +2340,7 @@ function loadFromSnapshot(data) {
   if (viewport) {
     if (typeof viewport.originX === 'number') originX = viewport.originX;
     if (typeof viewport.originY === 'number') originY = viewport.originY;
-    if (typeof viewport.scale   === 'number') scale   = viewport.scale;
+    if (typeof viewport.scale   === 'number') scale   = clampScale(viewport.scale);
   }
   if (typeof ci === 'number') animColorIdx = ci;
   if (snap) {
@@ -2494,6 +2530,7 @@ function _splitCurveBaseProps(orig, parentGroupId) {
   return {
     kind: orig.kind, color: orig.color, outlineOpacity: orig.outlineOpacity ?? 1,
     freeformPen: orig.freeformPen ?? false,
+    brushStroke: orig.brushStroke ?? false,
     fillColor: orig.fillColor ?? null, fillOpacity: orig.fillOpacity ?? 0.3,
     fillStyle: orig.fillStyle ?? 'solid', thickness: orig.thickness,
     closed: false, visible: orig.visible ?? true, name: null, letter: orig.letter,
@@ -3787,9 +3824,47 @@ function alignInteriorTangents(segs, pts) {
   return segs;
 }
 
+// A turn sharper than this at an interior point is treated as a genuine corner rather than
+// part of a smooth curve. Points are only ever kept by RDP simplification because they deviate
+// meaningfully from a straight chord, so real corners always survive simplification — the old
+// unconditional smoothing (see fitSmoothPointRun/alignInteriorTangents below) was rounding them
+// into loops at the fitting stage even at minimum smoothing. Splitting the point sequence into
+// independent runs at each corner, and fitting each run separately with the existing smooth
+// fitter, keeps the corner itself a real cusp (each side gets its own independent handles) while
+// leaving the smooth-curve fitting untouched everywhere else. 60 degrees is a starting point.
+const CORNER_TURN_ANGLE = Math.PI / 3;
+function splitPointsAtCorners(pts) {
+  if (pts.length < 3) return [pts];
+  const runs = [];
+  let runStart = 0;
+  for (let i = 1; i < pts.length - 1; i++) {
+    const inV = new Cx(pts[i].re - pts[i - 1].re, pts[i].im - pts[i - 1].im);
+    const outV = new Cx(pts[i + 1].re - pts[i].re, pts[i + 1].im - pts[i].im);
+    const inLen = Math.hypot(inV.re, inV.im), outLen = Math.hypot(outV.re, outV.im);
+    if (inLen < 1e-9 || outLen < 1e-9) continue;
+    const turn = Math.abs(signedAngleBetweenUnit(
+      new Cx(inV.re / inLen, inV.im / inLen),
+      new Cx(outV.re / outLen, outV.im / outLen)
+    ));
+    if (turn > CORNER_TURN_ANGLE) {
+      runs.push(pts.slice(runStart, i + 1));
+      runStart = i;
+    }
+  }
+  runs.push(pts.slice(runStart));
+  return runs;
+}
+
 function computeFreshPlacementSegments(points) {
   const pts = cleanSplinePoints(points);
   if (pts.length < 2) return [];
+  const runs = splitPointsAtCorners(pts);
+  const segs = [];
+  for (const run of runs) segs.push(...fitSmoothPointRun(run));
+  return segs;
+}
+
+function fitSmoothPointRun(pts) {
   if (pts.length === 2)
     return [makeSeg(lerpCx(pts[0], pts[1], 1 / 3), lerpCx(pts[0], pts[1], 2 / 3))];
   if (pts.length === 3) return computeThreeAnchorPlacementSegments(pts);
@@ -4287,7 +4362,7 @@ let colorEditTarget = 'outline';
 let gradientColorTab = 1; // 1 or 2, active sub-tab when editing gradient fill
 let objectFillTab = 1;   // 1=Fill1, 2=Fill2, 3=Style — active sub-tab in object panel
 let _globalCanvasDimFactor = 1; // multiplied into animOutlineOpacity/animFillOpacity to dim non-selected objects
-let eyedropperTarget = null; // 'outline' | 'fill' | 'gradientTo' | 'region-fill' | 'arc-stroke' | null
+let eyedropperTarget = null; // 'outline' | 'fill' | 'gradientTo' | 'region-fill' | 'arc-stroke' | 'stylus-default' | null
 let eyedropperAnimId = null;
 let eyedropperRegionId = null; // region id when target is 'region-fill'
 let eyedropperCurveId = null;  // curve id when target is 'arc-stroke'
@@ -4334,6 +4409,10 @@ let sideActionMenuOpen = false;
 let freeformPenActive  = false;
 let freeformPenCapture = null; // null | {points:[{x,y},...]} in device pixels
 let freeformPenTolerance = 2; // CSS pixels, used by RDP simplification
+let stylusSubTool = 'brush'; // 'pencil' | 'brush' — persists across reselects (unlike selectedShapeKind)
+let brushActive  = false;
+let brushCapture = null; // null | {points:[{x,y},...]} in device pixels — same shape as freeformPenCapture
+let currentBrushAnimId = null; // id of the object consecutive Brush strokes append loops to this session
 let lockHover    = null; // {anim, anchorIdx} | null — interior anchor lock toggle (legacy arc-drill context)
 let anchorIconHover = null; // 'lock' | null — hovered icon in the anchor icon cluster
 let _anchorIconPositions = null; // { lock? } — canvas hit zones, set during draw()
@@ -4384,6 +4463,7 @@ function snapshotAnimations() {
     visible: a.visible, thickness: a.thickness, rotation: a.rotation ?? 0,
     anchors: a.anchors.map(p => new Cx(p.re, p.im)),
     freeformPen: a.freeformPen ?? false,
+    brushStroke: a.brushStroke ?? false,
     segments: a.segments.map(s => s ? ({
       h0: new Cx(s.h0.re, s.h0.im),
       h1: new Cx(s.h1.re, s.h1.im),
@@ -4417,6 +4497,7 @@ function snapshotAnimations() {
     curves: a.curves ? a.curves.map(c => ({
       id: c.id, color: c.color, kind: c.kind || 'freeform',
       freeformPen: c.freeformPen ?? false,
+      brushStroke: c.brushStroke ?? false,
       fillColor: c.fillColor ?? null, outlineOpacity: c.outlineOpacity ?? 1,
       fillOpacity: c.fillOpacity ?? 0.3, fillStyle: normalizeFillStyle(c.fillStyle),
       closed: !!c.closed, text: c.text ?? '', fontSize: c.fontSize ?? 36,
@@ -4517,6 +4598,7 @@ function restoreSnapshot(snap) {
     const anim = {
       id: s.id, letter: s.letter, color: s.color, kind: s.kind || 'freeform',
       freeformPen: s.freeformPen ?? false,
+      brushStroke: s.brushStroke ?? false,
       groupId: s.groupId ?? null,
       fillColor: s.fillColor ?? null,
       outlineOpacity: s.outlineOpacity ?? 1,
@@ -4569,6 +4651,7 @@ function restoreSnapshot(snap) {
       curves: s.curves ? s.curves.map(c => ({
         id: c.id, color: c.color, kind: c.kind || 'freeform',
         freeformPen: c.freeformPen ?? false,
+      brushStroke: c.brushStroke ?? false,
         fillColor: c.fillColor ?? null, outlineOpacity: c.outlineOpacity ?? 1,
         fillOpacity: c.fillOpacity ?? 0.3, fillStyle: normalizeFillStyle(c.fillStyle),
         closed: !!c.closed, text: c.text ?? '', fontSize: c.fontSize ?? 36,
@@ -5359,6 +5442,13 @@ function mergeObjects(ids) {
         textShearX: src.textShearX ?? 0, textShearY: src.textShearY ?? 0,
         visible: src.visible, thickness: src.thickness,
         activeSegments: new Set(),
+        brushStroke: src.brushStroke ?? false,
+        // isSegmentRigid treats freeformPen curves as never-rigid (hand-drawn strokes shouldn't
+        // get shape-preserving rigid handle scaling, only precisely-placed primitives/shapes
+        // should) — without carrying this flag over, a Pencil-drawn curve silently loses that
+        // exemption the moment it becomes a sibling curve of a merged object, and any of its
+        // 0%-eccentricity (i.e. straight) segments start reading as "rigid" instead.
+        freeformPen: src.freeformPen ?? false,
         ...(src._circleArc ? { _circleArc: src._circleArc } : {}),
       });
     }
@@ -5531,6 +5621,18 @@ function mergeObjects(ids) {
         _mr.fill2Arcs = _rf2.arcs; _mr.fill2Nodes = _rf2.nodes;
       }
     }
+  }
+  // Nodes from the merged sources that visually touch should already read as connected, using
+  // the exact same "touching" definition the chain-link icon uses (findTouchingAnchorClusters) —
+  // not snapMergedCorners' own math-space threshold above, which only welds OPEN curves'
+  // anchors and explicitly skips closed curves entirely. Deliberately placed AFTER fill
+  // migration, not before: for a plain (non-primitive) source, allCurves reuses src.anchors/
+  // src.segments by reference rather than cloning them, and the migration above reads sources'
+  // geometry via those same references (_ptInSrc samples _src.segments[...].compiled) — joining
+  // here first would weld/recompile the very geometry the migration is still trying to read,
+  // corrupting its containment test and misassigning fill colors.
+  for (const cl of findTouchingAnchorClusters(merged)) {
+    if (!cl.joined) joinAnchorCluster(merged, cl);
   }
   renderAnimList(); draw(); saveProject();
 }
@@ -5876,12 +5978,33 @@ function invalidateStaleArcDrillFor(anim) {
   for (const c of animCurves(anim)) c.activeSegments = new Set();
 }
 
+// Move a curve's anchor, re-snapping any adjacent segment that was exactly straight so it
+// stays exactly straight. isSegmentStraight's tolerance is tight (1e-6 — "still exactly
+// straight," not merely "close enough"), so simply moving the anchor while leaving its
+// handles where they were (correct for the OLD position, not the new one) can fail that check
+// afterward even when the move is too small to see. A later drag on that anchor then silently
+// falls through to the rigid-translate branch instead of the straight-line one, and a hinge
+// that should stay straight visibly bends. Matches the rest of the drag code's own scope: plain
+// idx+1/idx-1 neighbor lookup, no special-casing for a closed curve's own wraparound segment.
+function moveAnchorPreservingStraightness(curve, idx, newPos) {
+  const oldPos = curve.anchors[idx];
+  const nextAnchor = curve.anchors[idx + 1];
+  const outSeg = curve.segments[idx];
+  const outWasStraight = nextAnchor && isSegmentStraight(outSeg, oldPos, nextAnchor);
+  const prevAnchor = idx > 0 ? curve.anchors[idx - 1] : null;
+  const inSeg = idx > 0 ? curve.segments[idx - 1] : null;
+  const inWasStraight = prevAnchor && isSegmentStraight(inSeg, prevAnchor, oldPos);
+  setCurveAnchorPosition(curve, idx, newPos);
+  if (outWasStraight) { outSeg.h0 = lerpCx(newPos, nextAnchor, 1 / 3); outSeg.h1 = lerpCx(newPos, nextAnchor, 2 / 3); }
+  if (inWasStraight) { inSeg.h0 = lerpCx(prevAnchor, newPos, 1 / 3); inSeg.h1 = lerpCx(prevAnchor, newPos, 2 / 3); }
+}
+
 // Weld every member of a touching cluster to one exact shared position, then re-run topology
 // so the existing single-node rendering/fill machinery picks up the new coincidence.
 function joinAnchorCluster(anim, cluster) {
   const target = cluster.members[0].curve.anchors[cluster.members[0].anchorIdx];
   for (const m of cluster.members) {
-    setCurveAnchorPosition(m.curve, m.anchorIdx, new Cx(target.re, target.im));
+    moveAnchorPreservingStraightness(m.curve, m.anchorIdx, new Cx(target.re, target.im));
     recompileAnim(m.curve);
   }
   detectObjectTopology(anim);
@@ -5897,7 +6020,7 @@ function unjoinAnchorCluster(anim, cluster) {
     if (i === 0) return;
     const angle = (2 * Math.PI * i) / cluster.members.length;
     const a = m.curve.anchors[m.anchorIdx];
-    setCurveAnchorPosition(m.curve, m.anchorIdx, new Cx(a.re + Math.cos(angle) * NUDGE, a.im + Math.sin(angle) * NUDGE));
+    moveAnchorPreservingStraightness(m.curve, m.anchorIdx, new Cx(a.re + Math.cos(angle) * NUDGE, a.im + Math.sin(angle) * NUDGE));
     recompileAnim(m.curve);
   });
   detectObjectTopology(anim);
@@ -6047,7 +6170,7 @@ function findJoinedEdgePartner(anim, curve, segIdx) {
 }
 
 function activePlacementTool() {
-  if (freeformPenActive) return 'freeform';
+  if (freeformPenActive || brushActive) return 'stylus';
   if (currentTool === 'select') return 'select';
   const placing = animations.find(a => a.inPlacementMode);
   if (!placing) return currentTool || 'select';
@@ -6367,6 +6490,7 @@ document.addEventListener('keydown', e => {
     if (customPatternPickMode !== null) { customPatternPickMode = null; renderAnimList(); draw(); return; }
     if (eyedropperTarget !== null) { deactivateEyedropper(); renderAnimList(); return; }
     if (freeformPenActive) { freeformPenActive = false; freeformPenCapture = null; currentTool = 'select'; updateToolPanel(); renderAnimList(); draw(); updateCursor(); return; }
+    if (brushActive) { brushActive = false; brushCapture = null; currentBrushAnimId = null; currentTool = 'select'; updateToolPanel(); renderAnimList(); draw(); updateCursor(); return; }
     if (contourSelectMode !== null) { contourSelectMode = null; renderAnimList(); draw(); return; }
     const placing = animations.find(a => a.inPlacementMode);
     if (placing) {
@@ -6932,6 +7056,7 @@ function startPlacementFromTool(kind) {
   openColorMenuAnimId = null;
   if (kind === 'select') {
     if (freeformPenActive) { freeformPenActive = false; freeformPenCapture = null; }
+  if (brushActive) { brushActive = false; brushCapture = null; currentBrushAnimId = null; }
     const placing = animations.find(a => a.inPlacementMode);
     if (placing) {
       finalizePlacement(placing);
@@ -6954,9 +7079,9 @@ function startPlacementFromTool(kind) {
     beginShapePlacement(selectedShapeKind);
     return;
   }
-  if (kind === 'freeform') {
-    currentTool = 'freeform';
-    if (freeformPenActive) {
+  if (kind === 'stylus') {
+    currentTool = 'stylus';
+    if (freeformPenActive || brushActive) {
       updateToolPanel();
       return;
     } else {
@@ -6967,7 +7092,10 @@ function startPlacementFromTool(kind) {
       selectedGroupId = null;
       clearMultiSelection();
       clearGroupMode();
-      freeformPenActive = true;
+      // Re-clicking the toolbar always starts a fresh brush session — there's no precedent
+      // anywhere in this app for "resume adding to a specific existing object."
+      if (stylusSubTool === 'pencil') freeformPenActive = true;
+      else { brushActive = true; currentBrushAnimId = null; }
     }
     updateToolPanel();
     renderAnimList();
@@ -6975,6 +7103,7 @@ function startPlacementFromTool(kind) {
     return;
   }
   if (freeformPenActive) { freeformPenActive = false; freeformPenCapture = null; }
+  if (brushActive) { brushActive = false; brushCapture = null; currentBrushAnimId = null; }
   const placing = animations.find(a => a.inPlacementMode);
   if (placing && activePlacementTool() === kind) {
     updateToolPanel();
@@ -7000,6 +7129,7 @@ function beginShapePlacement(kind) {
   const shapeKind = SHAPE_TOOL_KINDS.includes(kind) ? kind : 'rectangle';
   selectedShapeKind = shapeKind;
   if (freeformPenActive) { freeformPenActive = false; freeformPenCapture = null; }
+  if (brushActive) { brushActive = false; brushCapture = null; currentBrushAnimId = null; }
   const placing = animations.find(a => a.inPlacementMode);
   if (placing) cancelPlacement(placing);
   exitEditMode();
@@ -7034,6 +7164,40 @@ function rdpSimplify(pts, eps) {
   return [pts[0], pts[pts.length - 1]];
 }
 
+// rdpSimplify operates on plain {x,y} points; this wraps it for math-space Cx points
+// (used to re-simplify a brush ribbon's boundary after offsetting).
+function rdpSimplifyCx(pts, eps) {
+  const xy = pts.map(p => ({ x: p.re, y: p.im }));
+  return rdpSimplify(xy, eps).map(p => new Cx(p.x, p.y));
+}
+
+// Caps the half-width used for TOLERANCE/simplification-aggressiveness purposes only — never for
+// the actual paint radius (isNearPolyline's coverage test always uses the real, uncapped
+// halfWidthDevicePx, so stroke width itself still scales correctly with the real thickness
+// setting). Every simplification/grid-spacing tolerance below scales proportionally with
+// half-width, which is exactly right at small-to-moderate thickness (a thicker stroke can
+// genuinely tolerate coarser simplification without looking different) but has no natural ceiling
+// — left alone, a thickness of 100 gets roughly 4x the simplification aggressiveness that 24 (the
+// value this was tuned against) did, smoothing away real detail that thickness alone doesn't
+// justify losing. Pinned at the equivalent of thickness 40 — comfortably above the tested "looks
+// right" range, so there's headroom, but detail stops degrading further beyond that.
+function brushToleranceHalfWidthDevicePx(halfWidthDevicePx) {
+  return Math.min(halfWidthDevicePx, 20 * devicePixelRatio);
+}
+
+// Brush stroke RDP epsilon (device px, same space as freeformPenTolerance's usage). This
+// simplifies the raw drag before it's fit into a smooth centerline curve (see
+// smoothedCenterlineCanvasPts) — so, unlike before that fitting step existed, its job now is just
+// "thin out redundant raw points for the fitter," not "decide what's a real corner vs. hand
+// tremor." That judgment now belongs to computeFreshPlacementSegments itself — the same fitter
+// Pencil uses to make exactly this call for every hand-drawn curve in this app — so this can go
+// back to Pencil's own modest tolerance instead of the large half-width-scaled value that was
+// compensating for not having a smoothing step at all.
+function brushRdpEpsilon(halfWidthDevicePx) {
+  halfWidthDevicePx = brushToleranceHalfWidthDevicePx(halfWidthDevicePx);
+  return Math.max(freeformPenTolerance * devicePixelRatio, halfWidthDevicePx * 0.15);
+}
+
 function commitFreeformPenStroke() {
   const cap = freeformPenCapture;
   freeformPenCapture = null;
@@ -7060,10 +7224,12 @@ function commitFreeformPenStroke() {
   if (!segs.length) { draw(); return; }
   addAnimation('freeform');
   const anim = animations[animations.length - 1];
+  anim.color = stylusDefaultColor();
   anim.anchors = mathPts;
   anim.segments = segs;
   anim.anchorLocked = mathPts.map(() => false);
   anim.freeformPen = true;
+  anim.outlineOpacity = globalSettings.stylusOpacity ?? 1;
   if (_didClose) anim.closed = true;
   anim.inPlacementMode = false;
   recompileAnim(anim);
@@ -7077,40 +7243,656 @@ function commitFreeformPenStroke() {
   renderAnimList(); draw(); updateCursor();
 }
 
-function renderFreeformPenSidebar(detailEl) {
+// Builds one curves[] entry for a brush loop, matching the shape mergeObjects() builds for its
+// per-source curve objects (see mergeObjects, ~line 5339) so the rest of the app (rendering,
+// topology, save/load) treats it exactly like any other multi-curve sub-path.
+function makeBrushLoopCurveEntry(anchors, segments, anim) {
+  return {
+    id: Date.now() + Math.random(), color: anim.color, kind: 'freeform',
+    closed: true, rotation: 0,
+    anchors, segments,
+    anchorLocked: anchors.map(() => false),
+    anchorLabels: [], fillColor: null, outlineOpacity: 1, fillOpacity: 0.3, fillStyle: 'solid',
+    gradientFromArcs: new Set(), gradientToArcs: new Set(),
+    gradientToColor: null, gradientToOpacity: null,
+    text: '', fontSize: 36, textScaleX: 1, textScaleY: 1, textShearX: 0, textShearY: 0,
+    visible: true, thickness: anim.thickness, activeSegments: new Set(),
+    brushStroke: true,
+  };
+}
+
+// Builds a Path2D (canvas space) from a list of curves, one closed subpath per curve, by
+// sampling each compiled segment the same way region fill paths already are elsewhere in this
+// file (sampleCompiledAdaptive). Used purely as an isPointInPath coverage-test surface — see
+// computeBrushCoverageLoops.
+function buildCurveListCoveragePath(curveList) {
+  const path = new Path2D();
+  for (const c of curveList) {
+    let started = false;
+    for (let s = 0; s < c.segments.length; s++) {
+      const sg = c.segments[s];
+      if (!sg?.compiled) continue;
+      for (const pt of sampleCompiledAdaptive(sg.compiled)) {
+        if (!pt) continue;
+        if (!started) { path.moveTo(pt[0], pt[1]); started = true; }
+        else path.lineTo(pt[0], pt[1]);
+      }
+    }
+    if (started) path.closePath();
+  }
+  return path;
+}
+
+function curveListCanvasBBox(curveList) {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  const acc = (re, im) => {
+    const [x, y] = toCanvas(re, im);
+    if (x < minX) minX = x; if (x > maxX) maxX = x;
+    if (y < minY) minY = y; if (y > maxY) maxY = y;
+  };
+  for (const c of curveList) {
+    for (const a of c.anchors) acc(a.re, a.im);
+    for (const seg of c.segments) { if (!seg) continue; acc(seg.h0.re, seg.h0.im); acc(seg.h1.re, seg.h1.im); }
+  }
+  return { minX, minY, maxX, maxY };
+}
+
+function pointListCanvasBBox(canvasPts) {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const [x, y] of canvasPts) {
+    if (x < minX) minX = x; if (x > maxX) maxX = x;
+    if (y < minY) minY = y; if (y > maxY) maxY = y;
+  }
+  return { minX, minY, maxX, maxY };
+}
+
+// Shoelace area (canvas-space) of a flat point list.
+function polygonArea(pts) {
+  let area = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const p0 = pts[i], p1 = pts[(i + 1) % pts.length];
+    if (!p0 || !p1) continue;
+    area += p0[0] * p1[1] - p1[0] * p0[1];
+  }
+  return Math.abs(area / 2);
+}
+
+// True iff (x,y) is within `radius` of any point on the polyline through `pts` (canvas space).
+// This is the entire definition of "did the brush paint here" — no travel direction, no notion
+// of "left/right side," no join/cap special-casing. A point is painted if it's close enough to
+// somewhere the cursor passed over, full stop — which is what makes this immune to the class of
+// bugs a hand-built offset-ribbon approach has (direction reversals, sharp turns, and retraces all
+// used to twist the ribbon's left/right rails into self-crossing nonsense; none of that concept
+// exists here).
+function isNearPolyline(x, y, pts, radius) {
+  if (pts.length === 1) return Math.hypot(x - pts[0][0], y - pts[0][1]) <= radius;
+  for (let i = 0; i < pts.length - 1; i++) {
+    if (pointSegmentDistance(x, y, pts[i], pts[i + 1]) <= radius) return true;
+  }
+  return false;
+}
+
+// Computes the outline of "everything painted so far" (oldCurveList, or null for a fresh stroke)
+// unioned with one new stroke's centerline dragged at halfWidthDevicePx, via marching squares over
+// a grid of coverage samples. oldCurveList's coverage uses the native, already-proven-correct
+// ctx.isPointInPath; the new stroke's coverage uses isNearPolyline above — both are simple,
+// direction-independent "is this point covered" tests, so this function never needs to know where
+// curves intersect, which anchors are "the same point," or which way anything was drawn. Returns
+// an array of closed point loops (canvas space) — more than one loop means disjoint painted
+// islands and/or real holes — or null if anything about the result looks malformed.
+function computeBrushCoverageLoops(oldCurveList, centerlineCanvasPts, halfWidthDevicePx) {
+  try {
+    // ctx.isPointInPath interprets its path/point coordinates through ctx's CURRENT transform —
+    // mergeObjects' fill-migration code has an explicit comment about avoiding it for exactly
+    // this reason. This function runs from a mouseup handler, not mid-render, so ctx's transform
+    // should already be at its identity resting state (matches toCanvas()'s plain device-pixel
+    // output, e.g. the identity reset at ~line 9213) — but pin it explicitly rather than rely on
+    // that assumption, since a silently-wrong transform here would corrupt every containment test.
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    try {
+    const oldPath = oldCurveList && oldCurveList.length ? buildCurveListCoveragePath(oldCurveList) : null;
+
+    const bboxB = pointListCanvasBBox(centerlineCanvasPts);
+    const margin = Math.max(halfWidthDevicePx * 1.5, 8);
+    let minX = bboxB.minX - margin, minY = bboxB.minY - margin, maxX = bboxB.maxX + margin, maxY = bboxB.maxY + margin;
+    if (oldPath) {
+      const bboxA = curveListCanvasBBox(oldCurveList);
+      minX = Math.min(minX, bboxA.minX - margin);
+      minY = Math.min(minY, bboxA.minY - margin);
+      maxX = Math.max(maxX, bboxA.maxX + margin);
+      maxY = Math.max(maxY, bboxA.maxY + margin);
+    }
+    if (![minX, minY, maxX, maxY].every(isFinite)) return null;
+
+    // Grid spacing tied to brush half-width (fine enough to resolve real shape detail), clamped
+    // so a very large painted area can't blow up the sample count — widen spacing rather than
+    // sample unboundedly many points. Floor lowered from 2px to 1 device px: 2px was an arbitrary
+    // "seems reasonable" choice, not derived from anything, and it was coarse enough relative to a
+    // thin brush's half-width that sharp curvature (e.g. the bottom of a tight dip) could fail to
+    // stay connected across grid samples there specifically, fracturing off as a disconnected sliver
+    // even while the rest of the same stroke traced fine.
+    //
+    // Uses the CAPPED half-width here (brushToleranceHalfWidthDevicePx) — a thicker brush getting a
+    // finer-than-strictly-needed grid only costs a bit of compute, never a correctness problem, and
+    // it's what keeps real outline detail from washing out at high thickness. The safety check just
+    // below still compares against the real, uncapped half-width, since THAT one protects against
+    // an actually-too-coarse grid for the true stroke width.
+    let spacing = Math.max(brushToleranceHalfWidthDevicePx(halfWidthDevicePx) * 0.35, devicePixelRatio);
+    let nx = Math.ceil((maxX - minX) / spacing) + 1;
+    let ny = Math.ceil((maxY - minY) / spacing) + 1;
+    const CAP = 60000;
+    if (nx * ny > CAP) {
+      spacing *= Math.sqrt((nx * ny) / CAP);
+      nx = Math.ceil((maxX - minX) / spacing) + 1;
+      ny = Math.ceil((maxY - minY) / spacing) + 1;
+    }
+    // Widening spacing past the brush's own half-width would mean grid points can miss a thin
+    // stroke entirely between samples — the coverage test would see gaps that aren't really there
+    // and the traced boundary fragments into many small disconnected loops instead of one shape
+    // (this is what "sliding thickness down" on a large/complex stroke was doing: a big bounding
+    // box forced the cap to widen spacing past a now-thin brush's half-width). Bail rather than
+    // silently produce a fragmented, wrong result — a discarded stroke is a far better failure mode
+    // than a pile of broken geometry and a hung browser.
+    if (spacing > halfWidthDevicePx) return null;
+    if (nx < 3 || ny < 3 || nx * ny > CAP * 1.05) return null;
+
+    const gx = i => minX + i * spacing;
+    const gy = j => minY + j * spacing;
+    const isCovered = (x, y) => (oldPath && ctx.isPointInPath(oldPath, x, y, 'evenodd')) || isNearPolyline(x, y, centerlineCanvasPts, halfWidthDevicePx);
+    const covered = new Uint8Array(nx * ny);
+    for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) covered[j * nx + i] = isCovered(gx(i), gy(j)) ? 1 : 0;
+    const at = (i, j) => covered[j * nx + i];
+
+    // Marching squares: each grid cell's 4 corners give a 0-15 case; 0 (all uncovered) and 15
+    // (all covered) contribute nothing. Every other case cuts the cell with a segment connecting
+    // two of its edge midpoints (no interpolation needed for a boolean field — the resulting
+    // blocky polyline is smoothed by the same simplify-then-fit pipeline used for the ribbon
+    // boundary itself, same as every other case below). The two diagonal cases (5, 10) are
+    // ambiguous between "connected through the middle" and "two separate corners" — resolved by
+    // also sampling the cell center.
+    //
+    // Each crossing point lies on a specific grid edge, shared by at most 2 cells, so segments
+    // stitch into closed loops by matching shared edge keys — no angular sorting or node-identity
+    // resolution anywhere in this function, which is the part that broke the earlier attempt.
+    const nodes = new Map(); // edgeKey -> { point, links: [edgeKey,...] }
+    const addNode = (key, x, y) => { if (!nodes.has(key)) nodes.set(key, { point: [x, y], links: [] }); return nodes.get(key); };
+    const link = (keyA, ptA, keyB, ptB) => {
+      addNode(keyA, ptA[0], ptA[1]).links.push(keyB);
+      addNode(keyB, ptB[0], ptB[1]).links.push(keyA);
+    };
+
+    for (let j = 0; j < ny - 1; j++) {
+      for (let i = 0; i < nx - 1; i++) {
+        const a = at(i, j), b = at(i + 1, j), c = at(i + 1, j + 1), d = at(i, j + 1);
+        const caseIdx = a | (b << 1) | (c << 2) | (d << 3);
+        if (caseIdx === 0 || caseIdx === 15) continue;
+        const Ax = gx(i), Ay = gy(j), Bx = gx(i + 1), By = gy(j), Cx_ = gx(i + 1), Cy = gy(j + 1), Dx = gx(i), Dy = gy(j + 1);
+        const midAB = [(Ax + Bx) / 2, (Ay + By) / 2], keyAB = `h:${i}:${j}`;
+        const midBC = [(Bx + Cx_) / 2, (By + Cy) / 2], keyBC = `v:${i + 1}:${j}`;
+        const midCD = [(Cx_ + Dx) / 2, (Cy + Dy) / 2], keyCD = `h:${i}:${j + 1}`;
+        const midDA = [(Dx + Ax) / 2, (Dy + Ay) / 2], keyDA = `v:${i}:${j}`;
+        const cutA = () => link(keyDA, midDA, keyAB, midAB);
+        const cutB = () => link(keyAB, midAB, keyBC, midBC);
+        const cutC = () => link(keyBC, midBC, keyCD, midCD);
+        const cutD = () => link(keyCD, midCD, keyDA, midDA);
+        const cutHoriz = () => link(keyDA, midDA, keyBC, midBC); // separates top pair from bottom pair
+        const cutVert = () => link(keyAB, midAB, keyCD, midCD);  // separates left pair from right pair
+        switch (caseIdx) {
+          case 1: case 14: cutA(); break;
+          case 2: case 13: cutB(); break;
+          case 4: case 11: cutC(); break;
+          case 8: case 7: cutD(); break;
+          case 3: case 12: cutHoriz(); break;
+          case 6: case 9: cutVert(); break;
+          case 5: { // A,C covered diagonal
+            if (isCovered((Ax + Cx_) / 2, (Ay + Cy) / 2)) { cutB(); cutD(); } else { cutA(); cutC(); }
+            break;
+          }
+          case 10: { // B,D covered diagonal
+            if (isCovered((Ax + Cx_) / 2, (Ay + Cy) / 2)) { cutA(); cutC(); } else { cutB(); cutD(); }
+            break;
+          }
+        }
+      }
+    }
+    if (!nodes.size) return null;
+
+    const visited = new Set();
+    const loops = [];
+    for (const startKey of nodes.keys()) {
+      if (visited.has(startKey)) continue;
+      const startNode = nodes.get(startKey);
+      if (startNode.links.length !== 2) return null;
+      const loopPts = [];
+      let prevKey = null, curKey = startKey, steps = 0;
+      do {
+        visited.add(curKey);
+        const node = nodes.get(curKey);
+        loopPts.push(node.point);
+        const nextKey = node.links[0] === prevKey ? node.links[1] : node.links[0];
+        prevKey = curKey;
+        curKey = nextKey;
+        if (!curKey || ++steps > 200000) return null;
+      } while (curKey !== startKey);
+      if (loopPts.length < 3) return null;
+      loops.push(loopPts);
+    }
+    return loops.length ? loops : null;
+    } finally {
+      ctx.restore();
+    }
+  } catch (_) {
+    return null;
+  }
+}
+
+// Straight-line segments between consecutive points (pts[last] duplicates pts[0], matching the
+// closed-loop convention used everywhere else in this file — n points, n-1 segments). Each
+// segment's handles sit exactly on the chord between its endpoints (the same "straight line as a
+// degenerate bezier" construction computeFreshPlacementSegments itself uses for its 2-point case),
+// which — since eccentricity has no effect on the rendered shape when
+// LEGACY_ECCENTRICITY_EDITING_ENABLED is false (confirmed: buildSingleEccentricityFn just returns
+// the raw bezier through h0/h1) — renders as a genuinely flat edge, not an approximately-flat one.
+//
+// Used instead of the organic hand-drawn-curve fitter (computeFreshPlacementSegments) for brush
+// outlines specifically: that fitter is built to smooth a gesture, and it doesn't know a run of
+// points is meant to be perfectly flat — it added visible curvature along straight sections of a
+// coverage outline (e.g. a plain straight-line stroke rendering as a lens/eye shape instead of a
+// flat-sided capsule). A marching-squares coverage outline isn't a gesture to smooth; it's already
+// the correct polygon, so it should be rendered faithfully rather than re-interpreted.
+function straightSegmentsFromPoints(pts) {
+  const segs = [];
+  for (let i = 0; i < pts.length - 1; i++) {
+    segs.push(makeSeg(lerpCx(pts[i], pts[i + 1], 1 / 3), lerpCx(pts[i], pts[i + 1], 2 / 3)));
+  }
+  return segs;
+}
+
+// Nudges each point toward the midpoint of its two neighbors (closed loop, wrapping around).
+// A point already sitting exactly on the line between its neighbors is a fixed point of this
+// operation — it doesn't move, since it already equals that midpoint — so a genuinely straight run
+// is untouched no matter how many passes are run, while an actual kink (including the small
+// grid-staircase zigzags marching squares leaves on any diagonal edge) gets pulled toward the
+// smooth path through its neighbors. That's what makes this safe to use here: it can only soften
+// real corners, never introduce curvature where there wasn't already a kink to smooth.
+function smoothClosedPointLoop(pts, weight = 0.5, iterations = 2) {
+  // pts is closed (pts[last] === pts[0]); smooth the n-1 distinct points, then re-close.
+  let current = pts.slice(0, -1);
+  const n = current.length;
+  if (n < 3) return pts;
+  for (let iter = 0; iter < iterations; iter++) {
+    const next = new Array(n);
+    for (let i = 0; i < n; i++) {
+      const prev = current[(i - 1 + n) % n], cur = current[i], nxt = current[(i + 1) % n];
+      const avgRe = (prev.re + nxt.re) / 2, avgIm = (prev.im + nxt.im) / 2;
+      next[i] = new Cx(cur.re * weight + avgRe * (1 - weight), cur.im * weight + avgIm * (1 - weight));
+    }
+    current = next;
+  }
+  return [...current, current[0]];
+}
+
+// Simplifies a closed canvas-space point loop, smooths remaining kinks, and builds straight
+// segments through the result — the same simplify pipeline commitBrushStroke already uses for the
+// raw ribbon boundary, applied here to a traced union-grid contour instead. RDP naturally keeps
+// points where the outline has real curvature (round caps/joins) and drops them where it's
+// genuinely flat (RDP removes an interior point whenever it's within epsilon of the straight
+// chord, and a perfectly straight run has zero deviation regardless of epsilon); smoothing then
+// rounds off whatever kinks survive simplification (mostly grid-staircase noise at this point) —
+// so straight-line facets through the result stay flat where the shape is flat and read as
+// reasonably round where it curves, without needing any curve-fitting step that could reintroduce
+// unwanted bulge.
+function rebuildLoopGeometry(canvasPts) {
+  if (canvasPts.length < 3) return null;
+  const area = polygonArea(canvasPts);
+  const mathPts = canvasPts.map(pt => new Cx(...toMath(pt[0], pt[1])));
+  const halfWidthDevicePx = (globalSettings.defaultBrushThickness / 2) * devicePixelRatio;
+  // Capped (brushToleranceHalfWidthDevicePx) for the same reason as everywhere else this pattern
+  // appears: this is a simplification tolerance, not the paint radius, and letting it keep growing
+  // linearly with thickness meant a thickness of 100 smoothed away real detail that thickness alone
+  // didn't justify losing.
+  const halfWidthMathForTolerance = brushToleranceHalfWidthDevicePx(halfWidthDevicePx) / scale;
+  // The floor here has to track the grid's OWN floor (1 device px in computeBrushCoverageLoops),
+  // not shrink below it — grid-staircase noise is an absolute-scale artifact (it doesn't get any
+  // smaller just because the brush is thin), so a purely thickness-proportional epsilon stops being
+  // able to clean it up once half-width itself drops below that floor. This is why node count
+  // used to blow up specifically at small thicknesses even though the underlying noise was the same
+  // size it always is.
+  const eps = Math.max(halfWidthMathForTolerance * 0.3, (2 * devicePixelRatio) / scale);
+  let simplified = rdpSimplifyCx(mathPts, eps);
+  if (simplified.length < 3) return null;
+  simplified.push(new Cx(simplified[0].re, simplified[0].im));
+  simplified = smoothClosedPointLoop(simplified);
+  const segments = straightSegmentsFromPoints(simplified);
+  if (!segments.length) return null;
+  return { anchors: simplified, segments, area };
+}
+
+// Replaces anim's brush geometry with the rebuilt (simplified) coverage loop(s) — used both when
+// creating a brand-new brush object (createBrushAnimFromLoops) and when merging a stroke into an
+// existing one.
+function applyRebuiltBrushLoops(anim, rebuilt) {
+  if (rebuilt.length === 1) {
+    anim.curves = null;
+    anim.anchors = rebuilt[0].anchors;
+    anim.segments = rebuilt[0].segments;
+    anim.anchorLocked = rebuilt[0].anchors.map(() => false);
+    recompileAnim(anim);
+  } else {
+    anim.curves = rebuilt.map(r => makeBrushLoopCurveEntry(r.anchors, r.segments, anim));
+    anim.anchors = [];
+    anim.segments = [];
+    for (const c of anim.curves) recompileAnim(c);
+  }
+}
+
+// Creates a brand-new brush object directly from coverage loops (see computeBrushCoverageLoops) —
+// the fresh-stroke counterpart to applyRebuiltBrushLoops, which handles the merge-into-existing
+// case. One loop → top-level anchors/segments; more than one (disjoint painted islands from a
+// single self-crossing drag) → curves[], same as everywhere else in this data model.
+function createBrushAnimFromLoops(rebuilt) {
+  const anim = addAnimation('freeform');
+  anim.closed = true;
+  anim.brushStroke = true;
+  anim.outlineOpacity = 0;
+  anim.color = stylusDefaultColor();
+  anim.fillColor = anim.color;
+  anim.fillOpacity = globalSettings.stylusOpacity ?? 1;
+  anim.fillStyle = 'solid';
+  anim.inPlacementMode = false;
+  applyRebuiltBrushLoops(anim, rebuilt);
+  detectObjectTopology(anim);
+  currentBrushAnimId = anim.id;
+  selectedId = anim.id;
+  return anim;
+}
+
+// Fits the same smooth curve Pencil itself would through a simplified drag (reusing
+// computeFreshPlacementSegments directly, not a re-approximation of it), then densely samples that
+// curve into canvas points — this is what the coverage test walks distance against, instead of the
+// raw simplified polyline. A hand-drawn line always has small direction changes RDP alone can't
+// tell apart from an intentional corner; Pencil's fitter is specifically built to make that call
+// well (it already smooths exactly this kind of gesture for every other curve in this app), so
+// reusing it here means the brush inherits that judgment rather than approximating it via a bigger
+// RDP tolerance. Also substantially reduces the grid-staircase double-noding a jagged input
+// centerline was producing at every kink, since the coverage boundary now varies smoothly instead
+// of having sharp local direction changes for the grid to stair-step around.
+// tolerancePx controls how densely the fitted curve gets sampled — deliberately NOT
+// sampleCompiledAdaptive's tight default (~0.7px). computeBrushCoverageLoops's grid can only ever
+// resolve detail down to its own spacing, so sampling far finer than that just multiplies point
+// count (and therefore the cost of isNearPolyline's per-grid-point scan, which is linear in
+// centerline points) for no visual benefit. Caller passes the same spacing the grid will use.
+function smoothedCenterlineCanvasPts(mathPts, tolerancePx) {
+  if (mathPts.length < 3) return mathPts.map(p => toCanvas(p.re, p.im));
+  const segs = computeFreshPlacementSegments(mathPts);
+  if (!segs.length) return mathPts.map(p => toCanvas(p.re, p.im));
+  const curve = { anchors: mathPts, segments: segs };
+  recompileAnim(curve);
+  const pts = [];
+  for (const seg of curve.segments) {
+    if (!seg?.compiled) continue;
+    for (const pt of sampleCompiledAdaptive(seg.compiled, tolerancePx)) if (pt) pts.push(pt);
+  }
+  return pts.length >= 2 ? pts : mathPts.map(p => toCanvas(p.re, p.im));
+}
+
+function commitBrushStroke() {
+  const cap = brushCapture;
+  brushCapture = null;
+  if (!cap || cap.points.length < 2) { draw(); return; }
+  const halfWidthDevicePx = (globalSettings.defaultBrushThickness / 2) * devicePixelRatio;
+  const eps = brushRdpEpsilon(halfWidthDevicePx);
+  const simplifiedMathPts = rdpSimplify(cap.points, eps).map(p => new Cx(...toMath(p.x, p.y)));
+  // Matches computeBrushCoverageLoops's own grid-spacing formula — no point sampling the
+  // centerline finer than the grid can resolve (see smoothedCenterlineCanvasPts). Capped the same
+  // way (brushToleranceHalfWidthDevicePx) so this doesn't wash out detail at high thickness either.
+  const centerlineTolerancePx = Math.max(brushToleranceHalfWidthDevicePx(halfWidthDevicePx) * 0.35, devicePixelRatio);
+  const centerlineCanvasPts = smoothedCenterlineCanvasPts(simplifiedMathPts, centerlineTolerancePx);
+
+  // "What did the brush paint" is just "coverage" — within half-width of the dragged centerline,
+  // unioned with whatever this object already has painted (if any). See computeBrushCoverageLoops
+  // and isNearPolyline for why this replaced an earlier hand-built offset-ribbon approach: that
+  // approach tracked direction-relative "left/right" rails that broke on reversals and even sharp
+  // turns in a single stroke; a plain distance-to-centerline test has no notion of direction to
+  // get confused about, so those bugs can't recur here structurally, not just by coincidence.
+  const existingAnim = animations.find(a => a.id === currentBrushAnimId);
+  const oldCurveList = existingAnim ? animCurves(existingAnim) : null;
+  const loops = computeBrushCoverageLoops(oldCurveList, centerlineCanvasPts, halfWidthDevicePx);
+
+  let committed = false;
+  if (loops) {
+    const rebuilt = loops.map(loop => rebuildLoopGeometry(loop));
+    if (rebuilt.every(r => r && r.anchors.length >= 3 && r.segments.length >= 3)) {
+      if (existingAnim) {
+        applyRebuiltBrushLoops(existingAnim, rebuilt);
+        detectObjectTopology(existingAnim);
+        selectedId = existingAnim.id;
+      } else {
+        createBrushAnimFromLoops(rebuilt);
+      }
+      committed = true;
+    }
+  }
+
+  // Ends the tool on release, matching Pencil exactly — each stroke commits, selects, and
+  // returns to Select, rather than staying active for further strokes.
+  if (committed) {
+    const finalAnim = animations.find(a => a.id === currentBrushAnimId);
+    if (finalAnim) { enterEditMode(finalAnim, new Set()); exitEditMode(); }
+  }
+  brushActive = false;
+  currentBrushAnimId = null;
+  currentTool = 'select';
+  if (committed) pushUndo();
+  updateToolPanel();
+  renderAnimList(); draw(); updateCursor();
+}
+
+function selectStylusSubTool(sub) {
+  if (sub === stylusSubTool) return;
+  if (sub === 'pencil') {
+    brushActive = false; brushCapture = null; currentBrushAnimId = null;
+    freeformPenActive = true;
+  } else {
+    freeformPenActive = false; freeformPenCapture = null;
+    brushActive = true; currentBrushAnimId = null;
+  }
+  stylusSubTool = sub;
+  updateToolPanel(); renderAnimList(); draw(); updateCursor();
+}
+
+// Covers both Stylus sub-tools (Pencil = the existing freeform pen, unchanged; Brush = new).
+// Brush reads as bristles via several separate lines fanning out from the ferrule — a pattern
+// that doesn't depend on subtle width/fill differences to be recognizable at small sizes, unlike
+// the earlier tapered-outline attempts.
+function makeStylusSubIcon(key, size = 25, active = false) {
+  const svg = makeSvgEl('svg', { viewBox: '0 0 24 24', class: 'anim-kind-icon', 'aria-hidden': 'true' });
+  svg.style.width = size + 'px';
+  svg.style.height = size + 'px';
+  svg.style.strokeWidth = '0.85';
+  // .anim-kind-icon sets its own `color` in CSS, which otherwise overrides whatever color the
+  // parent button has — set it here inline (wins over the class) so active/inactive actually differ.
+  svg.style.color = active ? '#ffffff' : '#7a7f95';
+  // Active state gets its own dark interior fill (matching the inactive button's own background,
+  // #1e1e2e) instead of the default transparent/currentColor fill, so the bright active stroke
+  // color has a darker interior to contrast against rather than reading as one flat light shape.
+  // Inactive rendering is untouched (still fill:none / currentColor as before).
+  if (key === 'brush') {
+    // Handle uses the same half-width as the pencil body below, for a matching visual weight.
+    // Bristle tip is an inverted raindrop — bulges wider than the ferrule, then curves in to a
+    // point — not a flat fan or a straight taper.
+    // Drawn bounds are x:[1.03,20.44] y:[0.03,19.44] — off-center in the 24x24 viewBox, so shift
+    // by (+1.265,+2.265) to center the actual artwork rather than just the SVG element itself.
+    const g = makeSvgEl('g', { transform: 'translate(1.265,2.265)' });
+    const handle = makeSvgEl('path', { d: 'M1.03,2.37 L3.37,0.03 L15.17,11.83 L12.83,14.17 Z' });
+    const tip = makeSvgEl('path', { d: 'M12.83,14.17 Q13.13,18.37 20.44,19.44 Q19.37,12.13 15.17,11.83 Z', fill: '#1e1e2e' });
+    if (active) handle.setAttribute('fill', '#1e1e2e');
+    g.append(handle, tip);
+    svg.append(g);
+  } else {
+    // Drawn bounds are x:[2.87,20] y:[1.87,19] — shift by (+0.565,+1.565) to center.
+    const g = makeSvgEl('g', { transform: 'translate(0.565,1.565)' });
+    const body = makeSvgEl('path', { d: 'M2.87,4.13 L5.13,1.87 L17.61,14.35 L20,19 L15.35,16.61 Z' });
+    if (active) body.setAttribute('fill', '#1e1e2e');
+    g.append(body, makeSvgEl('path', { d: 'M4.79,6.05 L7.05,3.79' }));
+    svg.append(g);
+  }
+  return svg;
+}
+
+// Gated on the engaged-tool flags (freeformPenActive/brushActive), not inPlacementMode — neither
+// sub-tool ever enters placement mode, both commit directly on mouseup.
+function renderStylusSidebar(detailEl) {
   const wrap = document.createElement('div');
   wrap.style.cssText = 'padding:10px 12px; display:flex; flex-direction:column; gap:8px;';
+  const isBrush = stylusSubTool === 'brush';
 
-  const hintEl = document.createElement('div');
-  hintEl.className = 'placement-hint';
-  hintEl.style.cssText = 'padding:0; margin-bottom:6px;';
-  hintEl.textContent = 'Drag on canvas to draw. Release to finish stroke.';
-  wrap.appendChild(hintEl);
+  const row = document.createElement('div');
+  row.style.cssText = 'display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:6px;';
+  for (const { key, label } of [{ key: 'pencil', label: 'Pencil' }, { key: 'brush', label: 'Brush' }]) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.title = label;
+    btn.setAttribute('aria-label', label);
+    btn.style.cssText = [
+      'height:84px', 'border-radius:6px', 'border:1px solid #313244',
+      'background:#1e1e2e', 'color:#393b4c', 'display:flex',
+      'align-items:center', 'justify-content:center', 'cursor:pointer'
+    ].join(';');
+    if (key === stylusSubTool) {
+      btn.style.background = '#393b4c';
+      btn.style.borderColor = '#b3d1ff';
+      btn.style.color = '#ffffff';
+    }
+    btn.appendChild(makeStylusSubIcon(key, 64, key === stylusSubTool));
+    btn.addEventListener('click', e => { e.stopPropagation(); selectStylusSubTool(key); });
+    row.appendChild(btn);
+  }
+  wrap.appendChild(row);
 
-  const tolBlock = document.createElement('div');
-  tolBlock.style.cssText = 'display:flex; flex-direction:column; gap:6px;';
-
-  const tolLabelRow = document.createElement('div');
-  tolLabelRow.style.cssText = 'display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:11px; color:#a6adc8;';
-  const tolLabel = document.createElement('span');
-  tolLabel.textContent = 'Smoothing';
-  const tolValue = document.createElement('span');
-  tolValue.textContent = `${freeformPenTolerance}px`;
-  tolLabelRow.append(tolLabel, tolValue);
-  tolBlock.appendChild(tolLabelRow);
-
-  const tolSlider = document.createElement('input');
-  tolSlider.type = 'range';
-  tolSlider.min = '2'; tolSlider.max = '5'; tolSlider.step = '1';
-  tolSlider.value = String(freeformPenTolerance);
-  tolSlider.className = 'bend-slider';
-  tolSlider.tabIndex = -1;
-  tolSlider.addEventListener('input', () => {
-    freeformPenTolerance = parseInt(tolSlider.value, 10);
-    tolValue.textContent = `${freeformPenTolerance}px`;
+  const thickBlock = document.createElement('div');
+  thickBlock.style.cssText = 'display:flex; flex-direction:column; gap:6px;';
+  const thickLabelRow = document.createElement('div');
+  thickLabelRow.style.cssText = 'display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:11px; color:#a6adc8;';
+  const thickLabel = document.createElement('span');
+  thickLabel.textContent = 'Thickness';
+  const thickValue = document.createElement('span');
+  const curThick = isBrush ? globalSettings.defaultBrushThickness : globalSettings.defaultThickness;
+  thickValue.textContent = String(curThick);
+  thickLabelRow.append(thickLabel, thickValue);
+  thickBlock.appendChild(thickLabelRow);
+  const thickSlider = document.createElement('input');
+  thickSlider.type = 'range';
+  thickSlider.min = isBrush ? '10' : '1';
+  thickSlider.max = isBrush ? '100' : '10';
+  thickSlider.step = '1';
+  thickSlider.value = String(curThick);
+  thickSlider.className = 'bend-slider';
+  thickSlider.tabIndex = -1;
+  thickSlider.addEventListener('input', () => {
+    const v = parseInt(thickSlider.value, 10);
+    if (isBrush) globalSettings.defaultBrushThickness = v; else globalSettings.defaultThickness = v;
+    thickValue.textContent = String(v);
+    saveGlobalSettings();
   });
-  tolBlock.appendChild(tolSlider);
-  wrap.appendChild(tolBlock);
+  thickBlock.appendChild(thickSlider);
+  wrap.appendChild(thickBlock);
+
+  // Color the next Pencil/Brush stroke will use. Shared with the app's general "Default Color"
+  // (globalSettings.defaultColor, also read by addAnimation() for every new object) rather than
+  // a separate stylus-only value, so it stays a single source of truth and persists exactly like
+  // any other global setting until the user changes it again.
+  const colorBlock = document.createElement('div');
+  colorBlock.style.cssText = 'display:flex; flex-direction:column; gap:6px;';
+  const seedColor = stylusDefaultColor();
+  let opacitySlider = null;
+  const colorRow = appendHslColorPicker(colorBlock, seedColor, (color) => {
+    globalSettings.defaultColor = color;
+    saveGlobalSettings();
+  }, {
+    withUndo: false, fallbackHue: colorToHsl(seedColor).h,
+    onPreviewChange(hex) { setRangeTrack(opacitySlider, opacitySliderTrack(hex)); },
+  });
+  {
+    const isActive = eyedropperTarget === 'stylus-default';
+    const dropBtn = document.createElement('button');
+    dropBtn.className = 'eyedropper-btn' + (isActive ? ' active' : '');
+    dropBtn.title = isActive ? 'Click a canvas to sample color (Escape to cancel)' : 'Pick color from canvas';
+    dropBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21l1.5-4.5L15.5 6l3 3L8 20.5z"/><path d="M18.5 6l1.5-1.5c.8-.8.8-2.2 0-3s-2.2-.8-3 0L15.5 3"/></svg>` + (isActive ? ' Sampling…' : ' Sample');
+    dropBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      if (isActive) { deactivateEyedropper(); } else {
+        eyedropperTarget = 'stylus-default'; eyedropperAnimId = null; updateCursor();
+      }
+      renderAnimList();
+    });
+    colorRow.appendChild(dropBtn);
+  }
+  wrap.appendChild(colorBlock);
+
+  // Opacity for the next stroke. A dedicated stylusOpacity setting (not shared with defaultColor)
+  // since there's no shape-placement equivalent to keep it in sync with; defaults to 100%.
+  // Same tree-slider-row markup as the object-detail panel's Opacity control (appendSliderRow,
+  // ~19381) so it looks identical — built by hand instead of calling appendSliderRow because that
+  // helper calls pushUndo() on drag-start, which is right for editing an object's geometry but
+  // wrong here: this is a global setting, saved via saveGlobalSettings() like Thickness above,
+  // not part of the animations/groups undo history.
+  const opRow = document.createElement('div');
+  opRow.className = 'tree-slider-row';
+  opRow.style.padding = '2px 8px 2px 0';
+  const opLabel = document.createElement('label');
+  opLabel.textContent = 'Opacity';
+  const curOp = Math.round((globalSettings.stylusOpacity ?? 1) * 100);
+  opacitySlider = document.createElement('input');
+  opacitySlider.type = 'range';
+  opacitySlider.min = '0';
+  opacitySlider.max = '100';
+  opacitySlider.step = '1';
+  opacitySlider.value = String(curOp);
+  setRangeTrack(opacitySlider, opacitySliderTrack(seedColor));
+  const opValue = document.createElement('span');
+  opValue.className = 'tree-slider-val';
+  opValue.textContent = `${curOp}%`;
+  opacitySlider.addEventListener('input', () => {
+    const v = parseInt(opacitySlider.value, 10);
+    globalSettings.stylusOpacity = clamp(v / 100, 0, 1);
+    opValue.textContent = `${v}%`;
+    saveGlobalSettings();
+  });
+  opRow.append(opLabel, opacitySlider, opValue);
+  wrap.appendChild(opRow);
+
+  /* Smoothing slider removed from the UI (2026-07-28) — corner detection in
+  computeFreshPlacementSegments made it unnecessary for normal use; freeformPenTolerance now just
+  stays at its default (2px). Commented out rather than deleted in case it's needed again.
+  if (!isBrush) {
+    // Pencil's existing smoothing control, unchanged from the old Freeform Pen sidebar.
+    const tolBlock = document.createElement('div');
+    tolBlock.style.cssText = 'display:flex; flex-direction:column; gap:6px;';
+    const tolLabelRow = document.createElement('div');
+    tolLabelRow.style.cssText = 'display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:11px; color:#a6adc8;';
+    const tolLabel = document.createElement('span');
+    tolLabel.textContent = 'Smoothing';
+    const tolValue = document.createElement('span');
+    tolValue.textContent = `${freeformPenTolerance}px`;
+    tolLabelRow.append(tolLabel, tolValue);
+    tolBlock.appendChild(tolLabelRow);
+    const tolSlider = document.createElement('input');
+    tolSlider.type = 'range';
+    tolSlider.min = '2'; tolSlider.max = '5'; tolSlider.step = '1';
+    tolSlider.value = String(freeformPenTolerance);
+    tolSlider.className = 'bend-slider';
+    tolSlider.tabIndex = -1;
+    tolSlider.addEventListener('input', () => {
+      freeformPenTolerance = parseInt(tolSlider.value, 10);
+      tolValue.textContent = `${freeformPenTolerance}px`;
+    });
+    tolBlock.appendChild(tolSlider);
+    wrap.appendChild(tolBlock);
+  }
+  */
+
   detailEl.appendChild(wrap);
 }
 
@@ -7216,6 +7998,7 @@ function makeTransformedAnimation(src, transformPoint, rotation) {
     letter: nextLetter(),
     color: src.color,
     kind: animKind(src),
+    brushStroke: src.brushStroke ?? false,
     fillColor: animFillColor(src),
     outlineOpacity: animOutlineOpacity(src),
     fillOpacity: animFillOpacity(src),
@@ -7775,6 +8558,15 @@ function deactivateEyedropper() {
 }
 
 function applyEyedropperColor(hex) {
+  if (eyedropperTarget === 'stylus-default') {
+    // No anim to attach to yet — this just samples any existing color on the canvas straight
+    // into the Pencil/Brush drawing color, same as picking it from the wheel.
+    globalSettings.defaultColor = hex;
+    saveGlobalSettings();
+    deactivateEyedropper();
+    renderAnimList(); draw();
+    return;
+  }
   if (eyedropperTarget === 'region-fill' || eyedropperTarget === 'region-fill2') {
     let region = null;
     for (const grp of groups) {
@@ -7848,6 +8640,10 @@ function updateCursor() {
     canvas.style.cursor = FREEFORM_PEN_CURSOR;
     return;
   }
+  if (brushActive) {
+    canvas.style.cursor = BRUSH_CURSOR;
+    return;
+  }
   const placing = animations.some(a => a.inPlacementMode);
   if (placing) {
     canvas.style.cursor = 'none';
@@ -7911,6 +8707,7 @@ function queryAnchorHover(mathX, mathY, thresholdPx = 7 * devicePixelRatio) {
         const d = Math.hypot(ax - cx, ay - cy);
         if (d <= thresholdPx && d < bestDist) { bestDist = d; best = { anim, anchorIdx: i }; }
       }
+      if (best) best.dist = bestDist;
       return best;
     }
     // Merged object in edit mode: fall through to drillObjectArc check
@@ -7938,9 +8735,17 @@ function queryAnchorHover(mathX, mathY, thresholdPx = 7 * devicePixelRatio) {
         }
       }
     }
-  } else if (editModeAnimId || selectedId) {
-    // Merged object in edit mode (no drilled arc), OR object selected from panel (no edit mode).
-    // Check all anchors so the anchor icon cluster (lock / promote / demote) can appear on hover.
+  }
+  // Fallback (not exclusive with drillObjectArc above): a click can land on an anchor that
+  // belongs to a DIFFERENT arc than whichever one is currently drilled into — clicking an
+  // anchor directly never updates drillObjectArc (only clicking an arc's stroke does, via
+  // selectTopologyArc), so without this fallback that anchor is permanently unclickable until
+  // the user happens to click its own arc's stroke first. Only runs when the drilled-arc-scoped
+  // search above found nothing, so it doesn't change behavior for the common case.
+  if (!best && (editModeAnimId || selectedId)) {
+    // Merged object in edit mode (no drilled arc, or drilled arc didn't cover this anchor), OR
+    // object selected from panel (no edit mode). Check all anchors so the anchor icon cluster
+    // (lock / promote / demote) can appear on hover.
     const _selAnim = animations.find(a => a.id === (editModeAnimId ?? selectedId));
     if (_selAnim && isAnimEffectivelyVisible(_selAnim) && !_selAnim.inPlacementMode) {
       for (const _c of animCurves(_selAnim)) {
@@ -7954,7 +8759,8 @@ function queryAnchorHover(mathX, mathY, thresholdPx = 7 * devicePixelRatio) {
         }
       }
     }
-  } else if (isIsolViewport) {
+  }
+  if (!best && isIsolViewport) {
     for (const anim of animations) {
       if (!isAnimEffectivelyVisible(anim) || anim.inPlacementMode) continue;
       if (isPrimitiveAnim(anim) || isTextAnim(anim)) continue;
@@ -7967,6 +8773,7 @@ function queryAnchorHover(mathX, mathY, thresholdPx = 7 * devicePixelRatio) {
       }
     }
   }
+  if (best) best.dist = bestDist;
   return best;
 }
 
@@ -8021,6 +8828,7 @@ function queryHandleHover(mathX, mathY) {
     const d = Math.hypot(hx - cx, hy - cy);
     if (d < thresholdPx && d < bestDist) { bestDist = d; best = { anim: curve, segIdx, side }; }
   }
+  if (best) best.dist = bestDist;
   return best;
 }
 
@@ -9342,6 +10150,12 @@ canvas.addEventListener('mousedown', e => {
     draw();
     return;
   }
+  if (brushActive) {
+    e.preventDefault();
+    brushCapture = { points: [{ x: cx, y: cy }] };
+    draw();
+    return;
+  }
 
   // ── Placement mode ──
   const placingAnim = animations.find(a => a.inPlacementMode);
@@ -10187,16 +11001,20 @@ canvas.addEventListener('mousedown', e => {
   }
 
   const anchorHit = anchorHover ?? queryAnchorHover(mathX, mathY);
-  // Block anchorDrag on arc boundary junction nodes when a handle is also nearby.
-  // Without this, clicking near a handle/node overlap starts anchorDrag (anchor check
-  // runs first), which slightly moves the junction node, making handles collinear and
-  // erasing the topology node.
+  // Defer to a handle on arc boundary junction nodes only when the handle is genuinely
+  // closer to the click than the anchor is. Without this at all, clicking near a handle/node
+  // overlap starts anchorDrag (anchor check runs first), which slightly moves the junction
+  // node, making handles collinear and erasing the topology node. But blocking anchorDrag
+  // outright whenever ANY handle is merely nearby (the original fix) makes a junction node
+  // permanently ungrabbable as an anchor whenever a handle sits close to it — which is the
+  // common case, not the exception, since handles usually sit close to their own anchor. A
+  // precise click on the anchor dot itself should still win.
   let _anchorDragOk = true;
   if (anchorHit && drillObjectArc) {
     const { fromIdx, toIdx } = drillObjectArc;
     if (anchorHit.anchorIdx === fromIdx || anchorHit.anchorIdx === toIdx) {
       const _nearHandle = handleHover ?? queryHandleHover(mathX, mathY);
-      if (_nearHandle) _anchorDragOk = false;
+      if (_nearHandle && (_nearHandle.dist ?? 0) < (anchorHit.dist ?? Infinity)) _anchorDragOk = false;
     }
   }
   if (anchorHit && _anchorDragOk) {
@@ -10207,16 +11025,38 @@ canvas.addEventListener('mousedown', e => {
     const origH0 = aHitAnim.segments[anchorIdx] ? cloneCx(aHitAnim.segments[anchorIdx].h0) : null;
     const origH1 = anchorIdx > 0 && aHitAnim.segments[anchorIdx - 1] ? cloneCx(aHitAnim.segments[anchorIdx - 1].h1) : null;
     let linkedIdx = null, linkedOrigH0 = null, linkedOrigH1 = null;
+    // Straight/rigid/locked info for the loop-CLOSING segment itself — missed entirely by the
+    // plain _nextAnch/_prevAnch computation below, which only ever looks at anchorIdx±1 and has
+    // no idea a closed curve's index-0 (or last-index) anchor has a real neighbor on the OTHER
+    // side of the seam. Without this, dragging that anchor always fell back to a blind
+    // delta-shift for the wraparound segment's handle regardless of whether it was straight,
+    // rigid, or locked — the one case none of today's straight-vs-rigid ordering fixes touched,
+    // since it's a completely separate code branch (see linkedIdx handling in the mousemove
+    // handler) that never consulted those flags at all.
+    let wrapOutStraight = false, wrapOutRigid = false, wrapOutLocked = false, wrapNextAnchor = null;
+    let wrapInStraight = false, wrapInRigid = false, wrapInLocked = false, wrapPrevAnchor = null;
     const loopRange = findLoopRange(aHitAnim);
     if (loopRange) {
       if (anchorIdx === loopRange.loopStart) {
         linkedIdx = loopRange.loopEnd;
         linkedOrigH0 = aHitAnim.segments[linkedIdx] ? cloneCx(aHitAnim.segments[linkedIdx].h0) : null;
         linkedOrigH1 = linkedIdx > 0 && aHitAnim.segments[linkedIdx - 1] ? cloneCx(aHitAnim.segments[linkedIdx - 1].h1) : null;
+        if (linkedIdx > 0) {
+          wrapPrevAnchor = aHitAnim.anchors[linkedIdx - 1] ?? null;
+          const _wrapInSeg = aHitAnim.segments[linkedIdx - 1];
+          wrapInStraight = !!(wrapPrevAnchor && isSegmentStraight(_wrapInSeg, wrapPrevAnchor, origAnchor));
+          wrapInRigid = isSegmentRigid(aHitAnim, linkedIdx - 1);
+          wrapInLocked = !!(wrapPrevAnchor && isAnchorLocked(aHitAnim, linkedIdx - 1));
+        }
       } else if (anchorIdx === loopRange.loopEnd) {
         linkedIdx = loopRange.loopStart;
         linkedOrigH0 = aHitAnim.segments[linkedIdx] ? cloneCx(aHitAnim.segments[linkedIdx].h0) : null;
         linkedOrigH1 = linkedIdx > 0 && aHitAnim.segments[linkedIdx - 1] ? cloneCx(aHitAnim.segments[linkedIdx - 1].h1) : null;
+        wrapNextAnchor = aHitAnim.anchors[linkedIdx + 1] ?? null;
+        const _wrapOutSeg = aHitAnim.segments[linkedIdx];
+        wrapOutStraight = !!(wrapNextAnchor && isSegmentStraight(_wrapOutSeg, origAnchor, wrapNextAnchor));
+        wrapOutRigid = isSegmentRigid(aHitAnim, linkedIdx);
+        wrapOutLocked = !!(wrapNextAnchor && isAnchorLocked(aHitAnim, linkedIdx + 1));
       }
     }
     const _outSeg = aHitAnim.segments[anchorIdx];
@@ -10242,6 +11082,8 @@ canvas.addEventListener('mousedown', e => {
       prevAnchor: _prevAnch ? cloneCx(_prevAnch) : null,
       nextLocked: _nextLocked,
       prevLocked: _prevLocked,
+      wrapOutStraight, wrapOutRigid, wrapOutLocked, wrapNextAnchor,
+      wrapInStraight, wrapInRigid, wrapInLocked, wrapPrevAnchor,
       coincidentAnchors: [],
     };
     const _topoParentId = drillObjectArc?.animId ?? selectedId;
@@ -10671,6 +11513,13 @@ window.addEventListener('mousemove', e => {
     }
     drawFreeformPenOverlay(); return;
   }
+  if (brushCapture) {
+    const last = brushCapture.points[brushCapture.points.length - 1];
+    if (Math.hypot(cx - last.x, cy - last.y) >= 3 * devicePixelRatio) {
+      brushCapture.points.push({ x: cx, y: cy });
+    }
+    drawBrushOverlay(); return;
+  }
 
   if (dragging) {
     originX = dragOriginX + (e.clientX * devicePixelRatio - dragStartX);
@@ -10796,23 +11645,89 @@ window.addEventListener('mousemove', e => {
     const sdx = snapX - origAnchor.re, sdy = snapY - origAnchor.im;
     anim.anchors[anchorIdx] = new Cx(snapX, snapY);
     if (linkedIdx !== null) {
-      if (origH0 !== null) anim.segments[anchorIdx].h0 = new Cx(origH0.re + sdx, origH0.im + sdy);
-      if (origH1 !== null) anim.segments[anchorIdx - 1].h1 = new Cx(origH1.re + sdx, origH1.im + sdy);
+      const snapPt = new Cx(snapX, snapY);
+      // Outgoing from anchorIdx (only present when dragging loopStart — loopEnd has no outgoing
+      // segment of its own). Mirrors the main outgoing-segment handling below; duplicated here
+      // because the loop-closing case bypasses that branch entirely.
+      if (origH0 !== null && anim.segments[anchorIdx]) {
+        if (!anchorDrag.nextLocked && anchorDrag.outStraight && anchorDrag.nextAnchor) {
+          const p1 = anchorDrag.nextAnchor;
+          anim.segments[anchorIdx].h0 = new Cx(snapX + (p1.re - snapX) / 3, snapY + (p1.im - snapY) / 3);
+          anim.segments[anchorIdx].h1 = new Cx(snapX + 2 * (p1.re - snapX) / 3, snapY + 2 * (p1.im - snapY) / 3);
+        } else if (!anchorDrag.nextLocked && anchorDrag.outRigid && anchorDrag.nextAnchor) {
+          const p1 = anchorDrag.nextAnchor, orig0 = anchorDrag.origAnchor;
+          anim.segments[anchorIdx].h0 = scaleHandleRigid(origH0, p1, orig0, snapPt);
+          if (anchorDrag.origOutH1 !== null) anim.segments[anchorIdx].h1 = scaleHandleRigid(anchorDrag.origOutH1, p1, orig0, snapPt);
+        } else {
+          anim.segments[anchorIdx].h0 = new Cx(origH0.re + sdx, origH0.im + sdy);
+        }
+      }
+      // Incoming to anchorIdx from anchorIdx-1 (only present when dragging loopEnd, which has a
+      // real previous anchor in normal numbering — loopStart's incoming is the wraparound case
+      // below instead).
+      if (origH1 !== null && anim.segments[anchorIdx - 1]) {
+        if (!anchorDrag.prevLocked && anchorDrag.inStraight && anchorDrag.prevAnchor) {
+          const p0 = anchorDrag.prevAnchor;
+          anim.segments[anchorIdx - 1].h0 = new Cx(p0.re + (snapX - p0.re) / 3, p0.im + (snapY - p0.im) / 3);
+          anim.segments[anchorIdx - 1].h1 = new Cx(p0.re + 2 * (snapX - p0.re) / 3, p0.im + 2 * (snapY - p0.im) / 3);
+        } else if (!anchorDrag.prevLocked && anchorDrag.inRigid && anchorDrag.prevAnchor) {
+          const p0 = anchorDrag.prevAnchor, orig0 = anchorDrag.origAnchor;
+          if (anchorDrag.origInH0 !== null) anim.segments[anchorIdx - 1].h0 = scaleHandleRigid(anchorDrag.origInH0, p0, orig0, snapPt);
+          anim.segments[anchorIdx - 1].h1 = scaleHandleRigid(origH1, p0, orig0, snapPt);
+        } else {
+          anim.segments[anchorIdx - 1].h1 = new Cx(origH1.re + sdx, origH1.im + sdy);
+        }
+      }
       anim.anchors[linkedIdx] = new Cx(snapX, snapY);
-      if (linkedOrigH0 !== null) anim.segments[linkedIdx].h0 = new Cx(linkedOrigH0.re + sdx, linkedOrigH0.im + sdy);
-      if (linkedOrigH1 !== null) anim.segments[linkedIdx - 1].h1 = new Cx(linkedOrigH1.re + sdx, linkedOrigH1.im + sdy);
+      // Outgoing from linkedIdx (only present when dragging loopEnd — segments[linkedIdx] =
+      // segments[loopStart] is then THIS anchor's true wraparound-outgoing segment, using the
+      // wrapOut* flags computed at drag start since loopStart's own outStraight/nextAnchor never
+      // look past the seam).
+      if (linkedOrigH0 !== null && anim.segments[linkedIdx]) {
+        if (!anchorDrag.wrapOutLocked && anchorDrag.wrapOutStraight && anchorDrag.wrapNextAnchor) {
+          const p1 = anchorDrag.wrapNextAnchor;
+          anim.segments[linkedIdx].h0 = new Cx(snapX + (p1.re - snapX) / 3, snapY + (p1.im - snapY) / 3);
+          anim.segments[linkedIdx].h1 = new Cx(snapX + 2 * (p1.re - snapX) / 3, snapY + 2 * (p1.im - snapY) / 3);
+        } else if (!anchorDrag.wrapOutLocked && anchorDrag.wrapOutRigid && anchorDrag.wrapNextAnchor) {
+          const p1 = anchorDrag.wrapNextAnchor, orig0 = anchorDrag.origAnchor;
+          anim.segments[linkedIdx].h0 = scaleHandleRigid(linkedOrigH0, p1, orig0, snapPt);
+        } else {
+          anim.segments[linkedIdx].h0 = new Cx(linkedOrigH0.re + sdx, linkedOrigH0.im + sdy);
+        }
+      }
+      // Incoming to linkedIdx from linkedIdx-1 (only present when dragging loopStart —
+      // segments[linkedIdx-1] = segments[loopEnd-1] is the true wraparound-incoming segment,
+      // using the wrapIn* flags computed at drag start).
+      if (linkedOrigH1 !== null && anim.segments[linkedIdx - 1]) {
+        if (!anchorDrag.wrapInLocked && anchorDrag.wrapInStraight && anchorDrag.wrapPrevAnchor) {
+          const p0 = anchorDrag.wrapPrevAnchor;
+          anim.segments[linkedIdx - 1].h0 = new Cx(p0.re + (snapX - p0.re) / 3, p0.im + (snapY - p0.im) / 3);
+          anim.segments[linkedIdx - 1].h1 = new Cx(p0.re + 2 * (snapX - p0.re) / 3, p0.im + 2 * (snapY - p0.im) / 3);
+        } else if (!anchorDrag.wrapInLocked && anchorDrag.wrapInRigid && anchorDrag.wrapPrevAnchor) {
+          const p0 = anchorDrag.wrapPrevAnchor, orig0 = anchorDrag.origAnchor;
+          anim.segments[linkedIdx - 1].h1 = scaleHandleRigid(linkedOrigH1, p0, orig0, snapPt);
+        } else {
+          anim.segments[linkedIdx - 1].h1 = new Cx(linkedOrigH1.re + sdx, linkedOrigH1.im + sdy);
+        }
+      }
     } else {
       const isInterior = origH0 !== null && origH1 !== null;
       // Outgoing segment (anchorIdx → anchorIdx+1): update h0 and h1
       if (anim.segments[anchorIdx]) {
-        if (!anchorDrag.nextLocked && anchorDrag.outRigid && anchorDrag.nextAnchor && origH0 !== null) {
-          const p1 = anchorDrag.nextAnchor, snapPt = new Cx(snapX, snapY), orig0 = anchorDrag.origAnchor;
-          anim.segments[anchorIdx].h0 = scaleHandleRigid(origH0, p1, orig0, snapPt);
-          if (anchorDrag.origOutH1 !== null) anim.segments[anchorIdx].h1 = scaleHandleRigid(anchorDrag.origOutH1, p1, orig0, snapPt);
-        } else if (!anchorDrag.nextLocked && anchorDrag.outStraight && anchorDrag.nextAnchor) {
+        // Straight is checked before rigid: a segment can be both (isSegmentRigid's fallback
+        // treats exactly-0%-eccentricity, i.e. straight, as rigid too), and a straight segment
+        // staying straight is the simpler, more specific case — that's what "hinge" behavior
+        // means, and it's strictly consistent with "rigid" for something already a straight
+        // line. Checking rigid first was overriding it with proportional handle-scaling
+        // instead, which doesn't stay straight for a non-colinear drag direction.
+        if (!anchorDrag.nextLocked && anchorDrag.outStraight && anchorDrag.nextAnchor) {
           const p1 = anchorDrag.nextAnchor;
           anim.segments[anchorIdx].h0 = new Cx(snapX + (p1.re - snapX) / 3, snapY + (p1.im - snapY) / 3);
           anim.segments[anchorIdx].h1 = new Cx(snapX + 2 * (p1.re - snapX) / 3, snapY + 2 * (p1.im - snapY) / 3);
+        } else if (!anchorDrag.nextLocked && anchorDrag.outRigid && anchorDrag.nextAnchor && origH0 !== null) {
+          const p1 = anchorDrag.nextAnchor, snapPt = new Cx(snapX, snapY), orig0 = anchorDrag.origAnchor;
+          anim.segments[anchorIdx].h0 = scaleHandleRigid(origH0, p1, orig0, snapPt);
+          if (anchorDrag.origOutH1 !== null) anim.segments[anchorIdx].h1 = scaleHandleRigid(anchorDrag.origOutH1, p1, orig0, snapPt);
         } else if (anchorDrag.nextLocked && anchorDrag.nextAnchor && origH0 !== null) {
           // Neighbor is locked: its own handle (h1 of this segment) must stay frozen so its
           // angle never moves. Pivot h0's proportional re-aim on that frozen handle (the
@@ -10827,14 +11742,15 @@ window.addEventListener('mousemove', e => {
       }
       // Incoming segment (anchorIdx-1 → anchorIdx): update h0 and h1
       if (anchorIdx > 0 && anim.segments[anchorIdx - 1]) {
-        if (!anchorDrag.prevLocked && anchorDrag.inRigid && anchorDrag.prevAnchor && origH1 !== null) {
-          const p0 = anchorDrag.prevAnchor, snapPt = new Cx(snapX, snapY), orig0 = anchorDrag.origAnchor;
-          if (anchorDrag.origInH0 !== null) anim.segments[anchorIdx - 1].h0 = scaleHandleRigid(anchorDrag.origInH0, p0, orig0, snapPt);
-          anim.segments[anchorIdx - 1].h1 = scaleHandleRigid(origH1, p0, orig0, snapPt);
-        } else if (!anchorDrag.prevLocked && anchorDrag.inStraight && anchorDrag.prevAnchor) {
+        // Straight before rigid — see matching comment on the outgoing segment above.
+        if (!anchorDrag.prevLocked && anchorDrag.inStraight && anchorDrag.prevAnchor) {
           const p0 = anchorDrag.prevAnchor;
           anim.segments[anchorIdx - 1].h0 = new Cx(p0.re + (snapX - p0.re) / 3, p0.im + (snapY - p0.im) / 3);
           anim.segments[anchorIdx - 1].h1 = new Cx(p0.re + 2 * (snapX - p0.re) / 3, p0.im + 2 * (snapY - p0.im) / 3);
+        } else if (!anchorDrag.prevLocked && anchorDrag.inRigid && anchorDrag.prevAnchor && origH1 !== null) {
+          const p0 = anchorDrag.prevAnchor, snapPt = new Cx(snapX, snapY), orig0 = anchorDrag.origAnchor;
+          if (anchorDrag.origInH0 !== null) anim.segments[anchorIdx - 1].h0 = scaleHandleRigid(anchorDrag.origInH0, p0, orig0, snapPt);
+          anim.segments[anchorIdx - 1].h1 = scaleHandleRigid(origH1, p0, orig0, snapPt);
         } else if (anchorDrag.prevLocked && anchorDrag.prevAnchor && origH1 !== null) {
           // Neighbor is locked: its own handle (h0 of this segment) must stay frozen. Pivot
           // h1's proportional re-aim on that frozen handle (nearest fixed control point)
@@ -10860,26 +11776,29 @@ window.addEventListener('mousemove', e => {
         _ca.anchors[_cai] = new Cx(_cOrig.re + sdx, _cOrig.im + sdy);
         const _cSnapX = _cOrig.re + sdx, _cSnapY = _cOrig.im + sdy;
         const _cIsInterior = _cOrigH0 !== null && _cOrigH1 !== null;
+        // Straight before rigid — see matching comment on the primary anchor's outgoing
+        // segment above (isSegmentRigid's fallback also flags exactly-straight segments as
+        // rigid; straight must win or a joined sibling's straight edge bends the same way).
         if (_ca.segments[_cai]) {
-          if (_cOutRigid && _cNext && _cOrigH0 !== null) {
+          if (_cOutStraight && _cNext) {
+            _ca.segments[_cai].h0 = new Cx(_cSnapX + (_cNext.re - _cSnapX) / 3, _cSnapY + (_cNext.im - _cSnapY) / 3);
+            _ca.segments[_cai].h1 = new Cx(_cSnapX + 2 * (_cNext.re - _cSnapX) / 3, _cSnapY + 2 * (_cNext.im - _cSnapY) / 3);
+          } else if (_cOutRigid && _cNext && _cOrigH0 !== null) {
             const _cSnapPt = new Cx(_cSnapX, _cSnapY);
             _ca.segments[_cai].h0 = scaleHandleRigid(_cOrigH0, _cNext, _cOrig, _cSnapPt);
             if (_cOrigOutH1 !== null) _ca.segments[_cai].h1 = scaleHandleRigid(_cOrigOutH1, _cNext, _cOrig, _cSnapPt);
-          } else if (_cOutStraight && _cNext) {
-            _ca.segments[_cai].h0 = new Cx(_cSnapX + (_cNext.re - _cSnapX) / 3, _cSnapY + (_cNext.im - _cSnapY) / 3);
-            _ca.segments[_cai].h1 = new Cx(_cSnapX + 2 * (_cNext.re - _cSnapX) / 3, _cSnapY + 2 * (_cNext.im - _cSnapY) / 3);
           } else if (_cOrigH0 !== null) {
             _ca.segments[_cai].h0 = new Cx(_cOrigH0.re + sdx, _cOrigH0.im + sdy);
           }
         }
         if (_cai > 0 && _ca.segments[_cai - 1]) {
-          if (_cInRigid && _cPrev && _cOrigH1 !== null) {
+          if (_cInStraight && _cPrev) {
+            _ca.segments[_cai - 1].h0 = new Cx(_cPrev.re + (_cSnapX - _cPrev.re) / 3, _cPrev.im + (_cSnapY - _cPrev.im) / 3);
+            _ca.segments[_cai - 1].h1 = new Cx(_cPrev.re + 2 * (_cSnapX - _cPrev.re) / 3, _cPrev.im + 2 * (_cSnapY - _cPrev.im) / 3);
+          } else if (_cInRigid && _cPrev && _cOrigH1 !== null) {
             const _cSnapPt = new Cx(_cSnapX, _cSnapY);
             if (_cOrigInH0 !== null) _ca.segments[_cai - 1].h0 = scaleHandleRigid(_cOrigInH0, _cPrev, _cOrig, _cSnapPt);
             _ca.segments[_cai - 1].h1 = scaleHandleRigid(_cOrigH1, _cPrev, _cOrig, _cSnapPt);
-          } else if (_cInStraight && _cPrev) {
-            _ca.segments[_cai - 1].h0 = new Cx(_cPrev.re + (_cSnapX - _cPrev.re) / 3, _cPrev.im + (_cSnapY - _cPrev.im) / 3);
-            _ca.segments[_cai - 1].h1 = new Cx(_cPrev.re + 2 * (_cSnapX - _cPrev.re) / 3, _cPrev.im + 2 * (_cSnapY - _cPrev.im) / 3);
           } else if (_cOrigH1 !== null) {
             _ca.segments[_cai - 1].h1 = new Cx(_cOrigH1.re + sdx, _cOrigH1.im + sdy);
           }
@@ -11239,6 +12158,7 @@ window.addEventListener('mousemove', e => {
 
 window.addEventListener('mouseup', e => {
   if (freeformPenCapture && e.button === 0) { commitFreeformPenStroke(); return; }
+  if (brushCapture && e.button === 0) { commitBrushStroke(); return; }
   if (pendingBodyDrag) {
     pendingBodyDrag.onSelect();
     pendingBodyDrag = null;
@@ -11729,9 +12649,13 @@ canvas.addEventListener('wheel', e => {
   const factor = e.deltaY < 0 ? 1.1 : 0.9;
   const mx = e.offsetX * devicePixelRatio;
   const my = e.offsetY * devicePixelRatio;
-  originX = mx + (originX - mx) * factor;
-  originY = my + (originY - my) * factor;
-  scale *= factor;
+  // Clamp first, then derive the factor actually applied — at the cap this comes out to 1
+  // (no further zoom), so the point under the cursor doesn't jump when the limit is hit.
+  const newScale = clampScale(scale * factor);
+  const effFactor = newScale / scale;
+  originX = mx + (originX - mx) * effFactor;
+  originY = my + (originY - my) * effFactor;
+  scale = newScale;
   draw();
 }, { passive: false });
 
@@ -15983,10 +16907,11 @@ function drawAnchorIconCluster(anchorCx, anchorCy, isLocked, mainSel) {
   _anchorIconPositions = { lock: { cx: icx, cy: icy, r: ICON_R + 2 * dpr } };
 }
 
-// Draw the icon for a touching or already-joined anchor cluster: two separated rings, always
-// — this reads as what clicking the icon leads to (the nodes end up apart), which happens to
-// be the right picture whether that's the current state (not yet joined) or the result of
-// clicking to disjoin an already-joined pair.
+// Draw the icon for a touching or already-joined anchor cluster. Two states, two distinct
+// glyphs (revised from the original "always two separated orange rings" design, which used the
+// same picture for both states and read as ambiguous): orange two-rings for "not yet joined"
+// (still reads as what clicking leads to — the nodes end up apart, i.e. this is what they'd
+// look like split), blue one-ring for "already joined" (reads as the nodes now being one).
 function drawChainLinkIcon(icx, icy, joined, isHov, dpr) {
   const ICON_R = 8 * dpr;
   ctx.save();
@@ -15998,19 +16923,28 @@ function drawChainLinkIcon(icx, icy, joined, isHov, dpr) {
   ctx.lineWidth = 1.5 * dpr;
   ctx.stroke();
 
-  const col = '#f38ba8';
-  const ringR = ICON_R * 0.34;
-  const gap = ringR * 1.5;
-  ctx.strokeStyle = col;
-  ctx.lineWidth = Math.max(1.4 * dpr, ringR * 0.42);
-  ctx.beginPath(); ctx.arc(icx - gap, icy, ringR, 0, Math.PI * 2); ctx.stroke();
-  ctx.beginPath(); ctx.arc(icx + gap, icy, ringR, 0, Math.PI * 2); ctx.stroke();
+  if (joined) {
+    const col = '#89b4fa';
+    const ringR = ICON_R * 0.42;
+    ctx.strokeStyle = col;
+    ctx.lineWidth = Math.max(1.4 * dpr, ringR * 0.42);
+    ctx.beginPath(); ctx.arc(icx, icy, ringR, 0, Math.PI * 2); ctx.stroke();
+  } else {
+    const col = '#f38ba8';
+    const ringR = ICON_R * 0.34;
+    const gap = ringR * 1.5;
+    ctx.strokeStyle = col;
+    ctx.lineWidth = Math.max(1.4 * dpr, ringR * 0.42);
+    ctx.beginPath(); ctx.arc(icx - gap, icy, ringR, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(icx + gap, icy, ringR, 0, Math.PI * 2); ctx.stroke();
+  }
   ctx.restore();
 }
 
-// Draw the always-visible "not yet joined" icon for every touching anchor cluster or edge
-// pair on the selected/edited object, plus the hover-only "joined" icon for whichever one
-// the cursor currently sits over. Populates _joinIconPositions for click/hover hit-testing.
+// Draw the hover-only icon for every touching or already-joined anchor cluster/edge pair on
+// the selected/edited object — nothing is shown until the cursor is near the node/edge or the
+// icon itself, so an object with many touching pairs doesn't clutter the canvas with icons at
+// once. Populates _joinIconPositions for click/hover hit-testing regardless of what's drawn.
 function drawJoinIcons(anim) {
   _joinIconPositions = [];
   if (!anim || isPrimitiveAnim(anim) || isTextAnim(anim)) return;
@@ -16029,12 +16963,12 @@ function drawJoinIcons(anim) {
     if (_anchorIconPositions?.lock) _avoid.push([_anchorIconPositions.lock.cx, _anchorIconPositions.lock.cy]);
     const angle = findAnchorIconAngle(anim, baseCx, baseCy, _avoid);
     const icx = baseCx + Math.cos(angle) * D, icy = baseCy + Math.sin(angle) * D;
-    // Always record the hit-zone, even when not drawn right now (joined + not hovered) —
+    // Always record the hit-zone, even when not drawn right now (not currently hovered) —
     // otherwise the mousemove hover check has nothing to detect proximity against, and a
-    // joined pair's icon could never be discovered by hovering near it in the first place.
+    // pair's icon could never be discovered by hovering near it in the first place.
     // geometryHit lets hovering the actual node/edge (not just the offset icon) count too.
     _joinIconPositions.push({ key, cx: icx, cy: icy, r: 8 * dpr + 3 * dpr, onClick, geometryHit });
-    if (joined && !isHov) return;
+    if (!isHov) return;
     drawChainLinkIcon(icx, icy, joined, isHov, dpr);
   };
 
@@ -16390,7 +17324,21 @@ function drawCommittedAnimation(anim, { deferOverlay = false } = {}) {
   // data back out of anim._savedPriorRegions instead of silently using anim's stale top-level
   // fillStyle/fillColor (which are never kept in sync once a region-based fill/pattern is set).
   const _inRotateDrag = !!(rotateDrag && rotateDrag.anim === anim);
-  const _skipRegionFill = (_inResizeDrag && !isPrimitiveAnim(anim)) ||
+  // A live anchorDrag leaves anim._topoSplitCurves stale for the same reason resize/rotate do —
+  // detectObjectTopology only re-runs once, at the anchorDrag mouseup handler, not on every
+  // mousemove. Unlike resize/rotate, only the curve(s) actually being dragged are affected (the
+  // primary anchor's own curve, plus any coincident siblings moving with it via
+  // anchorDrag.coincidentAnchors), not every sibling curve of a merged object — tracked as a set
+  // of curve ids so the outline fallback below can be applied per-curve. Region fill can't be
+  // patched up per-curve this way (one region's boundary can span several curves at once), so
+  // it's hidden for the whole object during the drag instead, same tradeoff resize/rotate make.
+  const _draggedCurveIds = anchorDrag
+    ? new Set([anchorDrag.anim.id, ...(anchorDrag.coincidentAnchors ?? []).map(cc => cc.anim.id)])
+    : null;
+  const _inAnchorDrag = !!(_draggedCurveIds && (anim.curves
+    ? anim.curves.some(c => _draggedCurveIds.has(c.id))
+    : _draggedCurveIds.has(anim.id)));
+  const _skipRegionFill = (_inResizeDrag && !isPrimitiveAnim(anim)) || _inAnchorDrag ||
     (frameDrag?.mergedCurves && frameDrag.anim === anim && frameDrag.hasMoved && !frameDrag.origSplitAnchors);
   if (!_skipRegionFill) drawObjectRegionFillsForAnim(anim);
 
@@ -16408,7 +17356,10 @@ function drawCommittedAnimation(anim, { deferOverlay = false } = {}) {
       // has kind='freeform' and would apply Bézier approximation instead of exact arcs).
       // When a primitive has deleted arcs, use the split curve so invisible segments are skipped.
       const _primHasDeletedArcs = isPrimitiveAnim(c) && anim.deletedArcs?.some(d => d.curveId === c.id);
-      const _skipSplit = _skipSplitForDrag || (isPrimitiveAnim(c) && !_primHasDeletedArcs);
+      // Same live-fallback as _skipSplitForDrag above, but per-curve: only the specific
+      // curve(s) a live anchorDrag is actually moving need to bypass the stale split snapshot,
+      // not every sibling curve of this merged object.
+      const _skipSplit = _skipSplitForDrag || (isPrimitiveAnim(c) && !_primHasDeletedArcs) || _draggedCurveIds?.has(c.id);
       const splitC = _skipSplit ? null : (anim._topoSplitCurves?.get(c.id));
       const renderC = splitC ?? c;
       const proxy = makeCurveProxy(anim, renderC);
@@ -16505,11 +17456,11 @@ function drawCommittedAnimation(anim, { deferOverlay = false } = {}) {
   // a single self-intersecting curve's stroke ignored arc deletion entirely: detectObjectTopology
   // correctly re-traced the fill regions around the hidden segment, but the outline kept drawing
   // every original segment unconditionally, since it never consulted _topoSplitCurves at all.
-  // Resize/rotate don't keep _topoSplitCurves live during their drag (same reason the fill and
-  // node dots are hidden for that window above) — using it here would freeze the outline at its
-  // pre-drag shape instead of following the live resize/rotate, so fall back to the live anim
-  // segments during those specific drags, same tradeoff the anim.curves branch above makes.
-  const _stdSplitC = (!_inResizeDrag && !_inRotateDrag) ? (anim._topoSplitCurves?.get(anim.id) ?? null) : null;
+  // Resize/rotate/anchorDrag don't keep _topoSplitCurves live during their drag (same reason
+  // the fill and node dots are hidden for that window above) — using it here would freeze the
+  // outline at its pre-drag shape instead of following the live drag, so fall back to the live
+  // anim segments during those specific drags, same tradeoff the anim.curves branch above makes.
+  const _stdSplitC = (!_inResizeDrag && !_inRotateDrag && !_inAnchorDrag) ? (anim._topoSplitCurves?.get(anim.id) ?? null) : null;
   const _stdRenderC = _stdSplitC ?? anim;
   for (let i = 0; i < _stdRenderC.segments.length; i++) {
     const _as = _stdSplitC
@@ -16809,6 +17760,16 @@ function drawAnimations() {
         const { topoArcs: _allArcs } = computeObjectTopologyData(mainSel);
         const _arcsToShow = _allArcs.filter(a => selectedArcKeys.has(a.label));
         for (const _arc of _arcsToShow) {
+          // A live anchorDrag on this curve leaves its _topoSplitCurves entry stale until
+          // mouseup (same staleness the outline/fill work around elsewhere) — but unlike the
+          // outline, arc.fromIdx/toIdx are indices into the SPLIT curve's own segment numbering,
+          // which can differ from the live curve's if it was actually split at an intersection.
+          // Falling back to the live curve here risks drawing the handle from the wrong segment
+          // entirely, so hide it for the drag's duration instead — it reappears correctly at
+          // mouseup, same tradeoff already made for region fills during resize/rotate/anchorDrag.
+          const _curveBeingDragged = anchorDrag && (anchorDrag.anim.id === _arc.curveId ||
+            (anchorDrag.coincidentAnchors ?? []).some(cc => cc.anim.id === _arc.curveId));
+          if (_curveBeingDragged) continue;
           // arc.fromIdx/toIdx are indices into the split-curve data (see detectObjectTopology),
           // which exists for standalone self-intersecting curves too — try it first regardless
           // of merge status, only falling back to the live (unsplit) curve if topology hasn't
@@ -20164,6 +21125,9 @@ function assignRegionHoles(regions, curvesMap) {
       // Only mark as hole when from a disconnected component (no shared curve IDs).
       const largeCurves = new Set(large.boundary.map(e => e.animId));
       if ([...smallCurves].some(id => largeCurves.has(id))) continue;
+      // Brush coverage only ever grows (union of old + new strokes), so a loop nested inside
+      // another brush loop can only mean genuinely unpainted canvas — never ink getting
+      // "erased" — so it's always a real hole, same as for any other nested curves.
       const largePath = new Path2D();
       addRegionBoundaryToPathLike(largePath, large.boundary, curvesMap);
       if (ctx.isPointInPath(largePath, centroid[0], centroid[1])) {
@@ -20416,7 +21380,11 @@ function splitRawCurvesAtIntersections(rawCurves) {
         dedupedHits.push({ ...hit });
       }
     }
-    if (dedupedHits.length > 10) continue;
+    // Brush ribbons can legitimately self-cross far more than a hand-drawn curve (fast
+    // scribbling); raise the cap for brush-tagged curves rather than globally, since the
+    // default cap also guards against nearly-parallel/coincident curves producing phantom
+    // splits — a case still worth protecting for Pencil/Arc Builder paths.
+    if (dedupedHits.length > (A.brushStroke ? 60 : 10)) continue;
     if (dedupedHits.length > 0) console.warn(`[selfx-diag] curve=${A.id} nSeg=${nSeg} hits=${dedupedHits.length}:`, dedupedHits.map(h => `sa=${h.sa} sb=${h.sb} tA=${h.tA.toFixed(4)} tB=${h.tB.toFixed(4)} nearA=${h.nearA} nearB=${h.nearB} pt=(${h.point.re.toFixed(2)},${h.point.im.toFixed(2)})`));
     for (const { sa, sb, tA, tB, nearA, nearB, anchorIdxA_orig, anchorIdxB_orig, point } of dedupedHits) {
       if (nearA) {
@@ -20543,8 +21511,9 @@ function splitRawCurvesAtIntersections(rawCurves) {
         }
       }
 
-      // Sanity cap: two smooth curves can't have more than ~4–6 genuine crossings.
-      if (dedupedHits.length > 10) continue;
+      // Sanity cap: two smooth curves can't have more than ~4–6 genuine crossings. Raised for
+      // brush-tagged curves, which can legitimately overlap many times (see Phase 0 above).
+      if (dedupedHits.length > ((A.brushStroke || B.brushStroke) ? 60 : 10)) continue;
 
       // Commit.
       // if (dedupedHits.length > 0) console.log(`[phase1b] pair A=${A.id?.toFixed(0)} B=${B.id?.toFixed(0)} dedupedHits=${dedupedHits.length}:`, dedupedHits.map(h => `pt=(${h.point.re.toFixed(3)},${h.point.im.toFixed(3)}) sa=${h.sa} tA=${h.tA.toFixed(4)} nearA=${h.nearA} sb=${h.sb} tB=${h.tB.toFixed(4)} nearB=${h.nearB}`));
@@ -20795,6 +21764,31 @@ function detectObjectTopology(anim, { skipSpatialMigration = false } = {}) {
       }
     }
   }
+  // Cross-curve closed-anchor-onto-closed-anchor vertex merge: two CLOSED curves sharing a
+  // vertex (e.g. the join feature welding two touching anchors to exact coincidence) is a
+  // genuine intentional connection, same as the two passes above — this was previously the
+  // one combination with no merge case at all. An earlier, broader version of this kind of
+  // merge used a coarser distance threshold and ended up collapsing the many simultaneously-
+  // close, evenly-spaced anchors of two near-concentric circles into one degenerate node;
+  // rather than tightening that threshold, closed-vs-closed was dropped entirely. This uses
+  // the same tight EPSILON as every other pass here (1e-6, effectively bit-identical, not
+  // "visually close") — safe against that regression because two independently-drawn curves
+  // don't land within a millionth of a math unit of each other by chance, only a deliberate
+  // weld does.
+  for (const a of curves) {
+    if (!a.closed) continue;
+    for (let i = 0; i < a.anchors.length; i++) {
+      const pi = a.anchors[i], ki = keyToNode.get(`${a.id}:${i}`);
+      for (const b of curves) {
+        if (b === a || !b.closed) continue;
+        for (let j = 0; j < b.anchors.length; j++) {
+          const pj = b.anchors[j];
+          if (Math.hypot(pj.re - pi.re, pj.im - pi.im) < EPSILON)
+            ufUnion(ki, keyToNode.get(`${b.id}:${j}`));
+        }
+      }
+    }
+  }
   for (const { idA, anchorIdxA, idB, anchorIdxB } of forceMerges) {
     const ka = keyToNode.get(`${idA}:${anchorIdxA}`);
     const kb = keyToNode.get(`${idB}:${anchorIdxB}`);
@@ -20984,7 +21978,9 @@ function detectObjectTopology(anim, { skipSpatialMigration = false } = {}) {
   if (anim.regions.length > 0) {
     // If this is first-time detection (no prior regions) but the anim had a direct fill,
     // migrate it to the first region before clearing — otherwise the fill is lost forever.
-    if (priorRegions.length === 0 && anim.fillColor && !anim.regions[0].fillColor) {
+    // Brush objects skip this: regions[0] isn't reliably the painted (non-hole) region for
+    // brush geometry, so they're handled uniformly by the brushStroke branch below instead.
+    if (priorRegions.length === 0 && anim.fillColor && !anim.regions[0].fillColor && !anim.brushStroke) {
       anim.regions[0].fillColor = anim.fillColor;
       anim.regions[0].fillOpacity = anim.fillOpacity ?? 0;
       anim.regions[0].fillStyle = anim.fillStyle ?? 'solid';
@@ -20992,11 +21988,31 @@ function detectObjectTopology(anim, { skipSpatialMigration = false } = {}) {
     // When merging objects for the first time, auto-assign a distinct cycling color to every region —
     // but only when source sub-curves carry no fill. If they do, mergeObjects will migrate their
     // fills to regions after this call and the auto-assign would just be overwritten anyway.
-    if (priorRegions.length === 0 && anim.curves && !anim.curves.some(c => c.fillColor)) {
+    // Brush objects are excluded: their sub-curves are coverage-loop geometry from one stroke's
+    // single chosen color, not independent merged objects, so every painted region should get
+    // anim.fillColor rather than a cycling palette color (handled in the branch below).
+    if (priorRegions.length === 0 && anim.curves && !anim.curves.some(c => c.fillColor) && !anim.brushStroke) {
       for (const region of anim.regions) {
         region.fillColor = DEFAULT_COLORS[animColorIdx++ % DEFAULT_COLORS.length];
         region.fillOpacity = 1;
         region.fillStyle = 'solid';
+      }
+    } else if (priorRegions.length === 0 && anim.brushStroke && anim.fillColor) {
+      // Regions that assignRegionHoles just folded into another region's holeBoundaries are
+      // genuinely unpainted canvas (brush coverage only grows, so a nested loop is never
+      // "erased" ink). Rendering falls back to anim.fillColor/animFillOpacity whenever
+      // region.fillColor is unset (drawObjectRegionFillsForAnim's `region.fillColor ||
+      // anim.fillColor`), so merely leaving fillColor null would still paint them solid —
+      // give them a real fillOpacity of 0 instead so they explicitly stay invisible while
+      // remaining a normal, independently-colorable region for later edits.
+      const holeBoundarySet = new Set();
+      for (const r of anim.regions) for (const hb of (r.holeBoundaries ?? [])) holeBoundarySet.add(hb);
+      for (const region of anim.regions) {
+        if (region.fillColor) continue;
+        const isHole = holeBoundarySet.has(region.boundary);
+        region.fillColor = anim.fillColor;
+        region.fillOpacity = isHole ? 0 : (anim.fillOpacity ?? 1);
+        region.fillStyle = anim.fillStyle ?? 'solid';
       }
     }
     // Only clear sub-curve fills for merged objects (anim.curves). For simple curves,
@@ -23568,9 +24584,13 @@ function snapMergedCorners(anim) {
     if (new Set(members.map(j => pts[j].c)).size < 2) continue;
     const centRe = members.reduce((s, j) => s + pts[j].c.anchors[pts[j].i].re, 0) / members.length;
     const centIm = members.reduce((s, j) => s + pts[j].c.anchors[pts[j].i].im, 0) / members.length;
+    // moveAnchorPreservingStraightness (not a plain .re/.im mutation) so an endpoint that was
+    // exactly straight relative to its neighbor stays exactly straight relative to the new
+    // snapped position too — same reason joinAnchorCluster/unjoinAnchorCluster need it. A fresh
+    // Cx per member, never a shared one, matching how every other anchor-move in this file avoids
+    // aliasing the same point object across two different curves.
     for (const j of members) {
-      pts[j].c.anchors[pts[j].i].re = centRe;
-      pts[j].c.anchors[pts[j].i].im = centIm;
+      moveAnchorPreservingStraightness(pts[j].c, pts[j].i, new Cx(centRe, centIm));
     }
   }
   curves.forEach(c => recompileAnim(c));
@@ -25597,10 +26617,10 @@ function renderAnimListLegacy() {
     return;
   }
 
-  if (freeformPenActive) {
+  if (freeformPenActive || brushActive) {
     setView('detail');
     updateToolPanel();
-    renderFreeformPenSidebar(detailEl);
+    renderStylusSidebar(detailEl);
     return;
   }
 
@@ -27623,8 +28643,6 @@ const foldTooltip = document.getElementById('fold-tooltip');
 const globalSettingsPanel = document.getElementById('global-settings');
 const globalSettingsBtn = document.getElementById('global-settings-btn');
 const globalSettingsMenu = document.getElementById('global-settings-menu');
-const defaultThicknessInput = document.getElementById('default-thickness');
-const defaultThicknessVal = document.getElementById('default-thickness-val');
 const gridStrengthInput = document.getElementById('grid-strength');
 const gridStrengthVal = document.getElementById('grid-strength-val');
 const axisStrengthInput = document.getElementById('axis-strength');
@@ -27668,8 +28686,6 @@ document.addEventListener('click', e => {
 }, true);
 
 function renderGlobalSettingsControls() {
-  defaultThicknessInput.value = globalSettings.defaultThickness;
-  defaultThicknessVal.textContent = globalSettings.defaultThickness;
   renderDefaultColorSettings();
   gridStrengthInput.value = globalSettings.gridStrength;
   gridStrengthVal.textContent = `${globalSettings.gridStrength}%`;
@@ -27775,12 +28791,6 @@ defaultColorTriggerBtn.addEventListener('click', e => {
   setDefaultColorPickerOpen(!defaultColorPickerOpen);
 });
 
-defaultThicknessInput.addEventListener('input', () => {
-  globalSettings.defaultThickness = parseInt(defaultThicknessInput.value, 10);
-  saveGlobalSettings();
-  renderGlobalSettingsControls();
-});
-
 gridStrengthInput.addEventListener('input', () => {
   globalSettings.gridStrength = parseInt(gridStrengthInput.value, 10);
   saveGlobalSettings();
@@ -27827,10 +28837,31 @@ function drawFreeformPenOverlay() {
   const pts = freeformPenCapture ? freeformPenCapture.points : null;
   if (!pts || pts.length < 2) return;
   penOverlayCtx.save();
-  penOverlayCtx.strokeStyle = '#b4befe';
+  penOverlayCtx.strokeStyle = stylusDefaultColor();
   penOverlayCtx.lineWidth = 2 * devicePixelRatio;
   penOverlayCtx.setLineDash([6 * devicePixelRatio, 4 * devicePixelRatio]);
   penOverlayCtx.lineCap = 'round';
+  penOverlayCtx.beginPath();
+  penOverlayCtx.moveTo(pts[0].x, pts[0].y);
+  for (let i = 1; i < pts.length; i++) penOverlayCtx.lineTo(pts[i].x, pts[i].y);
+  penOverlayCtx.stroke();
+  penOverlayCtx.restore();
+}
+
+// Cheap live preview for a brush drag: a native round-capped/round-joined stroke on the raw
+// captured points, visually indistinguishable from the real coverage shape during a fast drag,
+// at none of the cost of running computeBrushCoverageLoops/detectObjectTopology every mousemove.
+function drawBrushOverlay() {
+  penOverlayCtx.clearRect(0, 0, penOverlay.width, penOverlay.height);
+  const pts = brushCapture ? brushCapture.points : null;
+  if (!pts || pts.length < 2) return;
+  const existing = animations.find(a => a.id === currentBrushAnimId);
+  penOverlayCtx.save();
+  penOverlayCtx.globalAlpha = 0.85;
+  penOverlayCtx.strokeStyle = existing ? existing.color : stylusDefaultColor();
+  penOverlayCtx.lineWidth = globalSettings.defaultBrushThickness * devicePixelRatio;
+  penOverlayCtx.lineCap = 'round';
+  penOverlayCtx.lineJoin = 'round';
   penOverlayCtx.beginPath();
   penOverlayCtx.moveTo(pts[0].x, pts[0].y);
   for (let i = 1; i < pts.length; i++) penOverlayCtx.lineTo(pts[i].x, pts[i].y);
@@ -27847,6 +28878,7 @@ function draw() {
     drawAnimations();
     penOverlayCtx.clearRect(0, 0, penOverlay.width, penOverlay.height);
     if (freeformPenCapture) drawFreeformPenOverlay();
+    if (brushCapture) drawBrushOverlay();
     positionCanvasTextEditor();
   }
   /* [DEAD-AUX-A] AUX_WINDOWS_ENABLED permanently false. */
