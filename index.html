@@ -1855,6 +1855,25 @@
     #object-recenter-btn.visible, #isolation-recenter-btn.visible { display: flex; }
     #object-recenter-btn:hover, #isolation-recenter-btn:hover { background: rgba(49, 50, 68, 0.92); border-color: #89b4fa; color: #f5f7ff; }
     #object-recenter-btn svg, #isolation-recenter-btn svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    /* ── Stylus "lay down tool" button — visible on the main canvas only while Pencil/Brush is engaged ── */
+    #stylus-laydown-btn {
+      position: absolute;
+      bottom: 16px; left: 50%;
+      transform: translateX(-50%);
+      padding: 8px 16px;
+      border: 1px solid #45475a;
+      border-radius: 999px;
+      background: rgba(24, 24, 37, 0.88);
+      color: #e1e8ff;
+      font-size: 13px;
+      cursor: pointer;
+      display: none;
+      z-index: 10;
+      backdrop-filter: blur(3px);
+      transition: background 0.15s, border-color 0.15s;
+    }
+    #stylus-laydown-btn.visible { display: block; }
+    #stylus-laydown-btn:hover { background: rgba(49, 50, 68, 0.95); border-color: #89b4fa; }
     /* ── Canvas ── */
     #scene-window { flex: 1; min-height: 0; position: relative; overflow: hidden; }
     #canvas-text-editor {
@@ -2074,6 +2093,7 @@
     <div id="scene-window">
       <canvas id="graph"></canvas>
       <canvas id="pen-overlay" style="position:absolute;top:0;left:0;pointer-events:none;"></canvas>
+      <button id="stylus-laydown-btn" title="Finish drawing and select the new object(s)">Lay down pencil</button>
     </div>
   </div>
 </div>
@@ -4413,6 +4433,10 @@ let stylusSubTool = 'brush'; // 'pencil' | 'brush' — persists across reselects
 let brushActive  = false;
 let brushCapture = null; // null | {points:[{x,y},...]} in device pixels — same shape as freeformPenCapture
 let currentBrushAnimId = null; // id of the object consecutive Brush strokes append loops to this session
+// Objects created since Pencil/Brush was last picked up (survives switching between the two sub-tools —
+// see selectStylusSubTool — so one continuous session can mix strokes from both). Reset when the
+// tool is freshly engaged from Select; consumed and cleared by layDownStylusTool.
+let stylusSessionAnimIds = [];
 let lockHover    = null; // {anim, anchorIdx} | null — interior anchor lock toggle (legacy arc-drill context)
 let anchorIconHover = null; // 'lock' | null — hovered icon in the anchor icon cluster
 let _anchorIconPositions = null; // { lock? } — canvas hit zones, set during draw()
@@ -6185,6 +6209,10 @@ function updateToolPanel() {
   document.querySelectorAll('.tool-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.tool === activeTool);
   });
+  const laydownBtn = document.getElementById('stylus-laydown-btn');
+  const stylusEngaged = freeformPenActive || brushActive;
+  laydownBtn.classList.toggle('visible', stylusEngaged);
+  if (stylusEngaged) laydownBtn.textContent = stylusSubTool === 'pencil' ? 'Lay down pencil' : 'Lay down brush';
 }
 
 function neutralizeToolPanel() {
@@ -6489,8 +6517,7 @@ document.addEventListener('keydown', e => {
     e.preventDefault();
     if (customPatternPickMode !== null) { customPatternPickMode = null; renderAnimList(); draw(); return; }
     if (eyedropperTarget !== null) { deactivateEyedropper(); renderAnimList(); return; }
-    if (freeformPenActive) { freeformPenActive = false; freeformPenCapture = null; currentTool = 'select'; updateToolPanel(); renderAnimList(); draw(); updateCursor(); return; }
-    if (brushActive) { brushActive = false; brushCapture = null; currentBrushAnimId = null; currentTool = 'select'; updateToolPanel(); renderAnimList(); draw(); updateCursor(); return; }
+    if (freeformPenActive || brushActive) { layDownStylusTool(); return; }
     if (contourSelectMode !== null) { contourSelectMode = null; renderAnimList(); draw(); return; }
     const placing = animations.find(a => a.inPlacementMode);
     if (placing) {
@@ -6965,7 +6992,7 @@ function nextLetter() {
   return objectLetterForIndex(animations.length);
 }
 
-function addAnimation(kind = 'freeform') {
+function addAnimation(kind = 'freeform', { select = true } = {}) {
   if (kind === 'freeform') freeformPlacementBend = 0;
   animations.forEach(a => {
     a.expanded = false;
@@ -7016,9 +7043,16 @@ function addAnimation(kind = 'freeform') {
   };
   if (canFillAnim(anim)) anim.fillColor = color;
   animations.push(anim);
-  selectedGroupId = null;
-  clearMultiSelection();
-  selectedId = anim.id;
+  // select:false (Pencil/Brush mid-session) skips touching selection entirely — this is what
+  // was still drawing a frame around every stroke even after commitBrushStroke/
+  // commitFreeformPenStroke stopped setting selectedId themselves: this shared helper was doing
+  // it one level down, for every caller, since immediate selection is the right default for
+  // every OTHER creation path (shapes, text, arc builder, etc).
+  if (select) {
+    selectedGroupId = null;
+    clearMultiSelection();
+    selectedId = anim.id;
+  }
   renderAnimList(); draw(); updateCursor();
   return anim;
 }
@@ -7055,8 +7089,7 @@ function addTextAnimation() {
 function startPlacementFromTool(kind) {
   openColorMenuAnimId = null;
   if (kind === 'select') {
-    if (freeformPenActive) { freeformPenActive = false; freeformPenCapture = null; }
-  if (brushActive) { brushActive = false; brushCapture = null; currentBrushAnimId = null; }
+    if (freeformPenActive || brushActive) { layDownStylusTool(); return; }
     const placing = animations.find(a => a.inPlacementMode);
     if (placing) {
       finalizePlacement(placing);
@@ -7094,6 +7127,7 @@ function startPlacementFromTool(kind) {
       clearGroupMode();
       // Re-clicking the toolbar always starts a fresh brush session — there's no precedent
       // anywhere in this app for "resume adding to a specific existing object."
+      stylusSessionAnimIds = [];
       if (stylusSubTool === 'pencil') freeformPenActive = true;
       else { brushActive = true; currentBrushAnimId = null; }
     }
@@ -7102,8 +7136,7 @@ function startPlacementFromTool(kind) {
     draw(); updateCursor();
     return;
   }
-  if (freeformPenActive) { freeformPenActive = false; freeformPenCapture = null; }
-  if (brushActive) { brushActive = false; brushCapture = null; currentBrushAnimId = null; }
+  if (freeformPenActive || brushActive) layDownStylusTool();
   const placing = animations.find(a => a.inPlacementMode);
   if (placing && activePlacementTool() === kind) {
     updateToolPanel();
@@ -7128,8 +7161,7 @@ function startPlacementFromTool(kind) {
 function beginShapePlacement(kind) {
   const shapeKind = SHAPE_TOOL_KINDS.includes(kind) ? kind : 'rectangle';
   selectedShapeKind = shapeKind;
-  if (freeformPenActive) { freeformPenActive = false; freeformPenCapture = null; }
-  if (brushActive) { brushActive = false; brushCapture = null; currentBrushAnimId = null; }
+  if (freeformPenActive || brushActive) layDownStylusTool();
   const placing = animations.find(a => a.inPlacementMode);
   if (placing) cancelPlacement(placing);
   exitEditMode();
@@ -7198,6 +7230,19 @@ function brushRdpEpsilon(halfWidthDevicePx) {
   return Math.max(freeformPenTolerance * devicePixelRatio, halfWidthDevicePx * 0.15);
 }
 
+// Clears the per-object topology-selection scaffolding (active/expanded arcs & anchors) that
+// enterEditMode+exitEditMode used to reset after every brush/pencil commit — without that pair's
+// selectedId side effect, which used to draw a selection frame around each individual stroke even
+// while the tool was still engaged. Selection now only happens once via layDownStylusTool, when
+// the whole session's objects get handed off together.
+function resetStylusAnimEditState(anim) {
+  anim.activeSegments = new Set();
+  if (!anim.expandedAnchors) anim.expandedAnchors = new Set();
+  anim.expandedAnchors.clear();
+  if (!anim.expandedArcs) anim.expandedArcs = new Set();
+  anim.expandedArcs.clear();
+}
+
 function commitFreeformPenStroke() {
   const cap = freeformPenCapture;
   freeformPenCapture = null;
@@ -7222,7 +7267,7 @@ function commitFreeformPenStroke() {
   }
   const segs = computeFreshPlacementSegments(mathPts);
   if (!segs.length) { draw(); return; }
-  addAnimation('freeform');
+  addAnimation('freeform', { select: false });
   const anim = animations[animations.length - 1];
   anim.color = stylusDefaultColor();
   anim.anchors = mathPts;
@@ -7234,10 +7279,13 @@ function commitFreeformPenStroke() {
   anim.inPlacementMode = false;
   recompileAnim(anim);
   detectObjectTopology(anim);
-  freeformPenActive = false;
-  enterEditMode(anim, new Set());
-  exitEditMode();
-  currentTool = 'select';
+  // Pencil stays engaged after each stroke (freeformPenActive is left true) so the next
+  // mousedown just starts a new stroke without having to re-pick the tool — see
+  // stylusSessionAnimIds / layDownStylusTool for how the batch gets finalized later. Unlike
+  // Brush, Pencil never merges consecutive strokes into one object: every stroke is its own
+  // object, full stop — if the user wants them combined, Merge is one click away once laid down.
+  stylusSessionAnimIds.push(anim.id);
+  resetStylusAnimEditState(anim);
   pushUndo();
   updateToolPanel();
   renderAnimList(); draw(); updateCursor();
@@ -7378,7 +7426,10 @@ function computeBrushCoverageLoops(oldCurveList, centerlineCanvasPts, halfWidthD
     // it's what keeps real outline detail from washing out at high thickness. The safety check just
     // below still compares against the real, uncapped half-width, since THAT one protects against
     // an actually-too-coarse grid for the true stroke width.
-    let spacing = Math.max(brushToleranceHalfWidthDevicePx(halfWidthDevicePx) * 0.35, devicePixelRatio);
+    // 0.35 → 0.25: finer grid so the traced coverage boundary hugs the actual gesture more closely
+    // before simplification/smoothing even run (see matching change to centerlineTolerancePx below,
+    // and the RDP epsilon / smoothClosedPointLoop weight in rebuildLoopGeometry).
+    let spacing = Math.max(brushToleranceHalfWidthDevicePx(halfWidthDevicePx) * 0.25, devicePixelRatio);
     let nx = Math.ceil((maxX - minX) / spacing) + 1;
     let ny = Math.ceil((maxY - minY) / spacing) + 1;
     const CAP = 60000;
@@ -7509,6 +7560,34 @@ function straightSegmentsFromPoints(pts) {
   return segs;
 }
 
+// Uniform Catmull-Rom spline through a closed point loop, converted to cubic Bezier form —
+// standard construction: tangent at each point is parallel to the secant through its two
+// neighbors (P[i+1]-P[i-1]), and each segment's handles sit at 1/6 of that tangent from either
+// endpoint. Unlike the organic hand-drawn-curve fitter this replaced straightSegmentsFromPoints
+// for (see that function's comment), this one doesn't add spurious curvature to a straight run:
+// if three consecutive points are exactly collinear, the tangent at the middle one is exactly
+// along that line, so all four control points of the adjacent segments land back on the same
+// line and the curve degenerates to a true straight edge — curvature only appears where the
+// traced outline actually curves.
+function catmullRomSegmentsFromPoints(pts) {
+  // pts is closed (pts[last] === pts[0]); index over the n distinct points, wrapping neighbors
+  // around the seam so the tangent at the first/last point sees its true closed-loop neighbors.
+  const distinct = pts.slice(0, -1);
+  const n = distinct.length;
+  if (n < 3) return straightSegmentsFromPoints(pts);
+  const segs = [];
+  for (let i = 0; i < n; i++) {
+    const p0 = distinct[(i - 1 + n) % n];
+    const p1 = distinct[i];
+    const p2 = distinct[(i + 1) % n];
+    const p3 = distinct[(i + 2) % n];
+    const h0 = new Cx(p1.re + (p2.re - p0.re) / 6, p1.im + (p2.im - p0.im) / 6);
+    const h1 = new Cx(p2.re - (p3.re - p1.re) / 6, p2.im - (p3.im - p1.im) / 6);
+    segs.push(makeSeg(h0, h1));
+  }
+  return segs;
+}
+
 // Nudges each point toward the midpoint of its two neighbors (closed loop, wrapping around).
 // A point already sitting exactly on the line between its neighbors is a fixed point of this
 // operation — it doesn't move, since it already equals that midpoint — so a genuinely straight run
@@ -7533,16 +7612,16 @@ function smoothClosedPointLoop(pts, weight = 0.5, iterations = 2) {
   return [...current, current[0]];
 }
 
-// Simplifies a closed canvas-space point loop, smooths remaining kinks, and builds straight
-// segments through the result — the same simplify pipeline commitBrushStroke already uses for the
+// Simplifies a closed canvas-space point loop, smooths remaining kinks, and fits a Catmull-Rom
+// curve through the result — the same simplify pipeline commitBrushStroke already uses for the
 // raw ribbon boundary, applied here to a traced union-grid contour instead. RDP naturally keeps
 // points where the outline has real curvature (round caps/joins) and drops them where it's
 // genuinely flat (RDP removes an interior point whenever it's within epsilon of the straight
 // chord, and a perfectly straight run has zero deviation regardless of epsilon); smoothing then
-// rounds off whatever kinks survive simplification (mostly grid-staircase noise at this point) —
-// so straight-line facets through the result stay flat where the shape is flat and read as
-// reasonably round where it curves, without needing any curve-fitting step that could reintroduce
-// unwanted bulge.
+// rounds off whatever kinks survive simplification (mostly grid-staircase noise at this point).
+// catmullRomSegmentsFromPoints stays flat where the point sequence is flat and reads as smoothly
+// round where it curves — see that function's own comment for why it doesn't reintroduce the
+// unwanted bulge a plain curve-fit was adding before straight segments replaced it.
 function rebuildLoopGeometry(canvasPts) {
   if (canvasPts.length < 3) return null;
   const area = polygonArea(canvasPts);
@@ -7559,12 +7638,16 @@ function rebuildLoopGeometry(canvasPts) {
   // able to clean it up once half-width itself drops below that floor. This is why node count
   // used to blow up specifically at small thicknesses even though the underlying noise was the same
   // size it always is.
-  const eps = Math.max(halfWidthMathForTolerance * 0.3, (2 * devicePixelRatio) / scale);
+  // 0.3 → 0.2: keeps more real points through simplification (see matching grid-spacing change in
+  // computeBrushCoverageLoops); smoothClosedPointLoop's weight is likewise nudged up from its 0.5
+  // default (less pull toward the neighbor-average per pass) so the committed shape hugs the
+  // painted gesture more closely overall.
+  const eps = Math.max(halfWidthMathForTolerance * 0.2, (2 * devicePixelRatio) / scale);
   let simplified = rdpSimplifyCx(mathPts, eps);
   if (simplified.length < 3) return null;
   simplified.push(new Cx(simplified[0].re, simplified[0].im));
-  simplified = smoothClosedPointLoop(simplified);
-  const segments = straightSegmentsFromPoints(simplified);
+  simplified = smoothClosedPointLoop(simplified, 0.65);
+  const segments = catmullRomSegmentsFromPoints(simplified);
   if (!segments.length) return null;
   return { anchors: simplified, segments, area };
 }
@@ -7592,7 +7675,7 @@ function applyRebuiltBrushLoops(anim, rebuilt) {
 // case. One loop → top-level anchors/segments; more than one (disjoint painted islands from a
 // single self-crossing drag) → curves[], same as everywhere else in this data model.
 function createBrushAnimFromLoops(rebuilt) {
-  const anim = addAnimation('freeform');
+  const anim = addAnimation('freeform', { select: false });
   anim.closed = true;
   anim.brushStroke = true;
   anim.outlineOpacity = 0;
@@ -7604,8 +7687,40 @@ function createBrushAnimFromLoops(rebuilt) {
   applyRebuiltBrushLoops(anim, rebuilt);
   detectObjectTopology(anim);
   currentBrushAnimId = anim.id;
-  selectedId = anim.id;
+  // selectedId deliberately left untouched — a per-stroke selection frame while the tool is
+  // still engaged is exactly what layDownStylusTool's batch-selection-on-lay-down replaced.
+  stylusSessionAnimIds.push(anim.id);
   return anim;
+}
+
+// Does a fresh stroke's centerline actually touch/overlap what `existingAnim` has already
+// painted? Used to decide whether a new stroke extends the same object (merge, matching the
+// existing "add ink to the current object" path) or starts a disjoint one (e.g. the separate dot
+// of a lowercase "i" drawn right after its stem) — unlike plain coverage unioning, this check
+// runs BEFORE the union so a non-touching stroke never gets folded into the same anim.curves.
+function brushStrokeTouchesExisting(existingAnim, centerlineCanvasPts, halfWidthDevicePx) {
+  if (!existingAnim) return false;
+  const oldCurveList = animCurves(existingAnim);
+  if (!oldCurveList?.length) return false;
+  const oldPath = buildCurveListCoveragePath(oldCurveList);
+  for (const [x, y] of centerlineCanvasPts) {
+    if (ctx.isPointInPath(oldPath, x, y)) return true;
+  }
+  // Deep-inside points are caught above; this catches the more common case of the new stroke
+  // merely grazing the existing shape's edge from outside, where the centerline itself never
+  // enters the old fill but the new stroke's own half-width would still overlap the old ink.
+  for (const c of oldCurveList) {
+    const boundaryPts = [];
+    for (const seg of c.segments) {
+      if (!seg?.compiled) continue;
+      for (const pt of sampleCompiledAdaptive(seg.compiled)) if (pt) boundaryPts.push(pt);
+    }
+    if (boundaryPts.length < 2) continue;
+    for (const [x, y] of centerlineCanvasPts) {
+      if (isNearPolyline(x, y, boundaryPts, halfWidthDevicePx)) return true;
+    }
+  }
+  return false;
 }
 
 // Fits the same smooth curve Pencil itself would through a simplified drag (reusing
@@ -7647,7 +7762,7 @@ function commitBrushStroke() {
   // Matches computeBrushCoverageLoops's own grid-spacing formula — no point sampling the
   // centerline finer than the grid can resolve (see smoothedCenterlineCanvasPts). Capped the same
   // way (brushToleranceHalfWidthDevicePx) so this doesn't wash out detail at high thickness either.
-  const centerlineTolerancePx = Math.max(brushToleranceHalfWidthDevicePx(halfWidthDevicePx) * 0.35, devicePixelRatio);
+  const centerlineTolerancePx = Math.max(brushToleranceHalfWidthDevicePx(halfWidthDevicePx) * 0.25, devicePixelRatio);
   const centerlineCanvasPts = smoothedCenterlineCanvasPts(simplifiedMathPts, centerlineTolerancePx);
 
   // "What did the brush paint" is just "coverage" — within half-width of the dragged centerline,
@@ -7656,7 +7771,12 @@ function commitBrushStroke() {
   // approach tracked direction-relative "left/right" rails that broke on reversals and even sharp
   // turns in a single stroke; a plain distance-to-centerline test has no notion of direction to
   // get confused about, so those bugs can't recur here structurally, not just by coincidence.
-  const existingAnim = animations.find(a => a.id === currentBrushAnimId);
+  const priorAnim = animations.find(a => a.id === currentBrushAnimId);
+  // Brush stays engaged across strokes (see stylusSessionAnimIds) — only actually extend the
+  // previous object when this stroke's ink would touch it. A disjoint stroke (e.g. the separate
+  // dot of a lowercase "i" drawn right after its stem) starts a brand-new object instead of
+  // silently unioning into geometry it never actually touched.
+  const existingAnim = brushStrokeTouchesExisting(priorAnim, centerlineCanvasPts, halfWidthDevicePx) ? priorAnim : null;
   const oldCurveList = existingAnim ? animCurves(existingAnim) : null;
   const loops = computeBrushCoverageLoops(oldCurveList, centerlineCanvasPts, halfWidthDevicePx);
 
@@ -7667,26 +7787,51 @@ function commitBrushStroke() {
       if (existingAnim) {
         applyRebuiltBrushLoops(existingAnim, rebuilt);
         detectObjectTopology(existingAnim);
-        selectedId = existingAnim.id;
       } else {
-        createBrushAnimFromLoops(rebuilt);
+        createBrushAnimFromLoops(rebuilt); // also pushes into stylusSessionAnimIds, sets currentBrushAnimId
       }
       committed = true;
     }
   }
 
-  // Ends the tool on release, matching Pencil exactly — each stroke commits, selects, and
-  // returns to Select, rather than staying active for further strokes.
   if (committed) {
+    // selectedId is deliberately left untouched here — see createBrushAnimFromLoops's comment;
+    // this just needs the same per-stroke topology-selection cleanup enterEditMode/exitEditMode
+    // used to provide as a side effect, without their selectedId-setting side effect.
     const finalAnim = animations.find(a => a.id === currentBrushAnimId);
-    if (finalAnim) { enterEditMode(finalAnim, new Set()); exitEditMode(); }
+    if (finalAnim) resetStylusAnimEditState(finalAnim);
   }
-  brushActive = false;
-  currentBrushAnimId = null;
-  currentTool = 'select';
+  // brushActive/currentBrushAnimId are deliberately left as-is — the tool stays engaged so the
+  // next mousedown starts a new stroke; see layDownStylusTool for how the session ends later.
   if (committed) pushUndo();
   updateToolPanel();
   renderAnimList(); draw(); updateCursor();
+}
+
+// Central "put the tool down" step for Pencil/Brush, called from every gesture that ends a
+// session (toolbox Select click, dead-space clicks, canvas double-click, the on-canvas lay-down
+// button, Escape). Hands off whatever objects were created since the tool was picked up to the
+// normal selection system: 2+ objects become a temporary multi-selection — the exact same
+// mechanism already used when the user manually selects several existing objects — so the frame
+// and Group/Merge buttons appear for free; exactly 1 becomes a normal single selection; 0 just
+// returns to a neutral Select state.
+function layDownStylusTool() {
+  freeformPenActive = false; freeformPenCapture = null;
+  brushActive = false; brushCapture = null; currentBrushAnimId = null;
+  currentTool = 'select';
+  const ids = stylusSessionAnimIds.filter(id => animations.some(a => a.id === id));
+  stylusSessionAnimIds = [];
+  if (ids.length >= 2) {
+    selectTemporaryMultiSelection(ids);
+  } else {
+    clearMultiSelection();
+    selectedGroupId = null;
+    selectedId = ids.length === 1 ? ids[0] : null;
+  }
+  updateToolPanel();
+  renderAnimList();
+  draw();
+  updateCursor();
 }
 
 function selectStylusSubTool(sub) {
@@ -12624,6 +12769,13 @@ window.addEventListener('mouseup', e => {
 
 canvas.addEventListener('contextmenu', e => {
   e.preventDefault();
+});
+canvas.addEventListener('dblclick', e => {
+  // Double-click is a "lay down the tool" gesture while Pencil/Brush is active — the two clicks
+  // that make up the double-click have already run through mousedown/mouseup as ordinary
+  // (degenerate, too-short-to-commit) strokes by the time this fires, so there's nothing to
+  // undo here, just end the session.
+  if (freeformPenActive || brushActive) { e.preventDefault(); layDownStylusTool(); }
 });
 canvas.addEventListener('auxclick', e => {
   if (e.button === 2) e.preventDefault();
@@ -28839,7 +28991,6 @@ function drawFreeformPenOverlay() {
   penOverlayCtx.save();
   penOverlayCtx.strokeStyle = stylusDefaultColor();
   penOverlayCtx.lineWidth = 2 * devicePixelRatio;
-  penOverlayCtx.setLineDash([6 * devicePixelRatio, 4 * devicePixelRatio]);
   penOverlayCtx.lineCap = 'round';
   penOverlayCtx.beginPath();
   penOverlayCtx.moveTo(pts[0].x, pts[0].y);
@@ -29046,6 +29197,7 @@ document.querySelectorAll('.tool-btn').forEach(btn => {
 
 document.getElementById('animations-panel').addEventListener('click', e => {
   if (e.target !== e.currentTarget) return;
+  if (freeformPenActive || brushActive) { layDownStylusTool(); return; }
   const placing = animations.find(a => a.inPlacementMode);
   if (placing) { finalizePlacement(placing); return; }
   const detail = document.getElementById('object-detail');
@@ -29062,6 +29214,11 @@ document.getElementById('animations-panel').addEventListener('click', e => {
 document.getElementById('merge-objects-btn').addEventListener('click', e => {
   e.stopPropagation();
   if (isMultiSelectionActive()) mergeObjects(multiSelectionMembers().map(a => a.id));
+});
+
+document.getElementById('stylus-laydown-btn').addEventListener('click', e => {
+  e.stopPropagation();
+  if (freeformPenActive || brushActive) layDownStylusTool();
 });
 
 document.getElementById('group-objects-btn').addEventListener('click', e => {
@@ -29112,6 +29269,7 @@ document.getElementById('object-tiles').addEventListener('wheel', e => {
 }, { passive: false });
 document.getElementById('object-tiles').addEventListener('click', e => {
   if (e.target !== e.currentTarget) return;
+  if (freeformPenActive || brushActive) { layDownStylusTool(); return; }
   openColorMenuAnimId = null;
   const placing = animations.find(a => a.inPlacementMode);
   if (placing) {
