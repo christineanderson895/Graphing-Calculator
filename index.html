@@ -138,7 +138,7 @@
       margin: 0 0 8px;
       border: 2px solid #776655;
       border-radius: 8px;
-      background: #776655;
+      background: #998877;
       display: flex;
       flex-direction: column;
       overflow: hidden;
@@ -298,6 +298,14 @@
       flex: 0 0 auto;
     }
     .obj-tile-wrap[draggable="true"] .obj-tile { cursor: grab; }
+    /* Shared hover-preview highlight, driven by whichever of the three surfaces (canvas, tile,
+       or object-panel row) the cursor is actually over — see groupMemberHover and
+       applyGroupMemberHoverDom. Toggled directly via data-anim-id rather than a full
+       renderAnimList() re-render, so hovering stays cheap. Row styling matches this panel's own
+       pre-existing row-hover look. */
+    [data-anim-id].hover-preview-highlight-row {
+      background: #313244;
+    }
     .obj-tile-wrap.dragging {
       opacity: 0.45;
     }
@@ -375,6 +383,15 @@
     }
     .obj-tile:hover { border-color: #7f849c; }
     .obj-tile.selected {
+      border-color: #cdd6f4;
+      border-width: 2px;
+      box-shadow: 0 0 0 1px rgba(205, 214, 244, 0.22);
+    }
+    /* Shared hover-preview highlight (see groupMemberHover / applyGroupMemberHoverDom) —
+       matches .obj-tile.selected exactly. Declared after .obj-tile:hover so it still wins the
+       equal-specificity tie when the mouse is literally over this tile (native :hover would
+       otherwise show its own gray border instead). */
+    .obj-tile.hover-preview-highlight-tile {
       border-color: #cdd6f4;
       border-width: 2px;
       box-shadow: 0 0 0 1px rgba(205, 214, 244, 0.22);
@@ -2189,7 +2206,6 @@ const BRUSH_CURSOR = (() => {
 const SVG_NS = 'http://www.w3.org/2000/svg';
 </script>
 <script>
-console.warn('%c ANIMATOR BUILD 2026-06-23-I', 'background:#c00;color:#fff;font-size:16px;font-weight:bold'); // DIAGNOSTIC VERSION MARKER
 // ════════════════════════════════════════════════════════
 // SHARED
 // ════════════════════════════════════════════════════════
@@ -3380,7 +3396,14 @@ function polylineHitInfo(samples, cx, cy) {
 function strokePath(pts, color, lineWidth) {
   ctx.beginPath();
   ctx.strokeStyle = color; ctx.lineWidth = lineWidth;
-  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  // 'butt' not 'round': every curve segment (anim.segments[i]) is stroked with its own separate
+  // ctx.stroke() call, not as one continuous path — round caps add a radius-lineWidth/2 bump at
+  // BOTH ends of every one of those calls. Two adjacent segments share an anchor point, so their
+  // two round caps stack there, adding a full circular bulge at every internal anchor — invisible
+  // at the old thickness ceiling (~10, a few px bump) but very visible now that thickness can go
+  // to 100 (a 50px bump). Tradeoff: a genuinely open curve's true start/end point now gets a flat
+  // cut instead of a rounded tip, which 'round' was arguably also doing on purpose there.
+  ctx.lineCap = 'butt'; ctx.lineJoin = 'round';
   let first = true;
   for (const pt of pts) {
     if (!pt) { first = true; continue; }
@@ -3389,7 +3412,7 @@ function strokePath(pts, color, lineWidth) {
   ctx.stroke();
 }
 
-function drawCompiledCurve(compiled, color, lineWidth, alpha, softness0 = 0, softness1 = 0) {
+function drawCompiledCurve(compiled, color, lineWidth, alpha) {
   if (!compiled) return;
   const STEPS = 240;
   const samples = [];
@@ -3397,58 +3420,9 @@ function drawCompiledCurve(compiled, color, lineWidth, alpha, softness0 = 0, sof
     const v = compiled(0, i / STEPS, {});
     samples.push((v && v.ok()) ? toCanvas(v.re, v.im) : null);
   }
-  if (softness0 <= 0 && softness1 <= 0) {
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    strokePath(samples, color, lineWidth);
-    ctx.restore();
-    return;
-  }
-  // Per-side edge feathering: fill gradient trapezoids along the path.
-  // softness0 controls one side (left of path direction), softness1 the other.
-  const c = parseHexColor(color);
-  const rgb = c ? `${c.r},${c.g},${c.b}` : '128,128,128';
-  const halfW = lineWidth / 2;
-  // s0/s1 are the fraction of the half-width occupied by the fade zone (0–0.5).
-  const s0 = Math.min(Math.max(softness0, 0), 1) * 0.5;
-  const s1 = Math.min(Math.max(softness1, 0), 1) * 0.5;
   ctx.save();
-  for (let i = 0; i < samples.length - 1; i++) {
-    const p0 = samples[i], p1 = samples[i + 1];
-    if (!p0 || !p1) continue;
-    const dx = p1[0] - p0[0], dy = p1[1] - p0[1];
-    const len = Math.sqrt(dx * dx + dy * dy);
-    if (len < 0.01) continue;
-    const nx = -dy / len, ny = dx / len; // normal pointing "left" of travel direction
-    const lx0 = p0[0] + nx * halfW, ly0 = p0[1] + ny * halfW;
-    const rx0 = p0[0] - nx * halfW, ry0 = p0[1] - ny * halfW;
-    const lx1 = p1[0] + nx * halfW, ly1 = p1[1] + ny * halfW;
-    const rx1 = p1[0] - nx * halfW, ry1 = p1[1] - ny * halfW;
-    // Gradient from left edge (position 0) to right edge (position 1).
-    const grad = ctx.createLinearGradient(lx0, ly0, rx0, ry0);
-    if (s0 > 0 && s1 > 0) {
-      grad.addColorStop(0, `rgba(${rgb},0)`);
-      grad.addColorStop(Math.min(s0 * 2, 0.5), `rgba(${rgb},${alpha})`);
-      grad.addColorStop(Math.max(1 - s1 * 2, 0.5), `rgba(${rgb},${alpha})`);
-      grad.addColorStop(1, `rgba(${rgb},0)`);
-    } else if (s0 > 0) {
-      grad.addColorStop(0, `rgba(${rgb},0)`);
-      grad.addColorStop(s0 * 2, `rgba(${rgb},${alpha})`);
-      grad.addColorStop(1, `rgba(${rgb},${alpha})`);
-    } else {
-      grad.addColorStop(0, `rgba(${rgb},${alpha})`);
-      grad.addColorStop(1 - s1 * 2, `rgba(${rgb},${alpha})`);
-      grad.addColorStop(1, `rgba(${rgb},0)`);
-    }
-    ctx.beginPath();
-    ctx.moveTo(lx0, ly0);
-    ctx.lineTo(rx0, ry0);
-    ctx.lineTo(rx1, ry1);
-    ctx.lineTo(lx1, ly1);
-    ctx.closePath();
-    ctx.fillStyle = grad;
-    ctx.fill();
-  }
+  ctx.globalAlpha = alpha;
+  strokePath(samples, color, lineWidth);
   ctx.restore();
 }
 
@@ -4366,9 +4340,9 @@ let drillObjectArc = null;         // { animId, label } — topo arc being drill
 let selectedRegionIds = new Set(); // Set of region IDs selected in Regions tab (belongs to selectedId)
 let objectDetailTab = 'fill';       // 'anchors' | 'outline' | 'fill' — active tab in detail panel
 let lastOutlineFillTab = 'fill';    // persists across object selections (session-only)
+let groupDetailTab = 'outline';     // 'outline' | 'fill' — active tab in the group detail panel
 let selectedArcKeys = new Set();   // arc labels selected in Arcs tab
 let regionFillSubTab = 1;          // 1=Color1, 2=Color2, 3=Style — sub-tab in Regions tab
-let outlineSubTab = 1;             // 1=Color, 2=Style — sub-tab in Outline tab
 let _lastDetailAnimId = null;      // detect object change to reset tab
 let _cvtBezierShowUI = false;      // convert-to-bezier slider UI expanded in panel
 let _cvtBezierN = 12;             // slider value for convert-to-bezier
@@ -4425,6 +4399,7 @@ let handleHover  = null; // {anim, segIdx, side} | null
 let resizeHover  = null; // {anim, handle} | null
 let rotateHover  = null; // {anim} | null
 let sideActionHover = null; // {anim|groupId|multi, kind:'menu'|'duplicate'|'reflect'|'rotate'} | null
+let groupMemberHover = null; // anim | null — the group member a click would currently drill into
 let sideActionMenuOpen = false;
 let freeformPenActive  = false;
 let freeformPenCapture = null; // null | {points:[{x,y},...]} in device pixels
@@ -4759,6 +4734,18 @@ function isPolylineAnim(anim) {
   return animKind(anim) === POLYLINE_KIND;
 }
 
+// Crop was originally primitive-only, but the capture step (cropAnim) was always just "grab a
+// bounding-box snapshot of what's behind this object" — nothing about it actually needed a
+// primitive formula. The only real requirement is a single, simple, closed outline to clip the
+// snapshot to: any closed non-merged non-text shape works (drawCroppedImage below builds the
+// clip path via addCurveFillPath for anything that isn't still a raw primitive).
+function isCroppableAnim(anim) {
+  if (!anim) return false;
+  if (isPrimitiveAnim(anim)) return animKind(anim) !== 'line';
+  if (isTextAnim(anim) || anim.curves) return false;
+  return !!(anim.closed && findLoopRange(anim));
+}
+
 function groupMembers(groupId) {
   if (groupId == null) return [];
   return animations.filter(a => a.groupId === groupId);
@@ -4834,6 +4821,57 @@ function allDescendantAnims(groupId) {
   return result;
 }
 
+// Group color controls are a one-time bulk-apply, not a stored group property — there is no
+// persistent "group color" to redisplay later. Applying a color at any level overwrites every
+// current descendant at that moment, so applying it again at a narrower (subgroup) or wider
+// (outer group) scope afterward simply overwrites whatever's there then — order of operations,
+// not precedence, decides the outcome. Recurses through nested sub-groups automatically since
+// allDescendantAnims already does.
+function groupOutlineDescendants(groupId) {
+  return allDescendantAnims(groupId).filter(a => !isTextAnim(a));
+}
+function groupFillDescendants(groupId) {
+  return allDescendantAnims(groupId).filter(a => !isTextAnim(a) && canFillAnim(a));
+}
+
+function applyGroupOutlineColor(groupId, hex) {
+  for (const a of groupOutlineDescendants(groupId)) {
+    a.color = hex;
+    clearArcStyleProps(a, ['color']);
+  }
+  saveProject(); draw();
+}
+function applyGroupOutlineOpacity(groupId, opacity) {
+  for (const a of groupOutlineDescendants(groupId)) {
+    a.outlineOpacity = opacity;
+    clearArcStyleProps(a, ['opacity']);
+  }
+  saveProject(); draw();
+}
+function applyGroupOutlineThickness(groupId, thickness) {
+  for (const a of groupOutlineDescendants(groupId)) {
+    a.thickness = thickness;
+    clearArcStyleProps(a, ['thickness']);
+  }
+  saveProject(); draw();
+}
+
+function applyGroupFillColor(groupId, hex) {
+  for (const a of groupFillDescendants(groupId)) {
+    a.fillColor = hex;
+    if (!a.fillStyle) a.fillStyle = 'solid';
+    syncObjectFillToDetectedRegions(a, { fillColor: hex, fillOpacity: animFillOpacity(a), fillStyle: a.fillStyle || 'solid' });
+  }
+  saveProject(); draw();
+}
+function applyGroupFillOpacity(groupId, opacity) {
+  for (const a of groupFillDescendants(groupId)) {
+    a.fillOpacity = opacity;
+    syncObjectFillToDetectedRegions(a, { fillColor: a.fillColor, fillOpacity: opacity, fillStyle: a.fillStyle || 'solid' });
+  }
+  saveProject(); draw();
+}
+
 function isGroupEffectivelyHidden(groupId) {
   let gid = groupId;
   const seen = new Set();
@@ -4904,35 +4942,150 @@ function drillIntoSelectedGroupAtPoint(cx, cy, anim = null) {
   return anim ? drillIntoSelectedGroupAtAnim(anim) : false;
 }
 
-function hitTestGroupElements(groupId, cx, cy) {
-  const ANCHOR_HIT_R = 12;
-  const ARC_HIT_R = 8;
-  const curves = allDescendantAnims(groupId).filter(a =>
-    !isPrimitiveAnim(a) && !isTextAnim(a) && a.segments.length > 0 && !a.inPlacementMode
-  );
-  curves.forEach(a => recompileAnim(a));
-  let bestAnchor = null, bestAnchorDist = ANCHOR_HIT_R;
-  for (const a of curves) {
-    for (let i = 0; i < a.anchors.length; i++) {
-      const [ax, ay] = toCanvas(a.anchors[i].re, a.anchors[i].im);
-      const d = Math.hypot(ax - cx, ay - cy);
-      if (d < bestAnchorDist) { bestAnchorDist = d; bestAnchor = { animId: a.id, anchorIdx: i }; }
+function deselectEverything() {
+  selectedId = null;
+  editModeAnimId = null;
+  selectedGroupId = null;
+  clearMultiSelection();
+  clearGroupMode();
+  clearSelectionShearGuides();
+  clearSelectionHovers();
+  clearGroupMemberHover();
+}
+
+// Resolves a body/fill click against the *current* selection, implementing a "nearest common
+// ancestor" drilling rule so navigation feels like moving through a folder tree:
+//  - A click that lands on something in the same immediate group as the current selection
+//    (a sibling circle in the same sub-group) resolves straight to it — even through occlusion
+//    by some foreign object layered on top, since that foreign object isn't part of this branch.
+//  - A click that lands in a *different* sub-group (a sibling branch under the same outer
+//    group) selects that sub-group as a whole — one click, not straight to one of its members —
+//    so a second click can then go deeper into it.
+//  - A click that lands on a plain (non-group) object outside the current branch entirely (e.g.
+//    a rectangle that sits alongside the sub-groups, not inside any of them) is rejected outright
+//    — the user must deselect first (click empty canvas) before it can be selected fresh.
+// Returns null if nothing should change (let the caller fall back to its own handling).
+function resolveContextualClick(cx, cy) {
+  const curAnim = animations.find(a => a.id === selectedId) || animations.find(a => a.id === editModeAnimId) || null;
+  const currentGroupId = selectedGroupId ?? (curAnim ? objectGroupId(curAnim) : null);
+  if (currentGroupId == null) return null; // nothing group-related selected — not our concern
+
+  // What's genuinely topmost at this point, scene-wide? If it's already part of the current
+  // branch (a direct member, or nested deeper within it), that's the real answer — go straight
+  // to placing it via nearest-common-ancestor below. Only when the true topmost object is
+  // something foreign do we check whether the current context owns something hidden behind it
+  // (occlusion-through) — a "does this group own anything here" check run *before* this would
+  // wrongly win against a properly-exposed foreign object any time a broad/background-sized
+  // direct member (e.g. a big rectangle behind everything) happens to also span this point.
+  const globalTop = queryFillHit(cx, cy);
+  const globalTopInBranch = globalTop != null &&
+    (objectGroupId(globalTop) === currentGroupId || isAnimDescendantOf(globalTop, currentGroupId));
+
+  if (!globalTopInBranch) {
+    if (selectedGroupId != null) {
+      const childGroupId = queryDirectChildGroupBoundsHit(selectedGroupId, cx, cy);
+      if (childGroupId != null) return { action: 'select-group', groupId: childGroupId };
     }
-  }
-  if (bestAnchor) return { type: 'anchor', ...bestAnchor };
-  let bestArc = null, bestArcDist = ARC_HIT_R;
-  for (const a of curves) {
-    for (let si = 0; si < a.segments.length; si++) {
-      const seg = a.segments[si];
-      if (!seg?.compiled) continue;
-      for (const pt of sampleCompiledAdaptive(seg.compiled)) {
-        if (!pt) continue;
-        const d = Math.hypot(pt[0] - cx, pt[1] - cy);
-        if (d < bestArcDist) { bestArcDist = d; bestArc = { animId: a.id, segIdx: si }; }
+    const directHit = hitTestGroupElements(currentGroupId, cx, cy, { directOnly: true });
+    if (directHit) {
+      if (directHit.type === 'fill' || directHit.type === 'arc') {
+        const anim = animations.find(a => a.id === directHit.animId);
+        if (anim) return { action: 'select-anim', anim };
+      } else {
+        return { action: 'group-element', hit: directHit, groupId: currentGroupId };
       }
     }
+    if (!globalTop) return { action: 'deselect' };
   }
-  if (bestArc) return { type: 'arc', ...bestArc };
+
+  // target is either already confirmed in-branch, or genuinely foreign with nothing reachable
+  // underneath it — place it relative to the current context via nearest common ancestor.
+  const target = globalTop;
+  const targetChain = groupPathFromRoot(objectGroupId(target));
+  const currentChain = groupPathFromRoot(currentGroupId);
+  let lca = null;
+  for (let i = 0; i < targetChain.length && i < currentChain.length; i++) {
+    if (targetChain[i] !== currentChain[i]) break;
+    lca = targetChain[i];
+  }
+  const nextGroupId = lca != null ? childGroupOnPathToAnim(lca, target)
+                                   : (targetChain.length ? targetChain[0] : null);
+  if (nextGroupId != null) return { action: 'select-group', groupId: nextGroupId };
+  // target is a direct member of lca (or fully top-level, if lca is null)
+  if (lca === currentGroupId) return { action: 'select-anim', anim: target };
+  // A plain object outside the current branch — reachable only by first stepping back out to
+  // the nearest shared group (if any). Pop the selection up to that shared ancestor rather than
+  // wiping it out entirely (a rectangle sitting inside the outer group shouldn't cost you the
+  // outer group's own selection) — this click still doesn't select the object itself, so a
+  // second click (now with that ancestor as the current context, landing directly on it) is
+  // still what actually reaches it.
+  if (lca != null) return { action: 'select-group', groupId: lca };
+  return { action: 'deselect' };
+}
+
+function applyContextualClickResult(result) {
+  if (!result) return false;
+  if (result.action === 'deselect') { deselectEverything(); return true; }
+  if (result.action === 'select-group') { selectGroup(result.groupId); return true; }
+  if (result.action === 'select-anim') { drillSelectObject(result.anim); return true; }
+  if (result.action === 'group-element') { handleGroupElementHit(result.hit, result.groupId); return true; }
+  return false;
+}
+
+function hitTestGroupElements(groupId, cx, cy, { directOnly = false } = {}) {
+  const ANCHOR_HIT_R = 12 * devicePixelRatio;
+  const ARC_HIT_R = 10 * devicePixelRatio;
+  // directOnly: only this group's own immediate members, not the full recursive descendant
+  // tree — used by the contextual-click resolver to test "does this land on something this
+  // group owns directly" without reaching past a nested sub-group's own boundary.
+  const members = (directOnly ? animations.filter(a => a.groupId === groupId) : allDescendantAnims(groupId))
+    .filter(a => !isTextAnim(a) && !a.inPlacementMode);
+  // Front-to-back: later entries in `animations` render (and appear) on top, so a member's own
+  // hit — anchor, arc, or filled interior — must win over a farther-back member's hit at the
+  // same point, even when the back member's geometry happens to be numerically closer to the
+  // cursor. Resolve one member at a time in that order instead of picking whichever match is
+  // globally closest across every member at once — a distance-only search can otherwise pick a
+  // precise anchor/edge hit on a back object over an obvious fill hit on the front one.
+  const zOrdered = [...members].sort((x, y) => animations.indexOf(y) - animations.indexOf(x));
+  for (const a of zOrdered) {
+    // Merged objects store their real geometry per sub-curve on a.curves[], not on a.segments/
+    // a.anchors directly (those are empty at the top level) — flatten to leaf curves so a hit
+    // on any sub-curve of a merged member resolves to that member.
+    const leaves = [];
+    if (a.curves?.length) {
+      for (const c of a.curves) {
+        if (isPrimitiveAnim(c) || isTextAnim(c) || !c.segments?.length) continue;
+        recompileAnim(c);
+        leaves.push({ anchors: c.anchors, segments: c.segments });
+      }
+    } else if (!isPrimitiveAnim(a) && a.segments?.length > 0) {
+      recompileAnim(a);
+      leaves.push({ anchors: a.anchors, segments: a.segments });
+    }
+    let bestAnchor = null, bestAnchorDist = ANCHOR_HIT_R;
+    for (const leaf of leaves) {
+      for (let i = 0; i < leaf.anchors.length; i++) {
+        const [ax, ay] = toCanvas(leaf.anchors[i].re, leaf.anchors[i].im);
+        const d = Math.hypot(ax - cx, ay - cy);
+        if (d < bestAnchorDist) { bestAnchorDist = d; bestAnchor = i; }
+      }
+    }
+    if (bestAnchor !== null) return { type: 'anchor', animId: a.id, anchorIdx: bestAnchor };
+    let bestArc = null, bestArcDist = ARC_HIT_R;
+    for (const leaf of leaves) {
+      for (let si = 0; si < leaf.segments.length; si++) {
+        const seg = leaf.segments[si];
+        if (!seg?.compiled) continue;
+        for (const pt of sampleCompiledAdaptive(seg.compiled)) {
+          if (!pt) continue;
+          const d = Math.hypot(pt[0] - cx, pt[1] - cy);
+          if (d < bestArcDist) { bestArcDist = d; bestArc = si; }
+        }
+      }
+    }
+    if (bestArc !== null) return { type: 'arc', animId: a.id, segIdx: bestArc };
+    if (fillHitCandidate(a, cx, cy)) return { type: 'fill', animId: a.id };
+  }
   const grp = groups.find(g => g.id === groupId);
   if (grp?.regions?.length) {
     const rid = hitTestGroupRegion(groupId, cx, cy);
@@ -5140,6 +5293,30 @@ function clearObjectSelectionState() {
   });
 }
 
+// Single DOM-sync point for the shared hover-preview highlight: whichever of canvas, tile-row,
+// or object-panel-row the cursor is over sets groupMemberHover and calls this to keep the other
+// two surfaces in sync. Idempotent and cheap (no full renderAnimList() re-render) — tiles get
+// the same look as a selected tile (.obj-tile.selected); rows get this panel's own pre-existing
+// row-hover background.
+function applyGroupMemberHoverDom(anim) {
+  document.querySelectorAll('.hover-preview-highlight-row').forEach(el => el.classList.remove('hover-preview-highlight-row'));
+  document.querySelectorAll('.hover-preview-highlight-tile').forEach(el => el.classList.remove('hover-preview-highlight-tile'));
+  if (anim) {
+    document.querySelectorAll(`[data-anim-id="${anim.id}"]`).forEach(el => {
+      el.classList.add(el.classList.contains('obj-tile') ? 'hover-preview-highlight-tile' : 'hover-preview-highlight-row');
+    });
+  }
+}
+
+// Callers that clear the hover state outside mousemove (e.g. on click, or the canvas
+// mouseleave handler) would otherwise leave a stale highlight with no further mousemove event
+// to clean it up.
+function clearGroupMemberHover() {
+  if (!groupMemberHover) return;
+  applyGroupMemberHoverDom(null);
+  groupMemberHover = null;
+}
+
 function clearSelectionHovers() {
   sideActionHover = null;
   resizeHover = null;
@@ -5149,6 +5326,7 @@ function clearSelectionHovers() {
   anchorHover = null;
   handleHover = null;
   lockHover = null;
+  clearGroupMemberHover();
 }
 
 function clearRotationMode() {
@@ -6829,7 +7007,15 @@ function finalizePrimitivePlacement(anim) {
   anim.activeSegments = new Set();
   placementPreviewPos = null;
   resetFreeformPlacementPathTracking();
-  if (_primKind !== 'rectangle' && _primKind !== 'triangle') {
+  // Rectangle/triangle/line are converted to real anchors+segments immediately, rather than
+  // staying primitive-formula shapes — see the primitives-vs-freeform unification discussion.
+  // isPolygon:true keeps them reading/behaving as a rigid polygon (promotedAnchors marks the
+  // corners) until the user explicitly loosens it via the same "Convert to Bézier curve" button
+  // this reuses (convertPrimitiveToPath already handles that second stage). Circle/ellipse are
+  // deliberately left as real primitives for now (Phase 2).
+  if (_primKind === 'rectangle' || _primKind === 'triangle' || _primKind === 'line') {
+    convertPrimitiveToPath(anim, true);
+  } else {
     detectObjectTopology(anim);
   }
   enterEditMode(anim, new Set());
@@ -10420,50 +10606,36 @@ canvas.addEventListener('mousedown', e => {
   if (isGroupSelectionActive()) {
     const overSelectedGroupControl = queryFrameBorderHover(cx, cy) || queryResizeHandleHover(cx, cy);
     if (!overSelectedGroupControl) {
-      // Allow dragging individual members by their frame border
-      const memberFrame = queryGroupMemberFrameBorderHover(selectedGroupId, cx, cy);
-      if (memberFrame) {
+      // Resolve against the current group context (see resolveContextualClick): a direct
+      // member's own geometry wins over anything foreign on top of it; a click that lands in a
+      // *different* sub-group selects that sub-group (not straight to one of its members); a
+      // click on a plain object outside this branch entirely is rejected (deselect only, same
+      // as clicking dead space — it takes a second, fresh click to actually select it).
+      // Deliberately geometry-only, no bounding-box/frame-border fallback — a member's
+      // axis-aligned bbox can be much bigger than its visible silhouette (e.g. a rotated
+      // rectangle), so a bbox-based check can claim a click that visually lands on a totally
+      // different, unrelated member. Clicking off a member's actual geometry should never
+      // select it.
+      const _ctxResult = resolveContextualClick(cx, cy);
+      if (_ctxResult && _ctxResult.action === 'select-anim') {
         e.preventDefault();
-        beginObjectFrameDrag(memberFrame, mathX, mathY);
-        renderAnimList(); draw(); updateCursor();
-        return;
-      }
-      // Group element hit test: anchor selects in group mode; arc/curve initiates group drag
-      const groupHit = hitTestGroupElements(selectedGroupId, cx, cy);
-      if (groupHit) {
-        e.preventDefault();
-        if (groupHit.type === 'arc') {
-          const _gha = animations.find(a => a.id === groupHit.animId);
-          if (_gha) {
-            const _gid = selectedGroupId;
-            pendingBodyDrag = {
-              anim: _gha, startMathX: mathX, startMathY: mathY,
-              startClientX: e.clientX, startClientY: e.clientY,
-              dragContext: 'group', groupId: _gid,
-              onSelect: () => { drillSelectObject(_gha); renderAnimList(); draw(); updateCursor(); },
-            };
-            return;
-          }
-        } else {
-          handleGroupElementHit(groupHit, selectedGroupId);
-        }
-        renderAnimList(); draw(); updateCursor();
-        return;
-      }
-      // Broader curve hit (10px vs arc's 8px) — initiates group drag
-      const curveHit = hitTestCurve(cx, cy);
-      if (curveHit && isAnimDescendantOf(curveHit.anim, selectedGroupId)) {
-        e.preventDefault();
-        const _cha = curveHit.anim, _gid = selectedGroupId;
+        const _gha = _ctxResult.anim, _gid = selectedGroupId;
         pendingBodyDrag = {
-          anim: _cha, startMathX: mathX, startMathY: mathY,
+          anim: _gha, startMathX: mathX, startMathY: mathY,
           startClientX: e.clientX, startClientY: e.clientY,
           dragContext: 'group', groupId: _gid,
-          onSelect: () => { drillSelectObject(_cha); renderAnimList(); draw(); updateCursor(); },
+          onSelect: () => { drillSelectObject(_gha); renderAnimList(); draw(); updateCursor(); },
         };
         return;
       }
-      // No hit — deselect group and fall through to normal canvas handling
+      if (_ctxResult && (_ctxResult.action === 'select-group' || _ctxResult.action === 'group-element')) {
+        e.preventDefault();
+        applyContextualClickResult(_ctxResult);
+        renderAnimList(); draw(); updateCursor();
+        return;
+      }
+      // Deselect (dead space, or a foreign object outside this branch) and fall through to
+      // normal canvas handling.
       selectedGroupId = null;
       selectedGroupAnchor = null;
       selectedGroupArc = null;
@@ -10480,17 +10652,27 @@ canvas.addEventListener('mousedown', e => {
     e.preventDefault();
     pushUndo();
     if (fb.groupId != null && !selectedObjectAnim()) {
+      const _fbGroupAnims = allDescendantAnims(fb.groupId);
       frameDrag = {
         groupId: fb.groupId,
         startMathX: mathX, startMathY: mathY,
-        origStates: buildGroupOrigStates(allDescendantAnims(fb.groupId)),
+        origStates: buildGroupOrigStates(_fbGroupAnims),
+        // Not just merged (a.curves) members — a single self-intersecting curve (e.g. a
+        // closed freeform like the ellipse) also renders from its own _topoSplitCurves
+        // snapshot, so it needs the same post-drag refresh or its outline desyncs from its
+        // live (correctly moved) anchors, same bug as the merged case.
+        topoAnims: _fbGroupAnims.filter(a => a.curves?.length || a._topoSplitCurves)
+          .map(a => ({ anim: a, origSplitAnchors: buildOrigSplitAnchors(a) })),
       };
       selectGroup(fb.groupId);
     } else if (fb.multi) {
+      const _fbMultiAnims = multiSelectionMembers();
       frameDrag = {
         multi: true,
         startMathX: mathX, startMathY: mathY,
-        origStates: buildGroupOrigStates(multiSelectionMembers()),
+        origStates: buildGroupOrigStates(_fbMultiAnims),
+        topoAnims: _fbMultiAnims.filter(a => a.curves?.length || a._topoSplitCurves)
+          .map(a => ({ anim: a, origSplitAnchors: buildOrigSplitAnchors(a) })),
       };
     } else {
       frameDrag = {
@@ -10627,9 +10809,17 @@ canvas.addEventListener('mousedown', e => {
       const _aHit = anchorHover ?? queryAnchorHover(mathX, mathY);
       const _hHit = !_aHit ? (handleHover ?? queryHandleHover(mathX, mathY)) : null;
       _rbSkip = !!_aHit || !!_hHit;
+      // Computed early so the generous corner/junction-node proximity checks below can defer
+      // to it — without this, a click clearly intended for a *different*, definite object (its
+      // own fill directly under the cursor) could get swallowed by a same-object corner-radius
+      // check just because that other object happens to sit within the edit-mode object's own
+      // generous 14dp essential-point radius, silently skipping the group-aware resolver below
+      // and falling through to the old scene-wide fillHit handling instead.
+      const _emFillEarly = _rbSkip ? null : queryFillHit(cx, cy);
+      const _emFillIsForeign = _emFillEarly && _emFillEarly.id !== editModeAnimId;
       // Primitives are excluded from anchor/handle hover. When the edit-mode anim is a
       // primitive, fall back to topology nodes so clicking on a corner skips rubber-band.
-      if (!_rbSkip) {
+      if (!_rbSkip && !_emFillIsForeign) {
         const _emAnim = animations.find(a => a.id === editModeAnimId);
         if (_emAnim && isPrimitiveAnim(_emAnim)) {
           const { essentialPoints: _emEps } = computeObjectTopologyData(_emAnim);
@@ -10659,6 +10849,32 @@ canvas.addEventListener('mousedown', e => {
           }
         }
       }
+      // Clicking the edit-mode object's body (interior fill, away from any node/edge) should
+      // start a quick body-drag instead of a rubber-band. A fill hit on a *different* object
+      // resolves through the group-aware contextual-click logic instead of being grabbed here.
+      if (!_rbSkip) {
+        const _emFill = _emFillEarly;
+        if (_emFill && _emFill.id === editModeAnimId) {
+          e.preventDefault();
+          pendingBodyDrag = {
+            anim: _emFill, startMathX: mathX, startMathY: mathY,
+            startClientX: e.clientX, startClientY: e.clientY,
+            dragContext: 'object',
+            onSelect: () => { renderAnimList(); draw(); updateCursor(); },
+          };
+          return;
+        }
+        if (_emFill && _emFill.id !== editModeAnimId) {
+          const _ctxResult = resolveContextualClick(cx, cy);
+          if (_ctxResult) {
+            e.preventDefault();
+            applyContextualClickResult(_ctxResult);
+            renderAnimList(); draw(); updateCursor();
+            return;
+          }
+          _rbSkip = true;
+        }
+      }
     } else if (selectedId !== null) {
       // In selection-frame mode: allow dragging topology nodes without deselecting
       const _sfAnim = animations.find(a => a.id === selectedId);
@@ -10680,7 +10896,12 @@ canvas.addEventListener('mousedown', e => {
           const _hHit = !_aHit ? (handleHover ?? queryHandleHover(mathX, mathY)) : null;
           if (_aHit || _hHit) _rbSkip = true;
         }
-        if (!_rbSkip) {
+        // Computed early (see the matching comment in the editModeAnimId branch above) so the
+        // generous 14dp essential-point proximity check below can defer to a clearly different,
+        // definite fill target instead of coincidentally swallowing it.
+        const _sfFillEarly = _rbSkip ? null : queryFillHit(cx, cy);
+        const _sfFillIsForeign = _sfFillEarly && _sfFillEarly.id !== selectedId;
+        if (!_rbSkip && !_sfFillIsForeign) {
           const { essentialPoints: _sfEps } = computeObjectTopologyData(_sfAnim);
           const _sfHIT = 14 * devicePixelRatio;
           for (const _sfEp of _sfEps) {
@@ -10702,6 +10923,32 @@ canvas.addEventListener('mousedown', e => {
               onSelect: () => { renderAnimList(); draw(); updateCursor(); },
             };
             return;
+          }
+        }
+        // Clicking the selected object's body (interior fill, away from any node/edge/
+        // frame border) should start a quick body-drag instead of a rubber-band. A fill
+        // hit on a *different* object resolves through the group-aware contextual-click logic.
+        if (!_rbSkip) {
+          const _sfFill = _sfFillEarly;
+          if (_sfFill && _sfFill.id === selectedId) {
+            e.preventDefault();
+            pendingBodyDrag = {
+              anim: _sfFill, startMathX: mathX, startMathY: mathY,
+              startClientX: e.clientX, startClientY: e.clientY,
+              dragContext: 'object',
+              onSelect: () => { renderAnimList(); draw(); updateCursor(); },
+            };
+            return;
+          }
+          if (_sfFill && _sfFill.id !== selectedId) {
+            const _ctxResult = resolveContextualClick(cx, cy);
+            if (_ctxResult) {
+              e.preventDefault();
+              applyContextualClickResult(_ctxResult);
+              renderAnimList(); draw(); updateCursor();
+              return;
+            }
+            _rbSkip = true;
           }
         }
       }
@@ -10993,13 +11240,20 @@ canvas.addEventListener('mousedown', e => {
       // "Near arc" but outside the strict threshold — used to suppress accidental mode-switches.
       const _nearArc = !_hasArcHit && _bestArcHit && _bestArcDist <= _arcHitThreshold * 1.5;
 
+      // A region hit only means the click falls within this object's own fill area — it says
+      // nothing about z-order, so it fires just as readily for a big shape sitting *behind*
+      // something else the user is actually trying to click. Defer to a genuinely different,
+      // topmost object at this exact point before treating it as a region click.
+      const _regFill = _hasRegCandidate ? queryFillHit(cx, cy) : null;
+      const _regIsForeign = _regFill && _regFill.id !== _topoAnim.id;
+
       let _doArc = false, _doReg = false;
-      if (_hasArcHit && _hasRegCandidate) {
+      if (_hasArcHit && _hasRegCandidate && !_regIsForeign) {
         // Ambiguous click (on arc boundary of a region): honour current selection mode.
         if (selectedRegionIds.size > 0) _doReg = true; else _doArc = true;
       } else if (_hasArcHit) {
         _doArc = true;
-      } else if (_hasRegCandidate) {
+      } else if (_hasRegCandidate && !_regIsForeign) {
         // In arc-selection mode, a near-arc region click is treated as a misclick — do nothing.
         if (!(selectedArcKeys.size > 0 && _nearArc)) _doReg = true;
       }
@@ -11048,7 +11302,15 @@ canvas.addEventListener('mousedown', e => {
           if (_inFrame) {
             const _wbAHit = anchorHover ?? queryAnchorHover(mathX, mathY);
             const _wbHHit = !_wbAHit ? (handleHover ?? queryHandleHover(mathX, mathY)) : null;
-            if (!_wbAHit && !_wbHHit) {
+            // Bounding-box membership alone doesn't mean the click is actually meant for this
+            // object — a large object's frame can easily span other, unrelated objects sitting
+            // in front of or behind it (e.g. a big background rectangle covering a whole cluster
+            // of smaller shapes). Only swallow the click here if there's genuinely nothing else
+            // (a different object's own fill) at this exact point; otherwise let it fall through
+            // to the normal scene-wide selection logic below instead of silently absorbing it.
+            const _wbFill = (!_wbAHit && !_wbHHit) ? queryFillHit(cx, cy) : null;
+            const _wbFillIsForeign = _wbFill && _wbFill.id !== _topoAnim.id;
+            if (!_wbAHit && !_wbHHit && !_wbFillIsForeign) {
               e.preventDefault();
               if (drillObjectArc !== null || selectedRegionIds.size > 0 || selectedArcKeys.size > 0) {
                 clearTopoFeatureSelection();
@@ -11462,60 +11724,9 @@ canvas.addEventListener('mousedown', e => {
       return;
     }
     if (_fillUnsel && !objectGroupId(fillHit) && !isGroupSelectionActive() && !isMultiSelectionActive()) {
-      // Check if any higher-z-order animation has geometry inside fillHit's fill area.
-      // If so, fillHit is visually behind something → use rubber-band instead of quick-drag,
-      // allowing the user to rubber-band select the front object from this area.
-      // A tiny click (no drag) still selects fillHit via the pendingRubberBand mouseup path.
-      const _fhIdx = animations.indexOf(fillHit);
-      let _hasFrontObject = false;
-      if (_fhIdx < animations.length - 1) {
-        ctx.save();
-        ctx.beginPath();
-        let _fhPathDrew = false;
-        if (isPrimitiveAnim(fillHit)) {
-          _fhPathDrew = addPrimitiveFillPath(ctx, fillHit);
-        } else if (fillHit.curves?.length) {
-          for (const _fc of fillHit.curves) {
-            if (isTextAnim(_fc)) continue;
-            if (isPrimitiveAnim(_fc) && animHasVisibleFill(_fc)) {
-              if (addPrimitiveFillPath(ctx, _fc)) _fhPathDrew = true;
-            } else if (!isPrimitiveAnim(_fc) && animFillColor(_fc) && animFillOpacity(_fc) > 0) {
-              if (addCurveFillPath(ctx, _fc)) _fhPathDrew = true;
-            }
-          }
-        } else if (!isTextAnim(fillHit)) {
-          _fhPathDrew = addCurveFillPath(ctx, fillHit, !!(fillHit.closed && findLoopRange(fillHit)));
-        }
-        if (_fhPathDrew) {
-          outerFront:
-          for (let _qi = _fhIdx + 1; _qi < animations.length; _qi++) {
-            const _q = animations[_qi];
-            if (!isAnimEffectivelyVisible(_q) || _q.inPlacementMode) continue;
-            const _qCurves = _q.curves ? _q.curves : [_q];
-            for (const _c of _qCurves) {
-              for (const _a of (_c.anchors || [])) {
-                if (!_a?.ok()) continue;
-                const [_ax, _ay] = toCanvas(_a.re, _a.im);
-                if (ctx.isPointInPath(_ax, _ay, 'evenodd')) { _hasFrontObject = true; break outerFront; }
-              }
-              for (const _seg of (_c.segments || [])) {
-                if (!_seg?.compiled) continue;
-                const _samps = sampleCompiledAdaptive(_seg.compiled);
-                if (!_samps.length) continue;
-                const _mid = _samps[Math.floor(_samps.length / 2)];
-                if (_mid && ctx.isPointInPath(_mid[0], _mid[1], 'evenodd')) { _hasFrontObject = true; break outerFront; }
-              }
-            }
-          }
-        }
-        ctx.restore();
-        ctx.beginPath();
-      }
-      if (_hasFrontObject) {
-        pendingRubberBand = { startX: cx, startY: cy, startClientX: e.clientX, startClientY: e.clientY, clickCx: cx, clickCy: cy, clickMathX: mathX, clickMathY: mathY, savedEditModeAnimId: editModeAnimId };
-        e.preventDefault();
-        return;
-      }
+      // queryFillHit already resolved fillHit as the frontmost object whose fill actually
+      // covers this exact click point, so it's always the right thing to quick-drag here —
+      // even if some other object's geometry overlaps fillHit elsewhere on the canvas.
       const _fh = fillHit;
       pendingBodyDrag = {
         anim: _fh, startMathX: mathX, startMathY: mathY,
@@ -11984,6 +12195,12 @@ window.addEventListener('mousemove', e => {
         frameDrag.hasMoved = true;
       applyGroupTranslation(frameDrag, dx, dy);
       if (frameDrag.origSplitAnchors) updateTopoSplitCurvesForTranslation(frameDrag, dx, dy);
+      // Merged-object members move via applyGroupTranslation above (per-curve), which doesn't
+      // touch their own _topoSplitCurves render cache — keep each one's split-curve snapshot
+      // shifted in lockstep so they visually track the drag instead of jumping only on release.
+      if (frameDrag.topoAnims) for (const _ta of frameDrag.topoAnims) {
+        if (_ta.origSplitAnchors) updateTopoSplitCurvesForTranslation(_ta, dx, dy);
+      }
       draw(); return;
     }
     const { anim, startMathX, startMathY, origAnchors, origSegs } = frameDrag;
@@ -12042,10 +12259,12 @@ window.addEventListener('mousemove', e => {
       pendingBodyDrag = null;
       pushUndo();
       if (_dc === 'multi') {
-        frameDrag = { multi: true, startMathX: _smx, startMathY: _smy, origStates: buildGroupOrigStates(multiSelectionMembers()) };
+        const _pbdMultiAnims = multiSelectionMembers();
+        frameDrag = { multi: true, startMathX: _smx, startMathY: _smy, origStates: buildGroupOrigStates(_pbdMultiAnims), topoAnims: _pbdMultiAnims.filter(a => a.curves?.length || a._topoSplitCurves).map(a => ({ anim: a, origSplitAnchors: buildOrigSplitAnchors(a) })) };
       } else if (_dc === 'group') {
         selectGroup(_pgid);
-        frameDrag = { groupId: _pgid, startMathX: _smx, startMathY: _smy, origStates: buildGroupOrigStates(allDescendantAnims(_pgid)) };
+        const _pbdGroupAnims = allDescendantAnims(_pgid);
+        frameDrag = { groupId: _pgid, startMathX: _smx, startMathY: _smy, origStates: buildGroupOrigStates(_pbdGroupAnims), topoAnims: _pbdGroupAnims.filter(a => a.curves?.length || a._topoSplitCurves).map(a => ({ anim: a, origSplitAnchors: buildOrigSplitAnchors(a) })) };
       } else {
         selectedGroupId = null;
         selectedId = _pba.id;
@@ -12147,6 +12366,28 @@ window.addEventListener('mousemove', e => {
           (isGroupSelectionActive() && isAnimDescendantOf(_fh, selectedGroupId));
         if (_canBodyDrag) newFillHover = _fh;
       }
+    }
+
+    // Group member hover: soft glow on whichever member a click would currently drill into.
+    // Mirrors the exact anchor/arc/curve resolution the mousedown handler uses (not a generic
+    // fill/z-order test) so the glow never promises a click that wouldn't actually land.
+    // This whole handler is a window-level mousemove listener (so rubber-band/drag tracking
+    // keeps working past the canvas edge), so it fires for mouse movement anywhere on the page —
+    // including over the tile tray or object panel. Only let it touch groupMemberHover when the
+    // cursor is actually over the canvas; otherwise a tile/row's own hover (set independently,
+    // see appendAnimTrayTile / renderGroupDetail) would get silently overwritten with null on
+    // the very next mousemove tick, since off-canvas coordinates never match a member here.
+    const overMainCanvas = !overIsol && e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom;
+    let groupMemberHoverChanged = false;
+    if (overMainCanvas) {
+      let newGroupMemberHover = null;
+      if (isGroupSelectionActive()) {
+        const _gmHit = hitTestGroupElements(selectedGroupId, cx, cy);
+        if (_gmHit && _gmHit.type !== 'region') newGroupMemberHover = animations.find(a => a.id === _gmHit.animId) ?? null;
+      }
+      groupMemberHoverChanged = newGroupMemberHover !== groupMemberHover;
+      groupMemberHover = newGroupMemberHover;
+      if (groupMemberHoverChanged) applyGroupMemberHoverDom(newGroupMemberHover);
     }
 
     const sideActionChanged = (newSideActionHover?.anim !== sideActionHover?.anim) || (newSideActionHover?.groupId !== sideActionHover?.groupId) || (newSideActionHover?.multi !== sideActionHover?.multi) || (newSideActionHover?.kind !== sideActionHover?.kind);
@@ -12296,7 +12537,7 @@ window.addEventListener('mousemove', e => {
     const joinIconHoverChanged = newJoinIconHoverKey !== joinIconHoverKey;
     joinIconHoverKey = newJoinIconHoverKey;
 
-    if (changed || joinIconHoverChanged) { updateCursor(); draw(); }
+    if (changed || joinIconHoverChanged || groupMemberHoverChanged) { updateCursor(); draw(); }
     else if (regionHoverChanged) { draw(); }
   }
 });
@@ -12721,6 +12962,10 @@ window.addEventListener('mouseup', e => {
     // alike (see beginObjectFrameDrag etc.) — either way, this object has separately
     // stored fill-region boundary data that needs the same post-drag refresh.
     const _fdTopoAnim = frameDrag.origSplitAnchors ? frameDrag.anim : null;
+    // Group/multi frame drags move each merged member's curves via applyGroupTranslation
+    // (per-curve, not through the single-object path above), so they need their own
+    // topology refresh list — see frameDrag.topoAnims set up at drag-start.
+    const _fdTopoAnims = frameDrag.topoAnims ?? null;
     if (wasTiny) {
       // Tiny click on frame: undo the translate and just exit edit mode
       undoStack.pop();
@@ -12733,6 +12978,7 @@ window.addEventListener('mouseup', e => {
       // here keeps the fill aligned with the outline after release.
       // skipSpatialMigration: a translation doesn't change topology — ordinal mapping is correct.
       if (_fdTopoAnim) detectObjectTopology(_fdTopoAnim, { skipSpatialMigration: true });
+      if (_fdTopoAnims) for (const _ta of _fdTopoAnims) detectObjectTopology(_ta.anim, { skipSpatialMigration: true });
     }
     renderAnimList(); draw(); updateCursor(); return;
   }
@@ -12789,8 +13035,9 @@ canvas.addEventListener('mouseleave', () => {
   // pendingRubberBand intentionally not cleared here — window-level mouseup processes it even
   // when the mouse briefly leaves the canvas between mousedown and mouseup (e.g. during a DOM
   // reflow). Clearing it here caused selection to silently fail.
-  if (anchorHover || handleHover || segmentHover || resizeHover || rotateHover || sideActionHover || frameHover || lockHover || fillHover || anchorIconHover !== null) {
+  if (anchorHover || handleHover || segmentHover || resizeHover || rotateHover || sideActionHover || frameHover || lockHover || fillHover || groupMemberHover || anchorIconHover !== null) {
     anchorHover = null; handleHover = null; segmentHover = null; resizeHover = null; rotateHover = null; sideActionHover = null; frameHover = null; lockHover = null; fillHover = null;
+    clearGroupMemberHover();
     anchorIconHover = null; _anchorIconPositions = null; _editNodeArcHover = null; _editNodeAnchorHover = null;
     updateCursor(); draw();
   }
@@ -14098,7 +14345,7 @@ function drawClosedSegmentFill(anim, fillColorOverride = null, opacityScale = 1)
   drawCurveFill(anim, fillColorOverride, opacityScale, []);
 }
 
-function drawSegment(anim, segIdx, colorOverride = null, opacityScale = 1, thicknessOverride = null, absOpacity = null, outerSoftness = 0, innerSoftness = 0) {
+function drawSegment(anim, segIdx, colorOverride = null, opacityScale = 1, thicknessOverride = null, absOpacity = null) {
   const seg = anim.segments[segIdx];
   if (!seg || !seg.compiled) return;
   const dpr = devicePixelRatio;
@@ -14135,7 +14382,7 @@ function drawSegment(anim, segIdx, colorOverride = null, opacityScale = 1, thick
       drawCompiledCurve(seg.compiled, color, cw * 0.55, opacity);
       ctx.restore();
     } else {
-      drawCompiledCurve(seg.compiled, color, cw, opacity, outerSoftness, innerSoftness);
+      drawCompiledCurve(seg.compiled, color, cw, opacity);
     }
   } else if (arcSelectGhost && seg.compiledRef) {
     seg.compiledRef.forEach((entry, i) => {
@@ -14143,9 +14390,9 @@ function drawSegment(anim, segIdx, colorOverride = null, opacityScale = 1, thick
       if (Math.abs(entry.eccentricity - seg.eccentricity) >= 1e-9)
         drawCompiledCurve(entry.fn, '#888888', cw * 0.2, 0.4 * opacity);
     });
-    drawCompiledCurve(seg.compiled, color, cw, opacity, outerSoftness, innerSoftness);
+    drawCompiledCurve(seg.compiled, color, cw, opacity);
   } else {
-    drawCompiledCurve(seg.compiled, color, cw, opacity, outerSoftness, innerSoftness);
+    drawCompiledCurve(seg.compiled, color, cw, opacity);
   }
 }
 
@@ -14289,35 +14536,49 @@ function drawPrimitiveShape(kind, p0, p1, color, lineWidth, alpha = 1, dashed = 
   ctx.restore();
 }
 
-function drawPrimitiveCroppedImage(anim, alpha) {
+// Clips anim._croppedImage to anim's own outline and draws it. Primitives still need their
+// per-kind formula for that outline (no real anchors/segments to sample — see isPrimitiveAnim);
+// anything else (including a converted-from-primitive or genuinely hand-drawn closed curve)
+// builds the clip path the same way its normal fill does, via addCurveFillPath.
+function drawCroppedImage(anim, alpha) {
   if (!anim._croppedImage?.complete || !anim._croppedImage.naturalWidth) return;
-  const kind = animKind(anim);
-  const p0 = anim.anchors[0], p1 = anim.anchors[1];
-  const [x0, y0] = toCanvas(p0.re, p0.im);
-  const [x1, y1] = toCanvas(p1.re, p1.im);
-  const rotation = animRotation(anim);
   const bounds = selectedObjectCanvasBounds(anim);
   if (!bounds) return;
   ctx.save();
   ctx.beginPath();
-  if (kind === 'rectangle') {
-    const temp = { kind: 'rectangle', anchors: [p0, p1], rotation };
-    const pts = primitiveRectangleCorners(temp).map(pt => toCanvas(pt.re, pt.im));
-    ctx.moveTo(pts[0][0], pts[0][1]);
-    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
-    ctx.closePath();
-  } else if (kind === 'triangle') {
-    const temp = { kind: 'triangle', anchors: [p0, p1], rotation };
-    const pts = primitiveTrianglePoints(temp).map(pt => toCanvas(pt.re, pt.im));
-    ctx.moveTo(pts[0][0], pts[0][1]);
-    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
-    ctx.closePath();
-  } else if (kind === 'circle') {
-    ctx.arc(x0, y0, Math.hypot(x1 - x0, y1 - y0), 0, Math.PI * 2);
-  } else if (kind === 'ellipse') {
-    const rx = Math.abs(x1 - x0), ry = Math.abs(y1 - y0);
-    ctx.ellipse(x0, y0, rx, ry, -rotation, 0, Math.PI * 2);
+  let hasPath = false;
+  if (isPrimitiveAnim(anim)) {
+    const kind = animKind(anim);
+    const p0 = anim.anchors[0], p1 = anim.anchors[1];
+    const [x0, y0] = toCanvas(p0.re, p0.im);
+    const [x1, y1] = toCanvas(p1.re, p1.im);
+    const rotation = animRotation(anim);
+    if (kind === 'rectangle') {
+      const temp = { kind: 'rectangle', anchors: [p0, p1], rotation };
+      const pts = primitiveRectangleCorners(temp).map(pt => toCanvas(pt.re, pt.im));
+      ctx.moveTo(pts[0][0], pts[0][1]);
+      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+      ctx.closePath();
+      hasPath = true;
+    } else if (kind === 'triangle') {
+      const temp = { kind: 'triangle', anchors: [p0, p1], rotation };
+      const pts = primitiveTrianglePoints(temp).map(pt => toCanvas(pt.re, pt.im));
+      ctx.moveTo(pts[0][0], pts[0][1]);
+      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+      ctx.closePath();
+      hasPath = true;
+    } else if (kind === 'circle') {
+      ctx.arc(x0, y0, Math.hypot(x1 - x0, y1 - y0), 0, Math.PI * 2);
+      hasPath = true;
+    } else if (kind === 'ellipse') {
+      const rx = Math.abs(x1 - x0), ry = Math.abs(y1 - y0);
+      ctx.ellipse(x0, y0, rx, ry, -rotation, 0, Math.PI * 2);
+      hasPath = true;
+    }
+  } else {
+    hasPath = addCurveFillPath(ctx, anim, true);
   }
+  if (!hasPath) { ctx.restore(); return; }
   ctx.clip();
   const lightness = anim.croppedImageLightness ?? 1.0;
   ctx.globalAlpha = alpha * (animFillOpacity(anim) ?? 1);
@@ -14329,7 +14590,7 @@ function drawPrimitiveCroppedImage(anim, alpha) {
 function drawPrimitive(anim, extraWidth = 0, alpha = 1) {
   if (!isPrimitiveAnim(anim) || anim.anchors.length < 2) return;
   if (anim.croppedImageDataUrl && anim._croppedImage?.complete && extraWidth === 0 && alpha >= 1) {
-    drawPrimitiveCroppedImage(anim, alpha);
+    drawCroppedImage(anim, alpha);
     drawPrimitiveShape(
       anim.kind, anim.anchors[0], anim.anchors[1], anim.color,
       primitiveStrokeWidth(anim, 0), alpha, false, animRotation(anim),
@@ -15040,7 +15301,7 @@ function sideActionMenuItemsForFrame(f, forSingleAnim = false, anim = null) {
     { kind: 'rotate',    x: menuBtn.x, y: menuBtn.y + menuBtn.h + gap + (h + gap)*2, w, h },
   ];
   if (forSingleAnim) {
-    const _isCroppable = anim && isPrimitiveAnim(anim) && animKind(anim) !== 'line';
+    const _isCroppable = isCroppableAnim(anim);
     items.push({ kind: _isCroppable ? 'crop' : 'editNodes', x: menuBtn.x, y: menuBtn.y + menuBtn.h + gap + (h + gap)*3, w, h });
   }
   return items;
@@ -15153,13 +15414,13 @@ function handleSideActionButtonPress(action) {
     return true;
   }
   if (action.kind === 'crop') {
-    if (action.anim && isPrimitiveAnim(action.anim) && animKind(action.anim) !== 'line') {
+    if (isCroppableAnim(action.anim)) {
       pushUndo();
       if (action.anim.croppedImageDataUrl) {
         action.anim.croppedImageDataUrl = null;
         action.anim._croppedImage = null;
       } else {
-        cropPrimitive(action.anim);
+        cropAnim(action.anim);
       }
       saveProject(); renderAnimList(); draw();
     }
@@ -15597,15 +15858,6 @@ function queryFrameBorderHoverForAnim(anim, cx, cy, innerTol = null) {
   return (inOuter && !inInner) ? anim : null;
 }
 
-function queryGroupMemberFrameBorderHover(groupId, cx, cy) {
-  const members = groupMembers(groupId);
-  for (let i = members.length - 1; i >= 0; i--) {
-    const hit = queryFrameBorderHoverForAnim(members[i], cx, cy);
-    if (hit) return hit;
-  }
-  return null;
-}
-
 function queryRotationWheelHover(cx, cy) {
   const anim = selectedObjectAnim();
   if (anim) return queryRotationWheelHoverForAnim(anim, cx, cy);
@@ -16026,6 +16278,22 @@ function primitiveEllipsePathForDrag(drag) {
 // isPolygon=false (default): full Bézier mode (handles become freely draggable).
 function convertPrimitiveToPath(anim, isPolygon = false) {
   const kind = animKind(anim);
+  if (kind === 'line') {
+    // Degenerate case: already just 2 anchors, no corner-formula needed — just relabel and
+    // give it a real straight segment instead of leaving segments empty.
+    const anchors = anim.anchors.map(cloneCx);
+    anim.kind = 'freeform';
+    anim.closed = false;
+    anim.rotation = 0;
+    anim.anchors = anchors;
+    anim.segments = [makeStraightSegment(anchors[0], anchors[1])];
+    anim.anchorLocked = anchors.map(() => false);
+    anim.promotedAnchors = anchors.map(() => true);
+    anim._isPolygon = false;
+    recompileAnim(anim);
+    detectObjectTopology(anim);
+    return true;
+  }
   if (kind !== 'rectangle' && kind !== 'triangle') return false;
   const fakeDrag = { origKind: kind, origAnchors: anim.anchors.map(cloneCx), origRotation: anim.rotation ?? 0 };
   const path = primitivePathForDrag(fakeDrag);
@@ -16485,6 +16753,16 @@ function applyResizeBounds(drag, nextBounds) {
     compiledRef: null,
   }) : null);
   anim.anchorLocked = drag.origAnchorLocked ? [...drag.origAnchorLocked] : [];
+  // A curve converted from a primitive circle/ellipse (convertCircleEllipseToPath) still carries
+  // _circleArc — an exact center/rx/ry the fill renderer (addRegionBoundaryToPathLike) draws via
+  // ctx.arc instead of the anchor polygon. That's fine for a pure move/rotate (center gets kept
+  // in sync elsewhere), but this generic resize path only transforms anchors/segments, leaving
+  // _circleArc's radius exactly where it started — the fill then renders at the old size while
+  // the anchor-based outline correctly follows the resize. Same fix already used elsewhere in
+  // this file when _circleArc goes stale: drop it, falling back to the real (and now correct)
+  // anchor polygon for fill too, rather than trying to patch a radius that may no longer even be
+  // circular (an ellipse resized non-uniformly has no single "radius" left to compute).
+  if (anim._circleArc) anim._circleArc = null;
   {
     const _ow = Math.abs(origBounds.right - origBounds.left);
     const _oh = Math.abs(origBounds.top - origBounds.bottom);
@@ -17313,6 +17591,53 @@ function drawSelectedObjectBounds(anim) {
   ctx.restore();
 }
 
+// Simple, non-interactive outlines for every group *above* whatever's currently innermost-
+// selected (a group or an individual object) — so drilling several levels deep still shows the
+// whole containing chain at a glance, not just the innermost level. The innermost selection
+// already gets its own full, detailed, interactive frame (handles, resize, rotation wheel) via
+// drawSelectedObjectBounds/drawSelectedGroupBounds; these ancestor outlines are deliberately
+// plainer, fading out further from the innermost level.
+function drawAncestorGroupOutlines() {
+  if (suppressSelectionOverlays) return;
+  let chain;
+  if (selectedGroupId != null) {
+    chain = groupPathFromRoot(selectedGroupId).slice(0, -1);
+  } else {
+    const mainSelId = editModeAnimId ?? selectedId;
+    const mainSel = mainSelId != null ? animations.find(a => a.id === mainSelId) : null;
+    if (!mainSel || objectGroupId(mainSel) == null) return;
+    chain = groupPathFromRoot(objectGroupId(mainSel));
+  }
+  if (!chain.length) return;
+  const dpr = devicePixelRatio;
+  ctx.save();
+  chain.forEach((gid, i) => {
+    const frame = groupSelectionFrameMetrics(gid);
+    if (!frame) return;
+    const { outerX, outerY, outerW, outerH } = frame;
+    const depthFromInnermost = chain.length - i;
+    // Alternating black/color dashes ("marching ants") instead of a single-color dashed line —
+    // a light-colored dash alone can vanish against a light canvas background; stacking a black
+    // pass and a color pass with the dash offset by half a dash length keeps every segment of
+    // the outline high-contrast against either a light or dark background.
+    const lineW = Math.max(0.8, 1.4 - depthFromInnermost * 0.2) * dpr;
+    const alpha = Math.max(0.22, 0.42 - depthFromInnermost * 0.05);
+    const dashLen = 5 * dpr;
+    ctx.lineWidth = lineW;
+    ctx.globalAlpha = alpha;
+    ctx.setLineDash([dashLen, dashLen]);
+    ctx.strokeStyle = '#000000';
+    ctx.lineDashOffset = 0;
+    ctx.strokeRect(outerX, outerY, outerW, outerH);
+    ctx.strokeStyle = CANVAS_TOOL_COLOR;
+    ctx.lineDashOffset = dashLen;
+    ctx.strokeRect(outerX, outerY, outerW, outerH);
+  });
+  ctx.setLineDash([]);
+  ctx.lineDashOffset = 0;
+  ctx.restore();
+}
+
 function drawSelectedGroupBounds() {
   if (suppressSelectionOverlays) return;
   if (!isGroupSelectionActive()) return;
@@ -17548,13 +17873,11 @@ function drawCommittedAnimation(anim, { deferOverlay = false } = {}) {
           const _as = splitC
             ? getArcStyleForSplitSegment(anim, c.id, i)
             : getArcStyleForSegment(anim, c.id, i);
-          const _outerSoft = _as?.outerSoftness ?? anim.outerSoftness ?? 0;
-          const _innerSoft = _as?.innerSoftness ?? anim.innerSoftness ?? 0;
           if (_as && (_as.color || _as.thickness !== undefined || _as.opacity !== undefined)) {
             drawSegment(proxy, i, _as.color ?? null, 1, _as.thickness ?? null,
-              _as.opacity !== undefined ? _as.opacity * clamp(anim.outlineOpacity ?? 1, 0, 1) * _globalCanvasDimFactor : null, _outerSoft, _innerSoft);
+              _as.opacity !== undefined ? _as.opacity * clamp(anim.outlineOpacity ?? 1, 0, 1) * _globalCanvasDimFactor : null);
           } else {
-            drawSegment(proxy, i, null, 1, null, null, _outerSoft, _innerSoft);
+            drawSegment(proxy, i, null, 1, null, null);
           }
         }
       }
@@ -17574,6 +17897,14 @@ function drawCommittedAnimation(anim, { deferOverlay = false } = {}) {
     return;
   }
   if (anim.anchors.length === 1 && anim.segments.length === 0) drawDot(anim);
+  // A cropped closed curve (converted from a primitive, or cropped directly once crop was
+  // generalized past primitives — see isCroppableAnim) draws its captured image instead of a
+  // normal fill, same as drawPrimitive does for a still-primitive cropped shape.
+  const _isCroppedClosedCurve = anim.croppedImageDataUrl && anim._croppedImage?.complete &&
+    anim._croppedImage.naturalWidth && anim.closed && findLoopRange(anim);
+  if (_isCroppedClosedCurve) {
+    drawCroppedImage(anim, 1);
+  } else
   // Skip direct-fill paths when regions exist — drawObjectRegionFills handles those,
   // with anim.fillColor as fallback if any region.fillColor is null.
   // Exception: during a resize or rotate drag, regions are stale, so bypass the guard and use
@@ -17618,13 +17949,16 @@ function drawCommittedAnimation(anim, { deferOverlay = false } = {}) {
     const _as = _stdSplitC
       ? getArcStyleForSplitSegment(anim, anim.id, i)
       : getArcStyleForSegment(anim, anim.id, i);
-    const _outerSoft = _as?.outerSoftness ?? anim.outerSoftness ?? 0;
-    const _innerSoft = _as?.innerSoftness ?? anim.innerSoftness ?? 0;
+    // Color/thickness/opacity always resolve from the live anim (arc override taking priority
+    // when present), never from _stdRenderC — that's a cached split-curve snapshot from the last
+    // topology recompute, and plain color/thickness/opacity edits don't trigger one, so its own
+    // fields go stale the moment you change them on the live object. _stdRenderC is only the
+    // right source for geometry (.segments), never for base styling.
     if (_as && (_as.color || _as.thickness !== undefined || _as.opacity !== undefined)) {
-      drawSegment(_stdRenderC, i, _as.color ?? null, 1, _as.thickness ?? null,
-        _as.opacity !== undefined ? _as.opacity * clamp(anim.outlineOpacity ?? 1, 0, 1) * _globalCanvasDimFactor : null, _outerSoft, _innerSoft);
+      drawSegment(_stdRenderC, i, _as.color ?? anim.color, 1, _as.thickness ?? anim.thickness,
+        _as.opacity !== undefined ? _as.opacity * clamp(anim.outlineOpacity ?? 1, 0, 1) * _globalCanvasDimFactor : animOutlineOpacity(anim));
     } else {
-      drawSegment(_stdRenderC, i, null, 1, null, null, _outerSoft, _innerSoft);
+      drawSegment(_stdRenderC, i, anim.color, 1, anim.thickness, animOutlineOpacity(anim));
     }
   }
   if (!deferOverlay) drawSelectedObjectBounds(anim);
@@ -17774,7 +18108,6 @@ function drawAnimations() {
       }
     }
   }
-
 
   for (const anim of animations) {
     if (!isAnimEffectivelyVisible(anim) && !anim.inPlacementMode) continue;
@@ -18004,7 +18337,54 @@ function drawAnimations() {
     drawGroupElementHighlight();
   }
 
+  // Soft glow on the group member a click would currently drill into — mirrors the exact
+  // anchor/arc/fill resolution used by the mousedown handler (see groupMemberHover in the
+  // mousemove handler), so the glow only ever lights up whichever member a click would actually
+  // select. Drawn as a final overlay (after the whole scene, not underneath it) so the fill
+  // wash actually lightens a fully-opaque object instead of being painted over by its own fill.
+  if (groupMemberHover && isAnimEffectivelyVisible(groupMemberHover)) {
+    const _gmAnim = groupMemberHover;
+    const _gmCurves = _gmAnim.curves ?? [_gmAnim];
+    const _gmDpr = devicePixelRatio;
+    ctx.save();
+    ctx.beginPath();
+    let _gmFillDrew = false;
+    if (isPrimitiveAnim(_gmAnim)) {
+      _gmFillDrew = addPrimitiveFillPath(ctx, _gmAnim);
+    } else {
+      for (const _gc of _gmCurves) {
+        if (isTextAnim(_gc)) continue;
+        if (isPrimitiveAnim(_gc)) { if (addPrimitiveFillPath(ctx, _gc)) _gmFillDrew = true; continue; }
+        const _gRenderC = _gmAnim._topoSplitCurves?.get(_gc.id) ?? _gc;
+        const _gProxy = makeCurveProxy(_gmAnim, _gRenderC);
+        if (addCurveFillPath(ctx, _gProxy, !!(_gRenderC.closed && findLoopRange(_gRenderC)))) _gmFillDrew = true;
+      }
+    }
+    if (_gmFillDrew) {
+      ctx.fillStyle = '#ffffff';
+      ctx.globalAlpha = 0.175;
+      ctx.fill('evenodd');
+    }
+    ctx.restore();
+    ctx.beginPath();
+    if (isPrimitiveAnim(_gmAnim)) {
+      drawPrimitive(_gmAnim, 14 * _gmDpr, 0.275);
+    } else {
+      for (const _gc of _gmCurves) {
+        if (isPrimitiveAnim(_gc)) { drawPrimitive(_gc, 14 * _gmDpr, 0.275); continue; }
+        const _gRenderC = _gmAnim._topoSplitCurves?.get(_gc.id) ?? _gc;
+        const _gcw = zoomStrokeWidth(_gmAnim.thickness ?? _gc.thickness);
+        for (const _gSeg of _gRenderC.segments) {
+          if (_gSeg?.compiled && _gSeg.visible !== false) {
+            drawCompiledCurve(_gSeg.compiled, '#ffffff', _gcw + 14 * _gmDpr, 0.275);
+          }
+        }
+      }
+    }
+  }
+
   drawSelectedGroupBounds();
+  drawAncestorGroupOutlines();
   drawSelectedMultiSelectionBounds();
   drawContourSelectOverlay();
 
@@ -19830,8 +20210,8 @@ function appendColorExpansion(parent, anim) {
 
   } else if (objectFillTab === 1) {
     // ── Fill 1: fill color + opacity ──
-    // Cropped primitive: show Lightness/Opacity/Uncrop instead of color picker
-    if (anim.croppedImageDataUrl && isPrimitiveAnim(anim) && animKind(anim) !== 'line') {
+    // Cropped shape: show Lightness/Opacity/Uncrop instead of color picker
+    if (anim.croppedImageDataUrl) {
       appendSliderRow(panel, 'Lightness', 0, 200, 1,
         Math.round((anim.croppedImageLightness ?? 1.0) * 100),
         v => `${Math.round(v)}%`, v => { anim.croppedImageLightness = parseFloat(v) / 100; saveProject(); draw(); },
@@ -20223,9 +20603,13 @@ function renderAnimThumbnail(anim, canvasEl, size = 48) {
           tctx.moveTo(x0,y0); tctx.lineTo(x1,y1);
           tctx.globalAlpha = 0.9; tctx.stroke();
         } else if (c.kind === 'rectangle') {
-          const [x0,y0] = T2(Math.min(p0.re,p1.re), Math.max(p0.im,p1.im));
-          const [x1,y1] = T2(Math.max(p0.re,p1.re), Math.min(p0.im,p1.im));
-          tctx.rect(x0, y0, x1-x0, y1-y0);
+          // Same rotation fix as the single-object branch below — plain min/max of p0/p1
+          // ignores c.rotation entirely.
+          const pts = primitiveRectangleCorners(c).map(pt => T2(pt.re, pt.im));
+          if (pts.length < 4) continue;
+          tctx.moveTo(pts[0][0], pts[0][1]);
+          for (let i = 1; i < pts.length; i++) tctx.lineTo(pts[i][0], pts[i][1]);
+          tctx.closePath();
           if (cFill) { tctx.fillStyle = cFill; tctx.globalAlpha = cFillAlpha; tctx.fill(); }
           tctx.globalAlpha = 0.9; tctx.stroke();
         } else if (c.kind === 'triangle') {
@@ -20331,6 +20715,10 @@ function renderAnimThumbnail(anim, canvasEl, size = 48) {
     } else if (anim.kind === 'ellipse' && p0 && p1) {
       const rx = Math.abs(p1.re - p0.re), ry = Math.abs(p1.im - p0.im);
       for (let i = 0; i <= 32; i++) { const a = (i / 32) * Math.PI * 2; addPt(p0.re + rx * Math.cos(a), p0.im + ry * Math.sin(a)); }
+    } else if (anim.kind === 'rectangle') {
+      for (const pt of primitiveRectangleCorners(anim)) addPt(pt.re, pt.im);
+    } else if (anim.kind === 'triangle') {
+      for (const pt of primitiveTrianglePoints(anim)) addPt(pt.re, pt.im);
     }
   } else {
     anim.anchors.forEach(a => { if (a) addPt(a.re, a.im); });
@@ -20420,9 +20808,14 @@ function renderAnimThumbnail(anim, canvasEl, size = 48) {
       tctx.moveTo(x0,y0); tctx.lineTo(x1,y1);
       tctx.globalAlpha = 0.9; tctx.stroke();
     } else if (anim.kind === 'rectangle') {
-      const [x0,y0] = T(Math.min(p0.re,p1.re), Math.max(p0.im,p1.im));
-      const [x1,y1] = T(Math.max(p0.re,p1.re), Math.min(p0.im,p1.im));
-      tctx.rect(x0, y0, x1-x0, y1-y0);
+      // Must go through primitiveRectangleCorners (same helper the main canvas uses) rather
+      // than a plain min/max rect of p0/p1 — that ignores anim.rotation entirely, so a
+      // rotated rectangle's thumbnail silently drew axis-aligned, mismatching the canvas.
+      const pts = primitiveRectangleCorners(anim).map(pt => T(pt.re, pt.im));
+      if (pts.length < 4) return;
+      tctx.moveTo(pts[0][0], pts[0][1]);
+      for (let i = 1; i < pts.length; i++) tctx.lineTo(pts[i][0], pts[i][1]);
+      tctx.closePath();
       if (fillCol) { tctx.fillStyle = fillCol; tctx.globalAlpha = fillAlpha; tctx.fill(); }
       tctx.globalAlpha = 0.9; tctx.stroke();
     } else if (anim.kind === 'triangle') {
@@ -20711,6 +21104,14 @@ function handleObjectTileDrop(e) {
   e.preventDefault();
   const drag = objectTileDrag;
   const joinGroupId = objectTileJoinGroupTarget(e); // must read before nulling objectTileDrag
+  // Also must read before nulling objectTileDrag: objectTileInsertionIndexFromEvent's own
+  // "plain branch" checks objectTileDrag?.animIds to tell whether the item being dragged
+  // already belongs to the target tile's group (so it can allow free repositioning within
+  // that group instead of snapping to the group's boundary). With objectTileDrag already
+  // null, that membership check always comes up empty, so it wrongly took the boundary-snap
+  // path on every drop within a group — landing at the front or back regardless of where the
+  // tile was actually released.
+  const insertionIndex = objectTileInsertionIndexFromEvent(e);
   objectTileDrag = null;
   suppressTileClickUntil = Date.now() + 250;
   clearObjectTileDropCues();
@@ -20720,7 +21121,6 @@ function handleObjectTileDrop(e) {
     return;
   }
   const fromIndex = animations.findIndex(anim => anim.id === drag.animId);
-  const insertionIndex = objectTileInsertionIndexFromEvent(e);
   moveAnimationInStack(fromIndex, insertionIndex, drag.animIds);
 }
 
@@ -21498,7 +21898,6 @@ function splitRawCurvesAtIntersections(rawCurves) {
   for (const A of rawCurves) {
     const nSeg = A.segments.length;
     if (nSeg < 2) continue;
-    console.warn(`[selfx-struct] curve=${A.id} closed=${A.closed} anchors=${A.anchors.length} segs=${nSeg} uncompiled=[${A.segments.map((s,i)=>s?.compiled?null:i).filter(x=>x!==null).join(',')}] anchorPts=[${A.anchors.map(p=>`(${p.re.toFixed(1)},${p.im.toFixed(1)})`).join(' ')}]`);
     const pairHits = [];
     for (let sa = 0; sa < nSeg; sa++) {
       if (!A.segments[sa]?.compiled) continue;
@@ -21537,7 +21936,6 @@ function splitRawCurvesAtIntersections(rawCurves) {
     // default cap also guards against nearly-parallel/coincident curves producing phantom
     // splits — a case still worth protecting for Pencil/Arc Builder paths.
     if (dedupedHits.length > (A.brushStroke ? 60 : 10)) continue;
-    if (dedupedHits.length > 0) console.warn(`[selfx-diag] curve=${A.id} nSeg=${nSeg} hits=${dedupedHits.length}:`, dedupedHits.map(h => `sa=${h.sa} sb=${h.sb} tA=${h.tA.toFixed(4)} tB=${h.tB.toFixed(4)} nearA=${h.nearA} nearB=${h.nearB} pt=(${h.point.re.toFixed(2)},${h.point.im.toFixed(2)})`));
     for (const { sa, sb, tA, tB, nearA, nearB, anchorIdxA_orig, anchorIdxB_orig, point } of dedupedHits) {
       if (nearA) {
         _addSnap(A, anchorIdxA_orig, point);
@@ -21829,7 +22227,6 @@ function detectObjectTopology(anim, { skipSpatialMigration = false } = {}) {
                                      : (s >= d.fromIdx && s < d.toIdx);
         if (inRange) { sc.segments[s] = { ...sc.segments[s], visible: false }; _markedCount++; }
       }
-      console.warn(`[selfx-arcdiag] deletedArc curveId=${d.curveId} fi=${d.fromIdx} ti=${d.toIdx} wrap=${!!d.wrapAround} nSeg=${nS} markedInvisible=${_markedCount}`);
     }
   }
 
@@ -22182,10 +22579,6 @@ function detectObjectTopology(anim, { skipSpatialMigration = false } = {}) {
     anim.fillColor = null;
     anim.fillOpacity = 0;
   }
-  console.warn(`[selfx-regions] anim=${anim.id} regionCount=${anim.regions.length}:`, anim.regions.map(r => {
-    const c = _sampleRegionCentroid(r, curvesMap);
-    return `id=${r.id} fill=${r.fillColor ?? 'none'} holes=${r.holeBoundaries?.length ?? 0} cent=${c ? `(${c[0].toFixed(1)},${c[1].toFixed(1)})` : 'n/a'}`;
-  }));
 }
 
 // Returns { essentialPoints: [{num, pos}], topoArcs: [{label, fromNum, toNum, curveId, fromIdx, toIdx}] }
@@ -22484,10 +22877,6 @@ function computeObjectTopologyData(anim) {
         return essentialPoints.filter(ep => activeNums.has(ep.num));
       })()
     : essentialPoints;
-  if (anim.deletedArcs?.length) {
-    const _nRemoved = topoArcs.length - filteredArcs.length;
-    console.warn(`[selfx-arcdiag] deletedArcs=${_nRemoved}/${anim.deletedArcs.length} matched. allArcs:`, topoArcs.map(a => `${a.label}(c=${a.curveId},fi=${a.fromIdx},ti=${a.toIdx})`).join(' | '), 'deletedArcs:', JSON.stringify(anim.deletedArcs.map(d => ({ c: d.curveId, fi: d.fromIdx, ti: d.toIdx, wrap: d.wrapAround }))));
-  }
   return { essentialPoints: filteredEssentialPoints, topoArcs: filteredArcs };
 }
 
@@ -22769,6 +23158,19 @@ function setArcStyle(anim, curveId, fromIdx, toIdx, updates) {
   if (!anim.arcStyles) anim.arcStyles = {};
   const key = arcStyleKey(curveId, fromIdx, toIdx);
   anim.arcStyles[key] = { ...(anim.arcStyles[key] ?? {}), ...updates };
+}
+
+// Removes the given per-arc style properties (e.g. 'color', 'opacity') from every arc on anim,
+// dropping any entry left empty. Used so the "whole object, nothing selected" outline controls
+// stay authoritative — setting the base color/opacity is meant to mean "the whole outline is
+// now this," not "the base changed but any arc with its own override silently keeps disagreeing."
+function clearArcStyleProps(anim, props) {
+  if (!anim.arcStyles) return;
+  for (const key of Object.keys(anim.arcStyles)) {
+    const style = anim.arcStyles[key];
+    for (const p of props) delete style[p];
+    if (Object.keys(style).length === 0) delete anim.arcStyles[key];
+  }
 }
 
 function regionLabel(region, topoArcs) {
@@ -23901,8 +24303,8 @@ function getPatternSpacingFrac(obj) {
   return Math.max(0.01, Math.min(0.5, v));
 }
 
-function cropPrimitive(anim) {
-  if (!isPrimitiveAnim(anim) || animKind(anim) === 'line') return;
+function cropAnim(anim) {
+  if (!isCroppableAnim(anim)) return;
   const bounds = selectedObjectCanvasBounds(anim);
   if (!bounds) return;
   const pxW0 = bounds.right - bounds.left, pxH0 = bounds.bottom - bounds.top;
@@ -25283,6 +25685,43 @@ function renderGroupRegionsTab(tabContent, groupId, grpObj) {
   }
 }
 
+const _OUTLINE_DROPPER_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21l1.5-4.5L15.5 6l3 3L8 20.5z"/><path d="M18.5 6l1.5-1.5c.8-.8.8-2.2 0-3s-2.2-.8-3 0L15.5 3"/></svg>`;
+function appendOutlineDropperBtn(row, targetKey, animId) {
+  const _isActive = eyedropperTarget === targetKey && eyedropperAnimId === animId;
+  const _db = document.createElement('button');
+  _db.className = 'eyedropper-btn' + (_isActive ? ' active' : '');
+  _db.title = _isActive ? 'Click a canvas to sample color (Escape to cancel)' : 'Pick color from canvas';
+  _db.innerHTML = _OUTLINE_DROPPER_SVG + (_isActive ? ' Sampling…' : ' Sample');
+  _db.addEventListener('click', e => {
+    e.stopPropagation();
+    if (_isActive) { deactivateEyedropper(); } else { eyedropperTarget = targetKey; eyedropperAnimId = animId; updateCursor(); }
+    renderAnimList();
+  });
+  row.appendChild(_db);
+}
+
+// Shared Outline-tab content: color + opacity + thickness. Used by both the individual-object
+// detail panel and the group detail panel (group callbacks cascade-apply to every descendant) —
+// see feedback_avoid_duplicated_panel_code, this used to be three separately hand-maintained
+// copies before objects consolidated on it, so groups reuse the same one rather than adding a
+// fourth.
+function appendOutlineControls(container, o) {
+  appendSliderRow(container, 'Thickness', 0, 10, 1, o.thickness,
+    v => `${Math.round(v)}`, v => o.onThicknessChange(parseInt(v, 10)),
+    false, { valAlign: 'center', mixed: !!o.mixedThickness });
+  let _preview = normalizeColorString(o.color) || o.color;
+  let _opacityCtrl = null;
+  const _row = appendHslColorPicker(container, o.color, (hex, meta = {}) => {
+    o.onColorChange(hex, meta);
+    if (meta.fromHueClick) renderAnimList();
+  }, { withUndo: true, fallbackHue: colorToHsl(o.color).h,
+    onPreviewChange(hex) { _preview = hex; _opacityCtrl?.setTrack(opacitySliderTrack(hex)); } });
+  if (o.dropperKey && o.animId != null) appendOutlineDropperBtn(_row, o.dropperKey, o.animId);
+  _opacityCtrl = appendSliderRow(container, 'Opacity', 0, 100, 1, Math.round(clamp(o.opacity, 0, 1) * 100),
+    v => `${Math.round(v)}%`, v => o.onOpacityChange(clamp(parseFloat(v) / 100, 0, 1)),
+    false, { colorTrack: opacitySliderTrack(_preview), mixed: !!o.mixedOpacity });
+}
+
 function renderGroupDetail(detailEl, groupId) {
   const items = directChildItems(groupId);
   if (!items.length) { selectedGroupId = null; setView('tiles'); return; }
@@ -25363,97 +25802,113 @@ function renderGroupDetail(detailEl, groupId) {
   header.append(leftGroup, rightGroup);
   detailEl.appendChild(header);
 
-  // Member list
-  const list = document.createElement('div');
-  list.style.cssText = 'overflow-y:auto; min-height:0; flex:1; padding:4px 0;';
-
-  for (let _mi = 0; _mi < items.length; _mi++) {
-    const item = items[_mi];
-    const memberNum = `${groupNumber}.${_mi + 1}`;
-    const isGroupItem = item.type === 'group';
-    const grpItem = isGroupItem ? item.item : null;
-    const animItem = isGroupItem ? null : item.item;
-
-    const row = document.createElement('div');
-    row.style.cssText = 'display:flex; align-items:center; padding:4px 8px; gap:6px; border-radius:4px; cursor:pointer;';
-    row.addEventListener('mouseenter', () => row.style.background = '#313244');
-    row.addEventListener('mouseleave', () => row.style.background = '');
-    row.addEventListener('click', e => {
-      if (e.target.closest('button')) return;
-      if (isGroupItem) {
-        selectGroup(grpItem.id);
-      } else {
-        selectedGroupId = null;
-        selectedId = animItem.id;
-      }
-      renderAnimList(); draw(); updateCursor();
-    });
-
-    if (!isGroupItem) {
-      const thumb = document.createElement('canvas');
-      thumb.style.cssText = 'width:28px; height:28px; border-radius:3px; background:#1e1e2e; flex-shrink:0;';
-      thumb.draggable = false;
-      renderAnimThumbnail(animItem, thumb, 28);
-      row.appendChild(thumb);
-    }
-
-    const labelEl = document.createElement('span');
-    labelEl.style.cssText = 'flex:1; font-size:0.8rem; color:#cdd6f4; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;';
-    if (isGroupItem) {
-      labelEl.textContent = grpItem.name || `Group ${groupHierarchicalNumber(grpItem.id)}`;
-    } else {
-      labelEl.textContent = animItem.name || memberNum;
-    }
-    row.appendChild(labelEl);
-
-    const itemIsHidden = isGroupItem ? isGroupEffectivelyHidden(grpItem.id) : !animItem.visible;
-    const itemVisBtn = document.createElement('button');
-    itemVisBtn.className = 'anim-icon-btn anim-vis-btn' + (itemIsHidden ? ' is-hidden' : '');
-    itemVisBtn.title = itemIsHidden ? 'Show' : 'Hide';
-    itemVisBtn.appendChild(makeVisibilityIcon(!itemIsHidden));
-    itemVisBtn.addEventListener('click', e => {
-      e.stopPropagation();
-      pushUndo();
-      if (isGroupItem) {
-        const g = groups.find(grp => grp.id === grpItem.id);
-        if (g) g.hidden = !g.hidden;
-      } else {
-        animItem.visible = !animItem.visible;
-      }
-      saveProject(); renderAnimList(); draw();
-    });
-    row.appendChild(itemVisBtn);
-
-    const itemDelBtn = document.createElement('button');
-    itemDelBtn.className = 'anim-icon-btn anim-delete-btn';
-    itemDelBtn.title = 'Delete';
-    itemDelBtn.textContent = '×';
-    itemDelBtn.addEventListener('click', e => {
-      e.stopPropagation();
-      if (isGroupItem) deleteGroup(grpItem.id); else deleteAnimation(animItem.id);
-    });
-    row.appendChild(itemDelBtn);
-
-    const drillBtn = document.createElement('button');
-    drillBtn.style.cssText = 'background:none; border:none; color:#6c7086; font-size:1.1rem; cursor:pointer; padding:0 4px; flex-shrink:0; line-height:1;';
-    drillBtn.textContent = '›';
-    drillBtn.title = 'View details';
-    drillBtn.addEventListener('click', e => {
-      e.stopPropagation();
-      if (isGroupItem) {
-        selectGroup(grpItem.id);
-      } else {
-        selectedGroupId = null;
-        selectedId = animItem.id;
-      }
-      renderAnimList();
-    });
-    row.appendChild(drillBtn);
-
-    list.appendChild(row);
+  // Schematic — same picture already shown on this group's tile in the tray, just bigger. Reuses
+  // renderGroupMosaicThumbnail (the real committed-animation renderer, via a temporary canvas/
+  // viewport swap) rather than a bespoke drawing routine, so it's guaranteed to match what the
+  // tile shows for every object type (primitives included).
+  {
+    const _wrapW = Math.max((detailEl.clientWidth || 264) - 16, 80);
+    const _size = Math.min(_wrapW, 150);
+    const schemWrap = document.createElement('div');
+    schemWrap.style.cssText = 'padding:8px 8px 4px; background:#11111b; border-bottom:1px solid #1e1e2e; display:flex; justify-content:center;';
+    const schemCanvas = document.createElement('canvas');
+    schemCanvas.style.width = _size + 'px';
+    schemCanvas.style.height = _size + 'px';
+    schemCanvas.style.display = 'block';
+    schemCanvas.style.borderRadius = '5px';
+    schemWrap.appendChild(schemCanvas);
+    detailEl.appendChild(schemWrap);
+    renderGroupMosaicThumbnail(groupId, schemCanvas, _size);
   }
 
-  detailEl.appendChild(list);
+  // Outline/Fill color controls — cascade-apply to every object currently in this group (and any
+  // nested sub-groups). Not a stored group property (see applyGroupOutlineColor/
+  // applyGroupFillColor and friends) — setting a value here overwrites every current descendant's
+  // own color/opacity/thickness right now, it isn't remembered as a group-level setting. Reuses
+  // the exact same tab bar + appendOutlineControls widget the individual object panel uses, just
+  // wired to cascade-apply callbacks instead of a single anim's setters.
+  if (groupDetailTab !== 'outline' && groupDetailTab !== 'fill') groupDetailTab = 'outline';
+  const _gdTabBar = document.createElement('div');
+  _gdTabBar.className = 'color-tab-bar';
+  _gdTabBar.style.cssText = 'margin-top:4px;padding:0 8px;';
+  ['Outline', 'Fill'].forEach(t => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'color-tab' + (groupDetailTab === t.toLowerCase() ? ' active' : '');
+    btn.textContent = t;
+    btn.style.cssText = 'flex:1;padding:4px 6px;font-size:0.7rem;';
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      groupDetailTab = t.toLowerCase();
+      renderAnimList();
+    });
+    _gdTabBar.appendChild(btn);
+  });
+  detailEl.appendChild(_gdTabBar);
+
+  const _gdContent = document.createElement('div');
+  _gdContent.className = 'color-tab-content';
+  _gdContent.style.cssText = 'padding:10px;max-height:320px;overflow-y:auto;';
+  _gdContent.addEventListener('mousedown', e => e.stopPropagation());
+  _gdContent.addEventListener('click', e => e.stopPropagation());
+  detailEl.appendChild(_gdContent);
+
+  if (groupDetailTab === 'outline') {
+    const _outlineAnims = groupOutlineDescendants(groupId);
+    if (!_outlineAnims.length) {
+      const _note = document.createElement('div');
+      _note.style.cssText = 'font-size:0.7rem;color:#6c7086;padding:8px 2px;';
+      _note.textContent = 'No objects in this group.';
+      _gdContent.appendChild(_note);
+    } else {
+      const _first = _outlineAnims[0];
+      const _initColor = _first.color ?? '#89b4fa';
+      const _initOpacity = _first.outlineOpacity ?? 1;
+      const _initThickness = _first.thickness ?? 2;
+      const _mixedOpacity = _outlineAnims.length > 1 && !_outlineAnims.every(a => (a.outlineOpacity ?? 1) === _initOpacity);
+      const _mixedThickness = _outlineAnims.length > 1 && !_outlineAnims.every(a => (a.thickness ?? 2) === _initThickness);
+      const _ctrlDiv = document.createElement('div');
+      _ctrlDiv.style.cssText = 'display:flex;flex-direction:column;gap:6px;';
+      appendOutlineControls(_ctrlDiv, {
+        color: _initColor,
+        onColorChange: hex => applyGroupOutlineColor(groupId, hex),
+        opacity: _initOpacity,
+        mixedOpacity: _mixedOpacity,
+        onOpacityChange: v => applyGroupOutlineOpacity(groupId, v),
+        thickness: _initThickness,
+        mixedThickness: _mixedThickness,
+        onThicknessChange: v => applyGroupOutlineThickness(groupId, v),
+      });
+      _gdContent.appendChild(_ctrlDiv);
+    }
+  } else {
+    const _fillAnims = groupFillDescendants(groupId);
+    if (!_fillAnims.length) {
+      const _note = document.createElement('div');
+      _note.style.cssText = 'font-size:0.7rem;color:#6c7086;padding:8px 2px;';
+      _note.textContent = 'No fillable objects in this group.';
+      _gdContent.appendChild(_note);
+    } else {
+      const _first = _fillAnims[0];
+      const _initColor = _first.fillColor ?? '#89b4fa';
+      const _initOpacity = animFillOpacity(_first);
+      const _mixedOpacity = _fillAnims.length > 1 && !_fillAnims.every(a => animFillOpacity(a) === _initOpacity);
+      const _fillDiv = document.createElement('div');
+      _fillDiv.style.cssText = 'display:flex;flex-direction:column;gap:6px;';
+      let _preview = normalizeColorString(_initColor) || _initColor;
+      let _opacityCtrl = null;
+      appendHslColorPicker(_fillDiv, _initColor, (hex, meta = {}) => {
+        applyGroupFillColor(groupId, hex);
+        if (meta.fromHueClick) renderAnimList();
+      }, { withUndo: true, fallbackHue: colorToHsl(_initColor).h,
+        onPreviewChange(hex) { _preview = hex; _opacityCtrl?.setTrack(opacitySliderTrack(hex)); } });
+      _opacityCtrl = appendSliderRow(_fillDiv, 'Opacity', 0, 100, 1, Math.round(clamp(_initOpacity, 0, 1) * 100),
+        v => `${Math.round(v)}%`, v => applyGroupFillOpacity(groupId, clamp(parseFloat(v) / 100, 0, 1)),
+        false, { colorTrack: opacitySliderTrack(_preview), mixed: _mixedOpacity });
+      _gdContent.appendChild(_fillDiv);
+    }
+  }
+
   updateToolPanel();
 }
 
@@ -25670,6 +26125,19 @@ function appendAnimTrayTile(tilesEl, anim, { label = '', child = true, singleOnl
   if (customPatternPickMode && customPatternPickMode.animId !== anim.id) {
     tile.classList.add('pick-source-eligible');
   }
+  // Drives the shared hover-preview state (see applyGroupMemberHoverDom) so hovering this tile
+  // also lights up the matching object-panel row and canvas glow, not just this tile.
+  tile.addEventListener('mouseenter', () => {
+    if (groupMemberHover === anim) return;
+    groupMemberHover = anim;
+    applyGroupMemberHoverDom(anim);
+    draw();
+  });
+  tile.addEventListener('mouseleave', () => {
+    if (groupMemberHover !== anim) return;
+    clearGroupMemberHover();
+    draw();
+  });
   tile.addEventListener('click', (e) => {
     if (Date.now() < suppressTileClickUntil) return;
     if (customPatternPickMode) {
@@ -27151,7 +27619,6 @@ function renderAnimListLegacy() {
     if (!_hasArcSel && !_hasRegSel) { objectDetailTab = lastOutlineFillTab; selectedArcKeys = new Set(); }
     else if (_hasRegSel && !_hasArcSel) { objectDetailTab = 'fill'; }
     regionFillSubTab = 1;
-    outlineSubTab = 1;
     _cvtBezierShowUI = false;
     _cvtBezierPreviewId = null;
     _cvtBezierN = 12;
@@ -27325,59 +27792,21 @@ function renderAnimListLegacy() {
   const _regions = anim.regions ?? [];
 
   if (objectDetailTab === 'outline') {
-    // ── Outline tab ──
-
-    const _DROPPER_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21l1.5-4.5L15.5 6l3 3L8 20.5z"/><path d="M18.5 6l1.5-1.5c.8-.8.8-2.2 0-3s-2.2-.8-3 0L15.5 3"/></svg>`;
-    const _appendOutlineDropper = (row, targetKey) => {
-      const _isActive = eyedropperTarget === targetKey && eyedropperAnimId === anim.id;
-      const _db = document.createElement('button');
-      _db.className = 'eyedropper-btn' + (_isActive ? ' active' : '');
-      _db.title = _isActive ? 'Click a canvas to sample color (Escape to cancel)' : 'Pick color from canvas';
-      _db.innerHTML = _DROPPER_SVG + (_isActive ? ' Sampling…' : ' Sample');
-      _db.addEventListener('click', e => {
-        e.stopPropagation();
-        if (_isActive) { deactivateEyedropper(); } else { eyedropperTarget = targetKey; eyedropperAnimId = anim.id; updateCursor(); }
-        renderAnimList();
-      });
-      row.appendChild(_db);
-    };
-
-    // ── Color | Style sub-tab bar ──
-    const _outSubBar = document.createElement('div');
-    _outSubBar.className = 'color-tab-bar';
-    ['Color', 'Style'].forEach((t, idx) => {
-      const _sb = document.createElement('button');
-      _sb.type = 'button';
-      _sb.className = 'color-tab' + (outlineSubTab === idx + 1 ? ' active' : '');
-      _sb.textContent = t;
-      _sb.style.cssText = 'flex:1;padding:4px 6px;font-size:0.65rem;';
-      _sb.addEventListener('click', e => { e.stopPropagation(); outlineSubTab = idx + 1; renderAnimList(); });
-      _outSubBar.appendChild(_sb);
-    });
-    _dtContent.appendChild(_outSubBar);
+    // ── Outline tab ── (see appendOutlineControls — shared with the group detail panel)
 
     if (_isCvtPrimitive) {
-      // Primitive circle/ellipse: Color | Style sub-tabs
       const _ctrlDiv = document.createElement('div');
       _ctrlDiv.style.cssText = 'display:flex;flex-direction:column;gap:6px;';
-      if (outlineSubTab === 1) {
-        let _arcColorPreview = normalizeColorString(anim.color) || anim.color;
-        let _arcOpacityCtrl = null;
-        const _primRow = appendHslColorPicker(_ctrlDiv, anim.color, (color, meta = {}) => {
-          anim.color = color; saveProject(); draw();
-          if (meta.fromHueClick) renderAnimList();
-        }, { withUndo: true, fallbackHue: colorToHsl(anim.color).h,
-          onPreviewChange(hex) { _arcColorPreview = hex; _arcOpacityCtrl?.setTrack(opacitySliderTrack(hex)); } });
-        _appendOutlineDropper(_primRow, 'outline');
-        _arcOpacityCtrl = appendSliderRow(_ctrlDiv, 'Opacity', 0, 100, 1,
-          Math.round(clamp(anim.outlineOpacity ?? 1, 0, 1) * 100),
-          v => `${Math.round(v)}%`, v => { anim.outlineOpacity = clamp(parseFloat(v) / 100, 0, 1); saveProject(); draw(); },
-          false, { colorTrack: opacitySliderTrack(_arcColorPreview) });
-      } else {
-        appendSliderRow(_ctrlDiv, 'Thickness', 0, 10, 1, anim.thickness ?? 2,
-          v => `${Math.round(v)}`, v => { anim.thickness = parseInt(v, 10); saveProject(); draw(); },
-          false, { valAlign: 'center' });
-      }
+      appendOutlineControls(_ctrlDiv, {
+        color: anim.color,
+        onColorChange: hex => { anim.color = hex; saveProject(); draw(); },
+        opacity: anim.outlineOpacity ?? 1,
+        onOpacityChange: v => { anim.outlineOpacity = v; saveProject(); draw(); },
+        thickness: anim.thickness ?? 2,
+        onThicknessChange: v => { anim.thickness = v; saveProject(); draw(); },
+        dropperKey: 'outline',
+        animId: anim.id,
+      });
       _dtContent.appendChild(_ctrlDiv);
     } else {
 
@@ -27392,37 +27821,21 @@ function renderAnimListLegacy() {
       _arcCtrlDiv.style.cssText = 'display:flex;flex-direction:column;gap:6px;';
 
       if (_selArcObjs.length === 0) {
-        // No arc selected — global stroke controls
-        if (outlineSubTab === 1) {
-          let _gColorPreview = normalizeColorString(anim.color) || anim.color;
-          let _gOpacityCtrl = null;
-          const _gRow = appendHslColorPicker(_arcCtrlDiv, anim.color, (color, meta = {}) => {
-            anim.color = color; saveProject(); draw();
-            if (meta.fromHueClick) renderAnimList();
-          }, { withUndo: true, fallbackHue: colorToHsl(anim.color).h,
-            onPreviewChange(hex) { _gColorPreview = hex; _gOpacityCtrl?.setTrack(opacitySliderTrack(hex)); } });
-          _appendOutlineDropper(_gRow, 'outline');
-          _gOpacityCtrl = appendSliderRow(_arcCtrlDiv, 'Opacity', 0, 100, 1,
-            Math.round(clamp(anim.outlineOpacity ?? 1, 0, 1) * 100),
-            v => `${Math.round(v)}%`, v => { anim.outlineOpacity = clamp(parseFloat(v) / 100, 0, 1); saveProject(); draw(); },
-            false, { colorTrack: opacitySliderTrack(_gColorPreview) });
-        } else {
-          appendSliderRow(_arcCtrlDiv, 'Thickness', 0, 10, 1, anim.thickness ?? 2,
-            v => `${Math.round(v)}`, v => { anim.thickness = parseInt(v, 10); saveProject(); draw(); },
-            false, { valAlign: 'center' });
-          const _gSoftWrap = document.createElement('div');
-          _gSoftWrap.style.cssText = 'display:flex;flex-direction:column;gap:0;';
-          const _gSoftLabel = document.createElement('div');
-          _gSoftLabel.style.cssText = 'font-size:0.65rem;color:#a6adc8;padding:4px 8px 0 8px;';
-          _gSoftLabel.textContent = 'Softness';
-          _gSoftWrap.appendChild(_gSoftLabel);
-          appendSliderRow(_gSoftWrap, '', 0, 100, 1, Math.round((anim.innerSoftness ?? 0) * 100),
-            v => `${Math.round(v)}%`, v => { anim.innerSoftness = parseFloat(v) / 100; saveProject(); draw(); }, false);
-          appendSliderRow(_gSoftWrap, '', 0, 100, 1, Math.round((anim.outerSoftness ?? 0) * 100),
-            v => `${Math.round(v)}%`, v => { anim.outerSoftness = parseFloat(v) / 100; saveProject(); draw(); }, false);
-          _gSoftWrap.querySelectorAll('label').forEach(l => l.style.display = 'none');
-          _arcCtrlDiv.appendChild(_gSoftWrap);
-        }
+        // No arc selected — global stroke controls. Setting color/opacity/thickness here is
+        // meant to be authoritative for the whole outline, so it also clears any conflicting
+        // per-arc override rather than leaving it to silently keep disagreeing (see
+        // clearArcStyleProps — this is the same "no competing outline colors" fix applied to
+        // thickness too, for consistency).
+        appendOutlineControls(_arcCtrlDiv, {
+          color: anim.color,
+          onColorChange: hex => { anim.color = hex; clearArcStyleProps(anim, ['color']); saveProject(); draw(); },
+          opacity: anim.outlineOpacity ?? 1,
+          onOpacityChange: v => { anim.outlineOpacity = v; clearArcStyleProps(anim, ['opacity']); saveProject(); draw(); },
+          thickness: anim.thickness ?? 2,
+          onThicknessChange: v => { anim.thickness = v; clearArcStyleProps(anim, ['thickness']); saveProject(); draw(); },
+          dropperKey: 'outline',
+          animId: anim.id,
+        });
       } else {
         // Arc(s) selected — arc-specific controls with disagreement detection
         const _firstArc = _selArcObjs[0];
@@ -27430,66 +27843,37 @@ function renderAnimListLegacy() {
         const _isWholeArc = topoArcs.length === 1;
         const _allSelected = selectedArcKeys.size === topoArcs.length;
         const _initArcColor = _firstStyle?.color ?? anim.color;
-        let _arcColorPreview = normalizeColorString(_initArcColor) || _initArcColor;
-        let _arcOpacityCtrl = null;
 
         const _getArcOpacity = a => { const s = getArcStyle(anim, a.curveId, a.fromIdx, a.toIdx); return s?.opacity ?? anim.outlineOpacity ?? 1; };
         const _getArcThick  = a => { const s = getArcStyle(anim, a.curveId, a.fromIdx, a.toIdx); return s?.thickness ?? anim.thickness ?? 2; };
-        const _getArcInner  = a => { const s = getArcStyle(anim, a.curveId, a.fromIdx, a.toIdx); return s?.innerSoftness ?? anim.innerSoftness ?? 0; };
-        const _getArcOuter  = a => { const s = getArcStyle(anim, a.curveId, a.fromIdx, a.toIdx); return s?.outerSoftness ?? anim.outerSoftness ?? 0; };
         const _initArcOpacity = _getArcOpacity(_firstArc);
         const _initArcThick   = _getArcThick(_firstArc);
-        const _initArcInner   = _getArcInner(_firstArc);
-        const _initArcOuter   = _getArcOuter(_firstArc);
         const _mixedOp = _selArcObjs.length > 1 && !_selArcObjs.every(a => _getArcOpacity(a) === _initArcOpacity);
         const _mixedTh = _selArcObjs.length > 1 && !_selArcObjs.every(a => _getArcThick(a)  === _initArcThick);
-        const _mixedIn = _selArcObjs.length > 1 && !_selArcObjs.every(a => _getArcInner(a)  === _initArcInner);
-        const _mixedOu = _selArcObjs.length > 1 && !_selArcObjs.every(a => _getArcOuter(a)  === _initArcOuter);
 
         const _applyArc = updates => {
           if (_isWholeArc && _allSelected) {
             if ('color' in updates) anim.color = updates.color;
             if ('opacity' in updates) anim.outlineOpacity = updates.opacity;
             if ('thickness' in updates) anim.thickness = updates.thickness;
-            if ('innerSoftness' in updates || 'outerSoftness' in updates)
-              for (const _sa of _selArcObjs) setArcStyle(anim, _sa.curveId, _sa.fromIdx, _sa.toIdx, updates);
           } else {
             for (const _sa of _selArcObjs) setArcStyle(anim, _sa.curveId, _sa.fromIdx, _sa.toIdx, updates);
           }
           saveProject(); draw();
         };
 
-        if (outlineSubTab === 1) {
-          const _arcRow = appendHslColorPicker(_arcCtrlDiv, _initArcColor, (color, meta = {}) => {
-            _applyArc({ color });
-            if (meta.fromHueClick) renderAnimList();
-          }, { withUndo: true, fallbackHue: colorToHsl(_initArcColor).h,
-            onPreviewChange(hex) { _arcColorPreview = hex; _arcOpacityCtrl?.setTrack(opacitySliderTrack(hex)); } });
-          _appendOutlineDropper(_arcRow, 'arc-stroke');
-
-          _arcOpacityCtrl = appendSliderRow(_arcCtrlDiv, 'Opacity', 0, 100, 1, Math.round(clamp(_initArcOpacity, 0, 1) * 100),
-            v => `${Math.round(v)}%`, v => { _applyArc({ opacity: clamp(parseFloat(v) / 100, 0, 1) }); },
-            false, { colorTrack: opacitySliderTrack(_arcColorPreview), mixed: _mixedOp });
-        } else {
-          // Style sub-tab
-          appendSliderRow(_arcCtrlDiv, 'Thickness', 0, 10, 1, _initArcThick,
-            v => `${Math.round(v)}`, v => { _applyArc({ thickness: parseInt(v, 10) }); },
-            false, { valAlign: 'center', mixed: _mixedTh });
-
-          // Softness — two unlabeled sliders grouped under one heading
-          const _softWrap = document.createElement('div');
-          _softWrap.style.cssText = 'display:flex;flex-direction:column;gap:0;';
-          const _softLabel = document.createElement('div');
-          _softLabel.style.cssText = 'font-size:0.65rem;color:#a6adc8;padding:4px 8px 0 8px;';
-          _softLabel.textContent = 'Softness';
-          _softWrap.appendChild(_softLabel);
-          appendSliderRow(_softWrap, '', 0, 100, 1, Math.round(_initArcInner * 100),
-            v => `${Math.round(v)}%`, v => { _applyArc({ innerSoftness: parseFloat(v) / 100 }); }, false, { mixed: _mixedIn });
-          appendSliderRow(_softWrap, '', 0, 100, 1, Math.round(_initArcOuter * 100),
-            v => `${Math.round(v)}%`, v => { _applyArc({ outerSoftness: parseFloat(v) / 100 }); }, false, { mixed: _mixedOu });
-          _softWrap.querySelectorAll('label').forEach(l => l.style.display = 'none');
-          _arcCtrlDiv.appendChild(_softWrap);
-        }
+        appendOutlineControls(_arcCtrlDiv, {
+          color: _initArcColor,
+          onColorChange: hex => _applyArc({ color: hex }),
+          opacity: _initArcOpacity,
+          mixedOpacity: _mixedOp,
+          onOpacityChange: v => _applyArc({ opacity: v }),
+          thickness: _initArcThick,
+          mixedThickness: _mixedTh,
+          onThicknessChange: v => _applyArc({ thickness: v }),
+          dropperKey: 'arc-stroke',
+          animId: anim.id,
+        });
       }
 
       _dtContent.appendChild(_arcCtrlDiv);
@@ -27516,34 +27900,39 @@ function renderAnimListLegacy() {
       row.appendChild(_db);
     };
 
+    // Cropped image fill — show Lightness + Opacity + Uncrop instead of normal fill controls.
+    // Hoisted above the primitive/regions split below: cropping was generalized past primitives
+    // (see isCroppableAnim), so this needs to apply the same way regardless of which branch this
+    // particular anim would otherwise take.
+    if (anim.croppedImageDataUrl) {
+      const _fillWrap = document.createElement('div');
+      _fillWrap.style.cssText = 'display:flex;flex-direction:column;gap:6px;';
+      appendSliderRow(_fillWrap, 'Lightness', 0, 200, 1,
+        Math.round((anim.croppedImageLightness ?? 1.0) * 100),
+        v => `${Math.round(v)}%`, v => { anim.croppedImageLightness = parseFloat(v) / 100; saveProject(); draw(); },
+        false, { valAlign: 'center' });
+      appendSliderRow(_fillWrap, 'Opacity', 0, 100, 1,
+        Math.round(clamp(animFillOpacity(anim), 0, 1) * 100),
+        v => `${Math.round(v)}%`, v => { anim.fillOpacity = clamp(parseFloat(v) / 100, 0, 1); saveProject(); draw(); },
+        false, { valAlign: 'center' });
+      const _ucBtn = document.createElement('button');
+      _ucBtn.className = 'fill-style-btn';
+      _ucBtn.style.cssText = 'margin-top:4px;font-size:0.7rem;width:100%;';
+      _ucBtn.textContent = 'Uncrop';
+      _ucBtn.addEventListener('click', e => {
+        e.stopPropagation(); pushUndo();
+        anim.croppedImageDataUrl = null; anim._croppedImage = null;
+        saveProject(); renderAnimList(); draw();
+      });
+      _fillWrap.appendChild(_ucBtn);
+      _dtContent.appendChild(_fillWrap);
+      return;
+    }
+
     if (_isCvtPrimitive) {
       // Primitive shape fill: Color 1 | Color 2 | Style sub-tabs
       const _fillWrap = document.createElement('div');
       _fillWrap.style.cssText = 'display:flex;flex-direction:column;gap:6px;';
-
-      // Cropped image fill — show Lightness + Opacity + Uncrop instead of normal fill controls
-      if (anim.croppedImageDataUrl && animKind(anim) !== 'line') {
-        appendSliderRow(_fillWrap, 'Lightness', 0, 200, 1,
-          Math.round((anim.croppedImageLightness ?? 1.0) * 100),
-          v => `${Math.round(v)}%`, v => { anim.croppedImageLightness = parseFloat(v) / 100; saveProject(); draw(); },
-          false, { valAlign: 'center' });
-        appendSliderRow(_fillWrap, 'Opacity', 0, 100, 1,
-          Math.round(clamp(animFillOpacity(anim), 0, 1) * 100),
-          v => `${Math.round(v)}%`, v => { anim.fillOpacity = clamp(parseFloat(v) / 100, 0, 1); saveProject(); draw(); },
-          false, { valAlign: 'center' });
-        const _ucBtn = document.createElement('button');
-        _ucBtn.className = 'fill-style-btn';
-        _ucBtn.style.cssText = 'margin-top:4px;font-size:0.7rem;width:100%;';
-        _ucBtn.textContent = 'Uncrop';
-        _ucBtn.addEventListener('click', e => {
-          e.stopPropagation(); pushUndo();
-          anim.croppedImageDataUrl = null; anim._croppedImage = null;
-          saveProject(); renderAnimList(); draw();
-        });
-        _fillWrap.appendChild(_ucBtn);
-        _dtContent.appendChild(_fillWrap);
-        return;
-      }
 
       const _primStyle = animFillStyle(anim);
       const _primIsGradFam = _primStyle === 'gradient' || _primStyle === 'contour-gradient' || _primStyle === 'radial-gradient';
@@ -29228,7 +29617,7 @@ document.getElementById('group-objects-btn').addEventListener('click', e => {
     return;
   }
   if (isMultiSelectionActive()) {
-    groupCandidateIds = new Set([...multiSelectedIds].filter(id => animations.some(a => a.id === id)));
+    groupCandidateIds = new Set([...multiSelectedIds].filter(id => animations.some(a => a.id === id && !a.inPlacementMode)));
     groupGroupCandidateIds = new Set([...multiSelectedIds].filter(id => groups.some(g => g.id === id)));
     createGroupFromCandidates();
     return;
