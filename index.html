@@ -4872,6 +4872,24 @@ function applyGroupFillOpacity(groupId, opacity) {
   saveProject(); draw();
 }
 
+// Coalesces rapid-fire calls (hue-wheel drag, slider drag — both fire on every raw pointermove/
+// input tick, easily 60-100+/sec) down to at most one per animation frame, keeping only the
+// latest args. The single-object color pickers call saveProject()+draw() per tick too and get
+// away with it (see project_canvas_perf_investigation — draw() is a known ~40-47ms cost, but
+// that's it), but the group cascade-apply functions above also loop every descendant on top of
+// that same per-tick saveProject()+draw() — for a handful of 13-object groups this was enough to
+// hang the tab (see project_group_color_panel_2026_08_01 memory). Only used for the group panel's
+// callbacks; the object panel's own color pickers are unchanged.
+function throttleToFrame(fn) {
+  let scheduled = false, lastArgs = null;
+  return (...args) => {
+    lastArgs = args;
+    if (scheduled) return;
+    scheduled = true;
+    requestAnimationFrame(() => { scheduled = false; fn(...lastArgs); });
+  };
+}
+
 function isGroupEffectivelyHidden(groupId) {
   let gid = groupId;
   const seen = new Set();
@@ -25806,6 +25824,18 @@ function renderGroupDetail(detailEl, groupId) {
   // renderGroupMosaicThumbnail (the real committed-animation renderer, via a temporary canvas/
   // viewport swap) rather than a bespoke drawing routine, so it's guaranteed to match what the
   // tile shows for every object type (primitives included).
+  //
+  // renderAnimList() (and therefore this whole panel) re-runs on every mousemove tick during any
+  // canvas drag — resize/rotate/anchor/handle/curve/eccentricity/frame/pan — regardless of
+  // whether the drag touches this group. renderGroupMosaicThumbnail fully redraws every
+  // descendant via drawCommittedAnimation, so paying that cost on every drag frame made the panel
+  // (and the whole tab) unresponsive for anything but small groups — this caused a real
+  // regression (see project_group_color_panel_2026_08_01 memory). Skip the redraw entirely while
+  // any drag is active, same tradeoff already made for fills/handle-dots during live drags
+  // (project_merge_join_drag_fixes_2026_07_29 §6) — the thumbnail just keeps showing its last
+  // frame until the drag ends and a real re-render happens.
+  const _anyDragActive = !!(dragging || resizeDrag || rotateDrag || anchorDrag || handleDrag ||
+                             curveDrag || eccDrag || frameDrag);
   {
     const _wrapW = Math.max((detailEl.clientWidth || 264) - 16, 80);
     const _size = Math.min(_wrapW, 150);
@@ -25818,7 +25848,7 @@ function renderGroupDetail(detailEl, groupId) {
     schemCanvas.style.borderRadius = '5px';
     schemWrap.appendChild(schemCanvas);
     detailEl.appendChild(schemWrap);
-    renderGroupMosaicThumbnail(groupId, schemCanvas, _size);
+    if (!_anyDragActive) renderGroupMosaicThumbnail(groupId, schemCanvas, _size);
   }
 
   // Outline/Fill color controls — cascade-apply to every object currently in this group (and any
@@ -25871,13 +25901,13 @@ function renderGroupDetail(detailEl, groupId) {
       _ctrlDiv.style.cssText = 'display:flex;flex-direction:column;gap:6px;';
       appendOutlineControls(_ctrlDiv, {
         color: _initColor,
-        onColorChange: hex => applyGroupOutlineColor(groupId, hex),
+        onColorChange: throttleToFrame(hex => applyGroupOutlineColor(groupId, hex)),
         opacity: _initOpacity,
         mixedOpacity: _mixedOpacity,
-        onOpacityChange: v => applyGroupOutlineOpacity(groupId, v),
+        onOpacityChange: throttleToFrame(v => applyGroupOutlineOpacity(groupId, v)),
         thickness: _initThickness,
         mixedThickness: _mixedThickness,
-        onThicknessChange: v => applyGroupOutlineThickness(groupId, v),
+        onThicknessChange: throttleToFrame(v => applyGroupOutlineThickness(groupId, v)),
       });
       _gdContent.appendChild(_ctrlDiv);
     }
@@ -25897,13 +25927,14 @@ function renderGroupDetail(detailEl, groupId) {
       _fillDiv.style.cssText = 'display:flex;flex-direction:column;gap:6px;';
       let _preview = normalizeColorString(_initColor) || _initColor;
       let _opacityCtrl = null;
+      const _throttledFillColorApply = throttleToFrame(hex => applyGroupFillColor(groupId, hex));
       appendHslColorPicker(_fillDiv, _initColor, (hex, meta = {}) => {
-        applyGroupFillColor(groupId, hex);
+        _throttledFillColorApply(hex);
         if (meta.fromHueClick) renderAnimList();
       }, { withUndo: true, fallbackHue: colorToHsl(_initColor).h,
         onPreviewChange(hex) { _preview = hex; _opacityCtrl?.setTrack(opacitySliderTrack(hex)); } });
       _opacityCtrl = appendSliderRow(_fillDiv, 'Opacity', 0, 100, 1, Math.round(clamp(_initOpacity, 0, 1) * 100),
-        v => `${Math.round(v)}%`, v => applyGroupFillOpacity(groupId, clamp(parseFloat(v) / 100, 0, 1)),
+        v => `${Math.round(v)}%`, throttleToFrame(v => applyGroupFillOpacity(groupId, clamp(parseFloat(v) / 100, 0, 1))),
         false, { colorTrack: opacitySliderTrack(_preview), mixed: _mixedOpacity });
       _gdContent.appendChild(_fillDiv);
     }
@@ -26085,7 +26116,7 @@ function appendGroupTrayTile(tilesEl, group, { label = '', path = false, child =
       renderAnimList(); updateGroupObjectsButton();
       return;
     }
-    selectGroup(group.id, { drill: false });
+    selectGroup(group.id);
     renderAnimList(); draw(); updateCursor();
   });
   tile.addEventListener('dblclick', (e) => {
