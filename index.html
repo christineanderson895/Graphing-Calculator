@@ -1144,7 +1144,7 @@
       border: 1px solid #45475a;
       border-radius: 4px;
       background: #11111b;
-      color: #a6adc8;
+      color: #6c7086;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -2156,8 +2156,10 @@ const DEFAULT_COLORS = ['#ef4444','#f97316','#eab308','#22c55e','#14b8a6','#3b82
 function stylusDefaultColor() {
   return normalizeColorString(globalSettings.defaultColor) || DEFAULT_COLORS[0];
 }
-const PRIMITIVE_KINDS = new Set(['line', 'rectangle', 'circle', 'ellipse', 'triangle']);
-const SHAPE_TOOL_KINDS = ['rectangle', 'circle', 'triangle'];
+const PRIMITIVE_KINDS = new Set(['line', 'rectangle', 'circle', 'ellipse', 'triangle', 'polygon']);
+const SHAPE_TOOL_KINDS = ['circle', 'triangle', 'rectangle', 'polygon'];
+const POLYGON_NAMES = { 3: 'triangle', 4: 'square', 5: 'pentagon', 6: 'hexagon', 7: 'heptagon', 8: 'octagon', 9: 'nonagon', 10: 'decagon', 12: 'dodecagon' };
+function polygonName(n) { return POLYGON_NAMES[n] || `${n}-gon`; }
 const POLYLINE_KIND = 'polyline';
 const FILL_STYLES = [
   { key: 'solid',     title: 'Solid' },
@@ -2577,6 +2579,8 @@ function _splitCurveBaseProps(orig, parentGroupId) {
     gradientAngle: orig.gradientAngle, patternType: orig.patternType,
     patternAngle: orig.patternAngle, patternSpacing: orig.patternSpacing,
     customPatternSourceId: orig.customPatternSourceId ?? null, customPatternMode: orig.customPatternMode ?? 'mask',
+    customPatternSourceIds: getCustomPatternSourceIds(orig),
+    customPatternStretchX: orig.customPatternStretchX ?? 1, customPatternStretchY: orig.customPatternStretchY ?? 1,
     croppedImageDataUrl: orig.croppedImageDataUrl ?? null, croppedImageLightness: orig.croppedImageLightness ?? 1.0,
     gradientFromArcs: new Set(), gradientToArcs: new Set(),
     activeSegments: new Set(), expandedAnchors: new Set(), expandedArcs: new Set(), regions: [],
@@ -4376,6 +4380,7 @@ function schedulePreviewDraw() {
   _previewDrawRAF = requestAnimationFrame(() => { _previewDrawRAF = null; draw(); });
 }
 let selectedShapeKind = 'rectangle';
+let selectedPolygonSides = 6;
 let freeformPlacementBend = 0;  // 0–100; controls bend during freeform drawing, resets to 0 per new object
 let freeformBendModifier = 0; // Legacy disabled bend control; kept only so older notes/code are easy to trace.
 let freeformPendingSideSignal = null; // { animId, anchorCount, score } — strongest side signal for the pending freeform arc
@@ -5805,6 +5810,9 @@ function mergeObjects(ids) {
       _mr.patternSpacing = _hr?.patternSpacing ?? _hsrc.patternSpacing;
       _mr.customPatternSourceId = _hr?.customPatternSourceId ?? _hsrc.customPatternSourceId ?? null;
       _mr.customPatternMode = _hr?.customPatternMode ?? _hsrc.customPatternMode ?? 'mask';
+      _mr.customPatternSourceIds = getCustomPatternSourceIds(_hr).length ? getCustomPatternSourceIds(_hr) : getCustomPatternSourceIds(_hsrc);
+      _mr.customPatternStretchX = _hr?.customPatternStretchX ?? _hsrc.customPatternStretchX ?? 1;
+      _mr.customPatternStretchY = _hr?.customPatternStretchY ?? _hsrc.customPatternStretchY ?? 1;
       if (!_srcGroups.has(_hsrc)) _srcGroups.set(_hsrc, []);
       _srcGroups.get(_hsrc).push(_mr);
     }
@@ -7025,14 +7033,18 @@ function finalizePrimitivePlacement(anim) {
   anim.activeSegments = new Set();
   placementPreviewPos = null;
   resetFreeformPlacementPathTracking();
-  // Rectangle/triangle/line are converted to real anchors+segments immediately, rather than
-  // staying primitive-formula shapes — see the primitives-vs-freeform unification discussion.
-  // isPolygon:true keeps them reading/behaving as a rigid polygon (promotedAnchors marks the
-  // corners) until the user explicitly loosens it via the same "Convert to Bézier curve" button
-  // this reuses (convertPrimitiveToPath already handles that second stage). Circle/ellipse are
-  // deliberately left as real primitives for now (Phase 2).
+  // Rectangle/triangle/line/circle/ellipse/polygon are all converted to real anchors+segments
+  // immediately, rather than staying primitive-formula shapes — see the primitives-vs-freeform
+  // unification discussion. The "Convert to Bézier curve" button still shown for rectangle/
+  // triangle only matters for a true primitive loaded from an old save file (convertPrimitiveToPath
+  // no-ops on anything already converted); n=12 for circle/ellipse matches that same button's own
+  // default, so a fresh circle looks identical to one someone converts by hand today.
   if (_primKind === 'rectangle' || _primKind === 'triangle' || _primKind === 'line') {
     convertPrimitiveToPath(anim, true);
+  } else if (_primKind === 'circle' || _primKind === 'ellipse') {
+    convertCircleEllipseToPath(anim, 12);
+  } else if (_primKind === 'polygon') {
+    convertPolygonToPath(anim);
   } else {
     detectObjectTopology(anim);
   }
@@ -7262,7 +7274,9 @@ function addAnimation(kind = 'freeform', { select = true } = {}) {
 }
 
 function addPrimitiveAnimation(kind) {
-  return addAnimation(kind);
+  const anim = addAnimation(kind);
+  if (kind === 'polygon') anim.polygonSides = selectedPolygonSides;
+  return anim;
 }
 
 function addPolylineAnimation() {
@@ -8250,8 +8264,8 @@ function renderShapePlacementSidebar(detailEl, anim) {
   wrap.style.cssText = 'padding:10px 12px; display:flex; flex-direction:column; gap:8px;';
 
   const row = document.createElement('div');
-  row.style.cssText = 'display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:6px;';
-  const labels = { rectangle: 'Rectangle', circle: 'Circle', triangle: 'Triangle' };
+  row.style.cssText = 'display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:6px;';
+  const labels = { rectangle: 'Rectangle', circle: 'Circle', triangle: 'Triangle', polygon: 'Polygon' };
   const activeKind = animKind(anim) || selectedShapeKind;
 
   for (const kind of SHAPE_TOOL_KINDS) {
@@ -8284,6 +8298,14 @@ function renderShapePlacementSidebar(detailEl, anim) {
     row.appendChild(btn);
   }
   wrap.appendChild(row);
+  if (activeKind === 'polygon') {
+    appendSliderRow(wrap, 'Number of sides', 3, 20, 1, anim.polygonSides ?? selectedPolygonSides,
+      v => `${v}`, v => {
+        const n = parseInt(v, 10);
+        selectedPolygonSides = n;
+        if (anim.kind === 'polygon') anim.polygonSides = n;
+      });
+  }
   detailEl.appendChild(wrap);
 }
 
@@ -8362,6 +8384,8 @@ function makeTransformedAnimation(src, transformPoint, rotation) {
     patternSpacing: src.patternSpacing,
     customPatternSourceId: src.customPatternSourceId ?? null,
     customPatternMode: src.customPatternMode ?? 'mask',
+    customPatternSourceIds: getCustomPatternSourceIds(src),
+    customPatternStretchX: src.customPatternStretchX ?? 1, customPatternStretchY: src.customPatternStretchY ?? 1,
     croppedImageDataUrl: src.croppedImageDataUrl ?? null,
     croppedImageLightness: src.croppedImageLightness ?? 1.0,
     closed: !!src.closed,
@@ -8838,7 +8862,7 @@ function primitiveCenter(anim) {
   const p0 = anim.anchors[0], p1 = anim.anchors[1];
   if (!p0) return null;
   const kind = animKind(anim);
-  if (kind === 'circle' || kind === 'ellipse') return p0;
+  if (kind === 'circle' || kind === 'ellipse' || kind === 'polygon') return p0;
   if (!p1) return p0;
   return new Cx((p0.re + p1.re) * 0.5, (p0.im + p1.im) * 0.5);
 }
@@ -8872,6 +8896,35 @@ function primitiveTrianglePoints(anim) {
   return rot ? pts.map(pt => rotateMathPoint(pt, center, rot)) : pts;
 }
 
+// Regular n-gon: anchors[0] is the center, anchors[1] is the dragged point. Orientation is
+// always fixed — a flat edge sits at the bottom (angle -90°) regardless of drag direction, for
+// both even and odd side counts (a triangle comes out flat-bottom/apex-up, same as n=4 comes out
+// an axis-aligned square) — only the drag distance sets size. The shape still grows to meet the
+// cursor no matter which direction you drag, the same "hug the cursor" feel as a corner-dragged
+// rectangle: find the edge whose own perpendicular is closest to the drag angle, and scale the
+// whole polygon so that edge's line passes through the dragged point.
+function primitivePolygonPoints(anim) {
+  const center = anim.anchors[0], p1 = anim.anchors[1];
+  if (!center || !p1) return [];
+  const n = Math.max(3, Math.min(20, Math.round(anim.polygonSides ?? 6)));
+  const dx = p1.re - center.re, dy = p1.im - center.im;
+  const dragDist = Math.hypot(dx, dy);
+  if (dragDist < 1e-9) return [];
+  const dragAngle = Math.atan2(dy, dx);
+  const step = 2 * Math.PI / n;
+  const BASE = -Math.PI / 2; // fixed: an edge's own perpendicular always points straight down
+  const apothemUnit = Math.cos(Math.PI / n);
+  const nearestEdgeAngle = BASE + step * Math.round((dragAngle - BASE) / step);
+  const delta = Math.atan2(Math.sin(dragAngle - nearestEdgeAngle), Math.cos(dragAngle - nearestEdgeAngle));
+  const scale = dragDist / (apothemUnit / Math.cos(delta));
+  const pts = [];
+  for (let k = 0; k < n; k++) {
+    const a = BASE + Math.PI / n + k * step;
+    pts.push(new Cx(center.re + scale * Math.cos(a), center.im + scale * Math.sin(a)));
+  }
+  return pts;
+}
+
 function samplePrimitiveBoundaryMath(anim, count = 96) {
   const p0 = anim.anchors[0], p1 = anim.anchors[1];
   if (!p0 || !p1) return [];
@@ -8879,6 +8932,7 @@ function samplePrimitiveBoundaryMath(anim, count = 96) {
   if (kind === 'line') return [p0, p1];
   if (kind === 'rectangle') return primitiveRectangleCorners(anim);
   if (kind === 'triangle') return primitiveTrianglePoints(anim);
+  if (kind === 'polygon') return primitivePolygonPoints(anim);
   const rot = animRotation(anim);
   if (kind === 'circle') {
     const radius = Math.hypot(p1.re - p0.re, p1.im - p0.im);
@@ -10481,6 +10535,21 @@ canvas.addEventListener('mousedown', e => {
   const cy = (e.clientY - rect.top)  * devicePixelRatio;
   const [mathX, mathY] = toMath(cx, cy);
   mouseDownClientX = e.clientX; mouseDownClientY = e.clientY;
+  // ── Custom pattern source pick mode ── clicking a canvas object picks it as the tile source
+  // instead of selecting it, matching the tile-row pick behavior at appendAnimTrayTile's click handler.
+  if (customPatternPickMode !== null) {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const picked = queryFillHit(cx, cy);
+    if (picked && picked.id !== customPatternPickMode.animId) {
+      // onPick returns true while there's still room for more sources — stays in pick mode so
+      // multiple objects can be added one after another without re-clicking "+ Add" each time.
+      const keepPicking = customPatternPickMode.onPick(picked);
+      if (!keepPicking) customPatternPickMode = null;
+      renderAnimList(); draw(); updateCursor();
+    }
+    return;
+  }
   if (e.button === 2) {
     e.preventDefault();
     dragging = true;
@@ -14465,7 +14534,7 @@ function fillStyleValue(color, style) {
   return fillStyleValueForContext(ctx, color, style);
 }
 
-function drawPrimitiveShape(kind, p0, p1, color, lineWidth, alpha = 1, dashed = false, rotation = 0, fillColor = null, outlineOpacity = 1, fillOpacity = 0.5, fillStyle = 'solid', fillAnim = null) {
+function drawPrimitiveShape(kind, p0, p1, color, lineWidth, alpha = 1, dashed = false, rotation = 0, fillColor = null, outlineOpacity = 1, fillOpacity = 0.5, fillStyle = 'solid', fillAnim = null, sides = null) {
   if (!p0 || !p1) return;
   const [x0, y0] = toCanvas(p0.re, p0.im);
   const [x1, y1] = toCanvas(p1.re, p1.im);
@@ -14501,6 +14570,15 @@ function drawPrimitiveShape(kind, p0, p1, color, lineWidth, alpha = 1, dashed = 
     if (kind === 'ellipse') {
       const rx = Math.abs(x1 - x0), ry = Math.abs(y1 - y0);
       ctx.ellipse(x0, y0, rx, ry, -rotation, 0, Math.PI * 2);
+      return true;
+    }
+    if (kind === 'polygon') {
+      const temp = { anchors: [p0, p1], polygonSides: sides };
+      const pts = primitivePolygonPoints(temp).map(pt => toCanvas(pt.re, pt.im));
+      if (pts.length < 3) return false;
+      ctx.moveTo(pts[0][0], pts[0][1]);
+      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+      ctx.closePath();
       return true;
     }
     return false;
@@ -14548,7 +14626,7 @@ function drawPrimitiveShape(kind, p0, p1, color, lineWidth, alpha = 1, dashed = 
     } else {
       if (buildShapePath()) paint();
     }
-  } else if (kind === 'ellipse') {
+  } else if (kind === 'ellipse' || kind === 'polygon') {
     if (buildShapePath()) paint();
   }
   ctx.restore();
@@ -14653,8 +14731,8 @@ function drawPrimitivePlacement(anim, previewPoint) {
     ctx.restore();
     return;
   }
-  drawPrimitiveShape(anim.kind, anim.anchors[0], previewPoint, anim.color, cw, 0.7, false, 0);
-  if (anim.kind === 'circle') {
+  drawPrimitiveShape(anim.kind, anim.anchors[0], previewPoint, anim.color, cw, 0.7, false, 0, null, 1, 0.5, 'solid', null, anim.polygonSides);
+  if (anim.kind === 'circle' || anim.kind === 'polygon') {
     const center = anim.anchors[0];
     const [cx, cy] = toCanvas(center.re, center.im);
     ctx.save();
@@ -15453,6 +15531,10 @@ function handleSideActionButtonPress(action) {
           pushUndo();
           convertPrimitiveToPath(action.anim, true);
           renderAnimList();
+        } else if (isPrimitiveAnim(action.anim) && (_enKind === 'circle' || _enKind === 'ellipse')) {
+          pushUndo();
+          convertCircleEllipseToPath(action.anim, 12);
+          renderAnimList();
         }
       }
       editNodesMode = !editNodesMode;
@@ -15939,6 +16021,9 @@ function cloneTransformState(anim) {
     // drawRegionCustomPattern read region.patternAngle, not anim.patternAngle) — captured
     // by id since rotation doesn't change region topology/ordering.
     origRegionPatternAngles: (anim.regions ?? []).map(r => ({ id: r.id, angle: r.patternAngle ?? 0 })),
+    origPatternStretchX: anim.customPatternStretchX ?? 1,
+    origPatternStretchY: anim.customPatternStretchY ?? 1,
+    origRegionPatternStretches: (anim.regions ?? []).map(r => ({ id: r.id, sx: r.customPatternStretchX ?? 1, sy: r.customPatternStretchY ?? 1 })),
   };
 }
 
@@ -16373,6 +16458,29 @@ function convertCircleEllipseToPath(anim, n) {
   return true;
 }
 
+// Regular polygon: straight sides need none of convertCircleEllipseToPath's tangent-handle math
+// (no curvature to approximate), so this builds directly off primitivePolygonPoints — same
+// with-duplicate-closing-anchor convention convertPrimitiveToPath uses for rectangle/triangle,
+// since a polygon is a straight-sided shape like those, not a curved one like circle/ellipse.
+function convertPolygonToPath(anim) {
+  if (animKind(anim) !== 'polygon') return false;
+  const basePts = primitivePolygonPoints(anim);
+  if (basePts.length < 3) return false;
+  const n = basePts.length;
+  const anchors = [...basePts, cloneCx(basePts[0])];
+  anim.kind = 'freeform';
+  anim.closed = true;
+  anim.rotation = 0;
+  anim.anchors = anchors;
+  anim.segments = anchors.slice(0, -1).map((p, i) => makeStraightSegment(p, anchors[i + 1]));
+  anim.anchorLocked = anchors.map(() => false);
+  anim.promotedAnchors = anchors.map((_, i) => i < n);
+  anim.polygonSides = n;
+  recompileAnim(anim);
+  detectObjectTopology(anim);
+  return true;
+}
+
 function primitivePathForDrag(drag) {
   if (drag.origKind === 'rectangle') return primitiveRectanglePathForDrag(drag);
   if (drag.origKind === 'triangle') return primitiveTrianglePathForDrag(drag);
@@ -16795,6 +16903,24 @@ function applyResizeBounds(drag, nextBounds) {
           if (_s.thickness !== undefined) {
             const _origT = drag.origArcThicknesses?.[_key] ?? _s.thickness;
             _s.thickness = Math.max(0.1, _origT * _ts);
+          }
+        }
+      }
+      // Custom-pattern tile stretch: only ever updated here, from an actual resize-drag's
+      // per-axis ratio — never derived from the shape's raw current aspect ratio (that's what
+      // _applyCustomPatternMultiTile reconstructs back out). Keeps rotation from ever being read
+      // as a stretch, since rotation never touches these fields.
+      const _rx = _nw / _ow, _ry = _nh / _oh;
+      anim.customPatternStretchX = (drag.origPatternStretchX ?? 1) * _rx;
+      anim.customPatternStretchY = (drag.origPatternStretchY ?? 1) * _ry;
+      const _regionsForStretch = anim.regions?.length ? anim.regions : anim._savedPriorRegions;
+      if (drag.origRegionPatternStretches?.length && _regionsForStretch?.length) {
+        const _origStretchById = new Map(drag.origRegionPatternStretches.map(r => [r.id, r]));
+        for (const _region of _regionsForStretch) {
+          const _o = _origStretchById.get(_region.id);
+          if (_o) {
+            _region.customPatternStretchX = _o.sx * _rx;
+            _region.customPatternStretchY = _o.sy * _ry;
           }
         }
       }
@@ -17877,6 +18003,8 @@ function drawCommittedAnimation(anim, { deferOverlay = false } = {}) {
             gradientAngle: _fillSrc.gradientAngle, gradC1Knobs: _fillSrc.gradC1Knobs, gradC2Knobs: _fillSrc.gradC2Knobs,
             patternType: _fillSrc.patternType, patternAngle: _fillSrc.patternAngle, patternSpacing: _fillSrc.patternSpacing,
             customPatternSourceId: _fillSrc.customPatternSourceId, customPatternMode: _fillSrc.customPatternMode,
+            customPatternSourceIds: getCustomPatternSourceIds(_fillSrc),
+            customPatternStretchX: _fillSrc.customPatternStretchX ?? 1, customPatternStretchY: _fillSrc.customPatternStretchY ?? 1,
           } : (animFillColor(proxy) ? proxy
             : (animFillColor(anim) ? { ...proxy, fillColor: anim.fillColor, fillStyle: anim.fillStyle, fillOpacity: anim.fillOpacity } : null));
           if (_fProxy) {
@@ -18489,6 +18617,8 @@ function makeObjectIcon(kind, className = 'anim-kind-icon') {
     svg.appendChild(makeSvgEl('circle', { cx: 12, cy: 12, r: 7 }));
   } else if (kind === 'ellipse') {
     svg.appendChild(makeSvgEl('ellipse', { cx: 12, cy: 12, rx: 7, ry: 5 }));
+  } else if (kind === 'polygon') {
+    svg.appendChild(makeSvgEl('polygon', { points: '12,4 5.1,8 5.1,16 12,20 18.9,16 18.9,8' }));
   } else if (kind === 'text') {
     const text = makeSvgEl('text', { x: 12, y: 17, 'text-anchor': 'middle' });
     text.textContent = 'T';
@@ -18537,9 +18667,17 @@ function objectLabel(anim) {
   if (kind === 'triangle') return `${anim.letter} - triangle`;
   if (kind === 'circle') return `${anim.letter} - circle`;
   if (kind === 'ellipse') return `${anim.letter} - ellipse`;
+  if (kind === 'polygon') return `${anim.letter} - ${polygonName(anim.polygonSides ?? selectedPolygonSides)}`;
   if (kind === 'text') return `${anim.letter} - text`;
   if (kind === POLYLINE_KIND) return `${anim.letter} - line segments`;
   if (anim.anchors.length === 1 && anim.segments.length === 0) return `${anim.letter} - dot`;
+  // A circle/ellipse converted via convertCircleEllipseToPath keeps _circleArc specifically to
+  // retain its circle identity for exact fill/schematic rendering and intersection math — reuse
+  // it here too, rather than let a converted circle read as generic "freeform" in the object list.
+  if (anim._circleArc) return `${anim.letter} - ${anim._circleArc.rx === anim._circleArc.ry ? 'circle' : 'ellipse'}`;
+  // Same idea for a converted regular polygon — convertPolygonToPath stashes the side count
+  // specifically so it keeps reading as "hexagon" etc. instead of generic "freeform".
+  if (anim.polygonSides) return `${anim.letter} - ${polygonName(anim.polygonSides)}`;
   return `${anim.letter} - freeform`;
 }
 
@@ -19243,11 +19381,13 @@ function makeFillStyleIcon(style) {
       svg.appendChild(makeSvgEl('circle', { cx, cy, r: 1.6, style: 'fill:currentColor;stroke:none;' }))));
   }
   if (style === 'custom-pattern') {
-    svg.appendChild(makeSvgEl('rect', { x: 3, y: 3, width: 18, height: 18, rx: 1,
+    svg.appendChild(makeSvgEl('circle', { cx: 12, cy: 12, r: 9,
       fill: 'none', stroke: 'currentColor', 'stroke-width': 1.5 }));
+    svg.appendChild(makeSvgEl('circle', { cx: 8.5, cy: 10, r: 1.3, style: 'fill:currentColor;stroke:none;' }));
+    svg.appendChild(makeSvgEl('circle', { cx: 15.5, cy: 10, r: 1.3, style: 'fill:currentColor;stroke:none;' }));
     svg.appendChild(makeSvgEl('path', {
-      d: 'M5,12 C7,8 9,16 11,12 C13,8 15,16 17,12 C18,9.5 19,10.5 19,12',
-      fill: 'none', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round'
+      d: 'M7.5,14 Q12,18.5 16.5,14',
+      fill: 'none', stroke: 'currentColor', 'stroke-width': 1.6, 'stroke-linecap': 'round'
     }));
     return svg;
   }
@@ -19637,12 +19777,7 @@ function appendRegionColorExpansion(parent, region, group) {
     if (!isFinite(region.fillOpacity) || region.fillOpacity <= 0) region.fillOpacity = 0.3;
     saveProject();
   }
-  const style = region.fillStyle || 'solid';
-  const GRADIENT_FAMILY = ['gradient', 'contour-gradient'];
-  const isGradientFamily = GRADIENT_FAMILY.includes(style);
-  const hasColor2 = isGradientFamily || style === 'pattern' || style === 'custom-pattern';
   const isGroupRegion = !!groups.find(g => g.id === group.id);
-  const _dropperSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21l1.5-4.5L15.5 6l3 3L8 20.5z"/><path d="M18.5 6l1.5-1.5c.8-.8.8-2.2 0-3s-2.2-.8-3 0L15.5 3"/></svg>`;
 
   // Region ids are per-object sequence numbers, not globally unique — must also match the
   // owning group/anim, otherwise a stale contourSelectMode from a different object can collide.
@@ -19651,371 +19786,51 @@ function appendRegionColorExpansion(parent, region, group) {
     : contourSelectMode?.animId === group.id;
   const isSelectingThisRegion = contourModeScopeMatches && contourSelectMode?.regionId === region.id;
 
-  // If contour selection is active for this region, lock to the Style tab
-  const activeTab = isSelectingThisRegion ? 3
-    : (gradientColorTab >= 1 && gradientColorTab <= 3 ? gradientColorTab : 1);
-
   const root = document.createElement('div');
   root.className = 'color-expansion';
   root.addEventListener('mousedown', e => e.stopPropagation());
   root.addEventListener('click', e => e.stopPropagation());
 
-  // Three-tab bar: Color 1 | Color 2 | Style
-  const tabBar = document.createElement('div');
-  tabBar.className = 'gradient-stop-tab-bar';
-  [{ tab: 1, label: 'Color 1' }, { tab: 2, label: 'Color 2' }, { tab: 3, label: 'Style' }].forEach(({ tab, label }) => {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'gradient-stop-tab' + (activeTab === tab ? ' active' : '');
-    btn.textContent = label;
-    btn.addEventListener('click', e => {
-      e.stopPropagation();
-      gradientColorTab = tab;
-      openColorMenuRegionId = region.id;
-      openColorMenuRegionGroupId = group.id;
-      renderAnimList();
-    });
-    tabBar.appendChild(btn);
-  });
-  root.appendChild(tabBar);
-
-  const panel = document.createElement('div');
-  panel.className = 'color-tab-content fill-active';
-
-  if (activeTab === 1) {
-    // ── Color 1 ─────────────────────────────────────────────────────────────
-    const _rgdc = normalizeColorString(globalSettings.defaultColor);
-    const _rgdh = _rgdc ? colorToHsl(_rgdc).h : 0;
-    const c1 = region.fillColor || hslToHex(_rgdh, 100, 50);
-    let c1Preview = normalizeColorString(c1) || c1;
-    let c1Opacity = null;
-    const c1PreviewRow = appendHslColorPicker(panel, c1, (color, meta = {}) => {
-      region.fillColor = color;
-      saveProject(); if (meta.fromHueClick) renderAnimList(); draw();
-    }, { withUndo: true, fallbackHue: _rgdh,
-      onPreviewChange(hex) { c1Preview = hex; c1Opacity?.setTrack(opacitySliderTrack(hex)); } });
-    c1Opacity = appendSliderRow(panel, 'Opacity', 0, 100, 1, Math.round((region.fillOpacity ?? 0) * 100),
-      v => `${Math.round(v)}%`, v => { region.fillOpacity = clamp(parseFloat(v) / 100, 0, 1); saveProject(); draw(); },
-      false, { colorTrack: opacitySliderTrack(c1Preview) });
-    {
-      const _isActive = eyedropperTarget === 'region-fill' && eyedropperRegionId === region.id;
-      const dropBtn = document.createElement('button');
-      dropBtn.className = 'eyedropper-btn' + (_isActive ? ' active' : '');
-      dropBtn.title = _isActive ? 'Click canvas to sample (Escape to cancel)' : 'Pick color from canvas';
-      dropBtn.innerHTML = _dropperSvg + (_isActive ? ' Sampling…' : ' Sample');
-      dropBtn.addEventListener('click', e => {
-        e.stopPropagation();
-        if (_isActive) { deactivateEyedropper(); } else {
-          eyedropperTarget = 'region-fill'; eyedropperAnimId = group.id;
-          eyedropperRegionId = region.id; eyedropperCurveId = null; updateCursor();
-        }
-        renderAnimList();
-      });
-      c1PreviewRow.appendChild(dropBtn);
-    }
-
-  } else if (activeTab === 2) {
-    // ── Color 2 ─────────────────────────────────────────────────────────────
-    if (hasColor2) {
-      const _rgdc2 = normalizeColorString(globalSettings.defaultColor);
-      const _rgdh2 = _rgdc2 ? colorToHsl(_rgdc2).h : 0;
-      const c2Init = region.gradientToColor || region.fillColor || hslToHex(_rgdh2, 100, 50);
-      let c2Preview = normalizeColorString(c2Init) || c2Init;
-      let c2Opacity = null;
-      const c2PreviewRow = appendHslColorPicker(panel, c2Init, (color, meta = {}) => {
-        region.gradientToColor = color;
-        saveProject(); if (meta.fromHueClick) renderAnimList(); draw();
-      }, { withUndo: true, fallbackHue: _rgdh2,
-        onPreviewChange(hex) { c2Preview = hex; c2Opacity?.setTrack(opacitySliderTrack(hex)); } });
-      c2Opacity = appendSliderRow(panel, 'Opacity', 0, 100, 1, Math.round((region.gradientToOpacity ?? 0) * 100),
-        v => `${Math.round(v)}%`, v => { region.gradientToOpacity = clamp(parseFloat(v) / 100, 0, 1); saveProject(); draw(); },
-        false, { colorTrack: opacitySliderTrack(c2Preview) });
-      {
-        const _isActive = eyedropperTarget === 'region-fill2' && eyedropperRegionId === region.id;
-        const dropBtn = document.createElement('button');
-        dropBtn.className = 'eyedropper-btn' + (_isActive ? ' active' : '');
-        dropBtn.title = _isActive ? 'Click canvas to sample (Escape to cancel)' : 'Pick color from canvas';
-        dropBtn.innerHTML = _dropperSvg + (_isActive ? ' Sampling…' : ' Sample');
-        dropBtn.addEventListener('click', e => {
-          e.stopPropagation();
-          if (_isActive) { deactivateEyedropper(); } else {
-            eyedropperTarget = 'region-fill2'; eyedropperAnimId = group.id;
-            eyedropperRegionId = region.id; eyedropperCurveId = null; updateCursor();
-          }
-          renderAnimList();
-        });
-        c2PreviewRow.appendChild(dropBtn);
-      }
-    } else {
-      const note = document.createElement('div');
-      note.style.cssText = 'padding: 16px 10px; font-size: 0.7rem; color: #7f849c; text-align: center; line-height: 1.6;';
-      note.textContent = 'Switch to Gradient in the Style tab to enable a second color.';
-      panel.appendChild(note);
-    }
-
-  } else {
-    // ── Style ────────────────────────────────────────────────────────────────
-    // Top-level: Solid | Gradient | Pattern
-    const styleRow = document.createElement('div');
-    styleRow.className = 'fill-style-row';
-    const _isPatFam = style === 'pattern' || style === 'custom-pattern';
-    [{ key: 'solid', title: 'Solid' }, { key: 'gradient', title: 'Gradient' }, { key: 'pattern', title: 'Pattern' }].forEach(({ key, title }) => {
-      const btn = document.createElement('button');
-      const isActive = key === 'gradient' ? isGradientFamily : (key === 'pattern' ? _isPatFam : style === key);
-      btn.className = 'fill-style-btn' + (isActive ? ' active' : '');
-      btn.title = title;
-      btn.appendChild(makeFillStyleIcon(key));
-      btn.addEventListener('click', e => {
-        e.stopPropagation();
-        const newStyle = key === 'gradient' ? (isGradientFamily ? style : 'gradient') :
-          (key === 'pattern' ? (_isPatFam ? style : 'pattern') : key);
-        if (style !== newStyle) {
-          pushUndo(); region.fillStyle = newStyle;
-          if (newStyle !== 'solid' && !region.gradientToColor) {
-            region.gradientToColor = region.fillColor || '#ffffff';
-            if (!isFinite(region.gradientToOpacity)) region.gradientToOpacity = 0;
-          }
-          saveProject(); renderAnimList(); draw();
-        }
-      });
-      styleRow.appendChild(btn);
-    });
-    panel.appendChild(styleRow);
-
-    // Gradient sub-type: Linear | Contour
-    if (isGradientFamily) {
-      const subRow = document.createElement('div');
-      subRow.className = 'fill-style-row';
-      subRow.style.marginTop = '4px';
-      [{ key: 'gradient', title: 'Linear' }, { key: 'contour-gradient', title: 'Contour' }].forEach(({ key, title }) => {
-        const btn = document.createElement('button');
-        btn.className = 'fill-style-btn' + (style === key ? ' active' : '');
-        btn.title = title;
-        btn.appendChild(makeFillStyleIcon(key));
-        btn.addEventListener('click', e => {
-          e.stopPropagation();
-          if (style !== key) {
-            pushUndo(); region.fillStyle = key;
-            if (!region.gradientToColor) {
-              region.gradientToColor = region.fillColor || '#ffffff';
-              if (!isFinite(region.gradientToOpacity)) region.gradientToOpacity = 0;
-            }
-            saveProject(); renderAnimList(); draw();
-          }
-        });
-        subRow.appendChild(btn);
-      });
-      panel.appendChild(subRow);
-    }
-
-    // Direction wheel for linear gradient
-    if (style === 'gradient') {
-      const wheelRow = document.createElement('div');
-      wheelRow.className = 'direction-wheel-row';
-      const lbl = document.createElement('span');
-      lbl.className = 'direction-wheel-label';
-      lbl.textContent = 'Direction';
-      wheelRow.appendChild(lbl);
-      appendDirectionWheel(wheelRow,
-        () => region.gradientAngle ?? Math.PI / 4,
-        a => { region.gradientAngle = a; draw(); });
-      panel.appendChild(wheelRow);
-    }
-
-    // Pattern sub-type row (Lines | Dots | Crosshatch | Custom) + controls
-    if (_isPatFam) {
-      const patternType = region.patternType || 'lines';
-      const typeRow = document.createElement('div');
-      typeRow.className = 'fill-style-row';
-      typeRow.style.cssText = 'margin-top:4px;grid-template-columns:repeat(4,1fr);';
-      [{ key: 'lines', title: 'Lines' }, { key: 'dots', title: 'Dots' },
-       { key: 'crosshatch', title: 'Crosshatch' }, { key: 'custom', title: 'Custom' }].forEach(({ key, title }) => {
-        const btn = document.createElement('button');
-        const isTypeActive = key === 'custom' ? style === 'custom-pattern' : (style === 'pattern' && patternType === key);
-        btn.className = 'fill-style-btn' + (isTypeActive ? ' active' : '');
-        btn.title = title;
-        btn.appendChild(makeFillStyleIcon(key === 'custom' ? 'custom-pattern' : key));
-        btn.addEventListener('click', e => {
-          e.stopPropagation();
-          pushUndo();
-          if (key === 'custom') {
-            region.fillStyle = 'custom-pattern';
-            if (!region.gradientToColor) { region.gradientToColor = region.fillColor || '#ffffff'; region.gradientToOpacity = region.gradientToOpacity ?? 1; }
-          } else {
-            region.fillStyle = 'pattern'; region.patternType = key;
-          }
-          saveProject(); renderAnimList(); draw();
-        });
-        typeRow.appendChild(btn);
-      });
-      panel.appendChild(typeRow);
-
-      if (style === 'pattern') {
-        const wheelRow = document.createElement('div');
-        wheelRow.className = 'direction-wheel-row';
-        const lbl = document.createElement('span');
-        lbl.className = 'direction-wheel-label'; lbl.textContent = 'Angle';
-        wheelRow.appendChild(lbl);
-        appendDirectionWheel(wheelRow, () => region.patternAngle ?? 0, a => { region.patternAngle = a; draw(); });
-        panel.appendChild(wheelRow);
-        appendSliderRow(panel, 'Spacing', 0.01, 0.5, 0.01, getPatternSpacingFrac(region),
-          v => `${Math.round(v * 100)}%`, v => { region.patternSpacing = parseFloat(v); saveProject(); draw(); });
-      }
-
-      if (style === 'custom-pattern') {
-        const _rIsPickMode = customPatternPickMode?.regionId === region.id;
-        panel.appendChild(makeCustomPatternSourceRow({
-          getSourceId: () => region.customPatternSourceId,
-          onSetSource: (id) => {
-            pushUndo(); region.customPatternSourceId = id;
-            if (id) { const src = animations.find(a => a.id === id); if (src) { const sb = selectedObjectCanvasBounds(src); if (sb) region.patternAngle = (sb.right - sb.left) >= (sb.bottom - sb.top) ? 0 : Math.PI / 2; } }
-            saveProject(); renderAnimList(); draw();
-          },
-          isPickMode: _rIsPickMode,
-          onEnterPickMode: () => {
-            customPatternPickMode = {
-              regionId: region.id,
-              onPick: (picked) => {
-                pushUndo(); region.customPatternSourceId = picked.id;
-                if (picked.croppedImageDataUrl) region.fillOpacity = 1.0;
-                const sb = selectedObjectCanvasBounds(picked); if (sb) region.patternAngle = (sb.right - sb.left) >= (sb.bottom - sb.top) ? 0 : Math.PI / 2;
-                saveProject();
-              }
-            };
-            renderAnimList(); draw();
-          },
-          onExitPickMode: () => { customPatternPickMode = null; renderAnimList(); draw(); }
-        }));
-
-        const modeRow = document.createElement('div');
-        modeRow.className = 'fill-style-row'; modeRow.style.marginTop = '4px';
-        const curMode = region.customPatternMode || 'mask';
-        [{ key: 'mask', title: 'Mask' }, { key: 'blend', title: 'Blend' }].forEach(({ key, title }) => {
-          const btn = document.createElement('button');
-          btn.className = 'fill-style-btn' + (curMode === key ? ' active' : '');
-          btn.style.fontSize = '0.65rem'; btn.textContent = title;
-          btn.addEventListener('click', e => {
-            e.stopPropagation();
-            if ((region.customPatternMode || 'mask') !== key) { pushUndo(); region.customPatternMode = key; saveProject(); renderAnimList(); draw(); }
-          });
-          modeRow.appendChild(btn);
-        });
-        panel.appendChild(modeRow);
-
-        const cpWheelRow = document.createElement('div');
-        cpWheelRow.className = 'direction-wheel-row';
-        const cpLbl = document.createElement('span');
-        cpLbl.className = 'direction-wheel-label'; cpLbl.textContent = 'Angle';
-        cpWheelRow.appendChild(cpLbl);
-        appendDirectionWheel(cpWheelRow, () => region.patternAngle ?? 0, a => { region.patternAngle = a; draw(); });
-        panel.appendChild(cpWheelRow);
-        appendSliderRow(panel, 'Spacing', 0.01, 0.5, 0.01, getPatternSpacingFrac(region),
-          v => `${Math.round(v * 100)}%`, v => { region.patternSpacing = parseFloat(v); saveProject(); draw(); });
-      }
-    }
-
-    // Boundary assignment (contour gradient only)
-    if (style === 'contour-gradient' && region.boundary?.length) {
-      const arcSection = document.createElement('div');
-      arcSection.className = 'contour-arc-section';
-      const isSelecting = isSelectingThisRegion;
-
-      if (isSelecting) {
-        const activeMode = contourSelectMode;
-        const sideColor = activeMode.side === 'b1' ? '#89b4fa' : '#cba6f7';
-        const sideLabel = activeMode.side === 'b1' ? 'Boundary 1' : 'Boundary 2';
-
-        const modeLabel = document.createElement('div');
-        modeLabel.className = 'contour-mode-label';
-        modeLabel.style.color = sideColor;
-        modeLabel.textContent = `Setting ${sideLabel}`;
-        arcSection.appendChild(modeLabel);
-
-        const countLabel = document.createElement('div');
-        countLabel.className = 'contour-mode-count';
-        const nNodes = activeMode.nodeIndices.length;
-        countLabel.textContent = activeMode.isCenterPoint
-          ? 'Center point selected'
-          : nNodes === 0
-            ? 'Click junction nodes on canvas (or the center point)'
-            : nNodes === 1
-              ? '1 node clicked — click the next junction (CCW) or same to close'
-              : `${nNodes} nodes clicked`;
-        arcSection.appendChild(countLabel);
-
-        const canSet = activeMode.isCenterPoint || nNodes >= 2;
-        const actionRow = document.createElement('div');
-        actionRow.className = 'contour-mode-actions';
-
-        const setBtn = document.createElement('button');
-        setBtn.className = 'contour-confirm-btn';
-        setBtn.textContent = 'Set';
-        setBtn.disabled = !canSet;
-        setBtn.addEventListener('click', e => {
-          e.stopPropagation();
-          if (!canSet) return;
-          pushUndo();
-          const _cvm = getCurvesMapForContourMode();
-          const edges = contourModeEdgesForActiveSelection(region, activeMode, _cvm);
-          const _nodes = edges.length ? contourModeNodePositions(region, activeMode, _cvm) : null;
-          if (activeMode.side === 'b1') { region.fill1Arcs = edges.length ? edges : null; region.fill1Nodes = _nodes; }
-          else { region.fill2Arcs = edges.length ? edges : null; region.fill2Nodes = _nodes; }
-          contourSelectMode = null;
-          saveProject(); renderAnimList(); draw();
-        });
-
-        const cancelBtn = document.createElement('button');
-        cancelBtn.className = 'contour-cancel-btn';
-        cancelBtn.textContent = 'Cancel';
-        cancelBtn.addEventListener('click', e => {
-          e.stopPropagation();
-          contourSelectMode = null;
-          renderAnimList(); draw();
-        });
-
-        actionRow.append(setBtn, cancelBtn);
-        arcSection.appendChild(actionRow);
+  renderFillStyleSection(root, {
+    get: () => region,
+    set: fields => Object.assign(region, fields),
+    subTabGet: () => isSelectingThisRegion ? 3 : (gradientColorTab >= 1 && gradientColorTab <= 3 ? gradientColorTab : 1),
+    subTabSet: tab => { gradientColorTab = tab; openColorMenuRegionId = region.id; openColorMenuRegionGroupId = group.id; },
+    dropperActive: which => eyedropperTarget === (which === 'fill' ? 'region-fill' : 'region-fill2') && eyedropperRegionId === region.id,
+    dropperToggle: which => {
+      if (eyedropperTarget === (which === 'fill' ? 'region-fill' : 'region-fill2') && eyedropperRegionId === region.id) {
+        deactivateEyedropper();
       } else {
-        const heading = document.createElement('div');
-        heading.className = 'contour-arc-heading';
-        heading.textContent = 'Boundaries';
-        arcSection.appendChild(heading);
-
-        ['b1', 'b2'].forEach(side => {
-          const row = document.createElement('div');
-          row.className = 'contour-arc-row';
-          const arcs = side === 'b1' ? region.fill1Arcs : region.fill2Arcs;
-          const label = document.createElement('span');
-          label.className = 'contour-arc-label';
-          label.textContent = side === 'b1' ? 'Boundary 1' : 'Boundary 2';
-          const status = document.createElement('span');
-          status.className = 'contour-arc-status';
-          status.textContent = arcs?.length === 1 && arcs[0]?.isPoint ? 'point' : arcs?.length ? `${arcs.length} arc${arcs.length === 1 ? '' : 's'}` : 'auto';
-          const btn = document.createElement('button');
-          btn.className = `contour-set-btn ${side}`;
-          btn.textContent = 'Set';
-          btn.title = `Draw ${side === 'b1' ? 'Boundary 1' : 'Boundary 2'} on canvas`;
-          btn.addEventListener('click', e => {
-            e.stopPropagation();
-            gradientColorTab = 3;
-            contourSelectMode = {
-              regionId: region.id,
-              groupId: isGroupRegion ? group.id : null,
-              animId: isGroupRegion ? null : group.id,
-              side, loopIndex: null, nodeIndices: []
-            };
-            renderAnimList(); draw();
-          });
-          row.append(label, status, btn);
-          arcSection.appendChild(row);
-        });
+        eyedropperTarget = which === 'fill' ? 'region-fill' : 'region-fill2';
+        eyedropperAnimId = group.id; eyedropperRegionId = region.id; eyedropperCurveId = null;
+        updateCursor();
       }
+    },
+    isPickMode: customPatternPickMode?.regionId === region.id,
+    onEnterPickMode: () => {
+      customPatternPickMode = {
+        regionId: region.id,
+        onPick: (picked) => {
+          const added = addCustomPatternSource(getCustomPatternSourceIds(region), picked.id);
+          if (!added) return false;
+          pushUndo(); region.customPatternSourceIds = added.ids;
+          if (added.isFirst) { region.customPatternStretchX = 1; region.customPatternStretchY = 1; region.patternAngle = 0; }
+          if (picked.croppedImageDataUrl) region.fillOpacity = 1.0;
+          saveProject();
+          return added.ids.length < CUSTOM_PATTERN_MAX_SOURCES;
+        }
+      };
+      renderAnimList(); draw();
+    },
+    onExitPickMode: () => { customPatternPickMode = null; renderAnimList(); draw(); },
+    isRegionScoped: true,
+    contour: {
+      region, isSelecting: isSelectingThisRegion, isGroupRegion,
+      groupId: group.id, animId: group.id,
+      onStartSelecting: () => { gradientColorTab = 3; },
+    },
+  });
 
-      panel.appendChild(arcSection);
-    }
-  }
-
-  root.appendChild(panel);
   parent.appendChild(root);
 }
 
@@ -20137,78 +19952,28 @@ function appendColorExpansion(parent, anim) {
   if (colorEditTarget !== 'outline' && !fillEnabled) colorEditTarget = 'outline';
 
   const isOutline = colorEditTarget === 'outline';
-  const fillStyle = animFillStyle(anim);
-  const isGradient = !isOutline && fillStyle === 'gradient';
-  const isPattern = !isOutline && fillStyle === 'pattern';
-  const isCustomPattern = !isOutline && fillStyle === 'custom-pattern';
-  const hasColor2 = isGradient || isPattern || isCustomPattern;
-  if (isGradient) ensureGradientDefaults(anim);
 
   const root = document.createElement('div');
   root.className = 'color-expansion';
   root.addEventListener('mousedown', e => e.stopPropagation());
   root.addEventListener('click', e => e.stopPropagation());
 
-  // ── Tab bar: Outline | Fill 1 | Fill 2 | Style ──
-  const tabBar = document.createElement('div');
-  tabBar.className = 'color-tab-bar';
-
-  const makeTab = (label, active, enabled, onClick) => {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'color-tab' + (active ? ' active' : '');
-    btn.style.cssText = 'flex:1;padding:4px 6px;';
-    btn.textContent = label;
-    btn.disabled = !enabled;
-    btn.addEventListener('click', e => { e.stopPropagation(); onClick(); });
-    return btn;
-  };
-
-  tabBar.appendChild(makeTab('Outline', isOutline, true, () => {
-    colorEditTarget = 'outline'; openColorMenuAnimId = anim.id; renderAnimList();
-  }));
-  tabBar.appendChild(makeTab('Fill 1', !isOutline && objectFillTab === 1, fillEnabled, () => {
-    colorEditTarget = 'fill'; objectFillTab = 1; openColorMenuAnimId = anim.id; renderAnimList();
-  }));
-  tabBar.appendChild(makeTab('Fill 2', !isOutline && objectFillTab === 2, fillEnabled, () => {
-    colorEditTarget = 'fill'; objectFillTab = 2; openColorMenuAnimId = anim.id; renderAnimList();
-  }));
-  tabBar.appendChild(makeTab('Style', !isOutline && objectFillTab === 3, fillEnabled, () => {
-    colorEditTarget = 'fill'; objectFillTab = 3; openColorMenuAnimId = anim.id; renderAnimList();
-  }));
-
-  root.appendChild(tabBar);
-
-  const panel = document.createElement('div');
-  panel.className = 'color-tab-content';
-  if (isOutline) {
-    panel.style.borderRadius = '0 6px 6px 6px';
-  } else if (objectFillTab === 3) {
-    panel.style.borderRadius = '6px 0 6px 6px';
-  } else {
-    panel.style.borderRadius = '6px 6px 6px 6px';
-  }
-
-  const DROPPER_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21l1.5-4.5L15.5 6l3 3L8 20.5z"/><path d="M18.5 6l1.5-1.5c.8-.8.8-2.2 0-3s-2.2-.8-3 0L15.5 3"/></svg>`;
-
-  function appendDropperBtn(targetPanel, targetKey) {
-    const isActive = eyedropperTarget === targetKey && eyedropperAnimId === anim.id;
-    const btn = document.createElement('button');
-    btn.className = 'eyedropper-btn' + (isActive ? ' active' : '');
-    btn.title = isActive ? 'Click a canvas to sample color (Escape to cancel)' : 'Pick color from canvas';
-    btn.innerHTML = DROPPER_SVG + (isActive ? ' Sampling…' : ' Sample');
-    btn.addEventListener('click', e => {
-      e.stopPropagation();
-      if (isActive) { deactivateEyedropper(); } else {
-        eyedropperTarget = targetKey; eyedropperAnimId = anim.id; updateCursor();
-      }
-      renderAnimList();
-    });
-    targetPanel.appendChild(btn);
-  }
-
   if (isOutline) {
     // ── Outline: color + opacity + thickness ──
+    const DROPPER_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21l1.5-4.5L15.5 6l3 3L8 20.5z"/><path d="M18.5 6l1.5-1.5c.8-.8.8-2.2 0-3s-2.2-.8-3 0L15.5 3"/></svg>`;
+    renderFillStyleSection(root, {
+      get: () => anim, set: () => {},
+      subTabGet: () => 1, subTabSet: () => {},
+      dropperActive: () => false, dropperToggle: () => {},
+      isPickMode: false, onEnterPickMode: () => {}, onExitPickMode: () => {},
+      outline: {
+        isActive: true,
+        onClick: () => { colorEditTarget = 'fill'; openColorMenuAnimId = anim.id; renderAnimList(); },
+      },
+    });
+    const panel = document.createElement('div');
+    panel.className = 'color-tab-content';
+    panel.style.borderRadius = '0 6px 6px 6px';
     let outPreview = normalizeColorString(anim.color) || anim.color;
     let outOpacity = null;
     const outRow = appendHslColorPicker(panel, anim.color, (color, meta = {}) => {
@@ -20218,268 +19983,99 @@ function appendColorExpansion(parent, anim) {
       withUndo: true, fallbackHue: colorToHsl(anim.color).h,
       onPreviewChange(hex) { outPreview = hex; outOpacity?.setTrack(opacitySliderTrack(hex)); },
     });
-    appendDropperBtn(outRow, 'outline');
+    const isDropperActive = eyedropperTarget === 'outline' && eyedropperAnimId === anim.id;
+    const dropBtn = document.createElement('button');
+    dropBtn.className = 'eyedropper-btn' + (isDropperActive ? ' active' : '');
+    dropBtn.title = isDropperActive ? 'Click a canvas to sample color (Escape to cancel)' : 'Pick color from canvas';
+    dropBtn.innerHTML = DROPPER_SVG + (isDropperActive ? ' Sampling…' : ' Sample');
+    dropBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      if (isDropperActive) { deactivateEyedropper(); } else {
+        eyedropperTarget = 'outline'; eyedropperAnimId = anim.id; updateCursor();
+      }
+      renderAnimList();
+    });
+    outRow.appendChild(dropBtn);
     outOpacity = appendSliderRow(panel, 'Opacity', 0, 100, 1, Math.round(animOutlineOpacity(anim) * 100),
       v => `${Math.round(v)}%`, v => { anim.outlineOpacity = clamp(parseFloat(v) / 100, 0, 1); saveProject(); },
       false, { colorTrack: opacitySliderTrack(outPreview) });
     appendSliderRow(panel, 'Thickness', 0, 10, 1, anim.thickness ?? 2, v => `${Math.round(v)}`, v => {
       anim.thickness = parseInt(v, 10); saveProject();
     }, false, { valAlign: 'center' });
-
-  } else if (objectFillTab === 1) {
-    // ── Fill 1: fill color + opacity ──
-    // Cropped shape: show Lightness/Opacity/Uncrop instead of color picker
-    if (anim.croppedImageDataUrl) {
-      appendSliderRow(panel, 'Lightness', 0, 200, 1,
-        Math.round((anim.croppedImageLightness ?? 1.0) * 100),
-        v => `${Math.round(v)}%`, v => { anim.croppedImageLightness = parseFloat(v) / 100; saveProject(); draw(); },
-        false, { valAlign: 'center' });
-      appendSliderRow(panel, 'Opacity', 0, 100, 1,
-        Math.round(clamp(animFillOpacity(anim), 0, 1) * 100),
-        v => `${Math.round(v)}%`, v => { anim.fillOpacity = clamp(parseFloat(v) / 100, 0, 1); saveProject(); draw(); },
-        false, { valAlign: 'center' });
-      const _ucBtn = document.createElement('button');
-      _ucBtn.className = 'fill-style-btn';
-      _ucBtn.style.cssText = 'margin-top:4px;font-size:0.7rem;width:100%;';
-      _ucBtn.textContent = 'Uncrop';
-      _ucBtn.addEventListener('click', e => {
-        e.stopPropagation(); pushUndo();
-        anim.croppedImageDataUrl = null; anim._croppedImage = null;
-        saveProject(); renderAnimList(); draw();
-      });
-      panel.appendChild(_ucBtn);
-      root.appendChild(panel); parent.appendChild(root);
-      return;
-    }
-    const c1 = animFillColor(anim) || anim.color;
-    let c1Preview = normalizeColorString(c1) || c1;
-    let c1Opacity = null;
-    const c1Row = appendHslColorPicker(panel, c1, (color, meta = {}) => {
-      if (!sameColor(animFillColor(anim), color)) {
-        anim.fillColor = color;
-        if (!anim.fillStyle) anim.fillStyle = 'solid';
-        syncObjectFillToDetectedRegions(anim, {
-          fillColor: color,
-          fillOpacity: animFillOpacity(anim),
-          fillStyle: anim.fillStyle || 'solid',
-        });
-      }
-      saveProject(); if (meta.fromHueClick) renderAnimList(); draw();
-    }, {
-      withUndo: true, fallbackHue: colorToHsl(anim.color).h,
-      onPreviewChange(hex) { c1Preview = hex; c1Opacity?.setTrack(opacitySliderTrack(hex)); },
-    });
-    appendDropperBtn(c1Row, 'fill');
-    c1Opacity = appendSliderRow(panel, 'Opacity', 0, 100, 1, Math.round(animFillOpacity(anim) * 100),
-      v => `${Math.round(v)}%`, v => {
-        if (!animFillColor(anim)) { anim.fillColor = c1; if (!anim.fillStyle) anim.fillStyle = 'solid'; }
-        anim.fillOpacity = clamp(parseFloat(v) / 100, 0, 1);
-        syncObjectFillToDetectedRegions(anim, {
-          fillColor: anim.fillColor,
-          fillOpacity: anim.fillOpacity,
-          fillStyle: anim.fillStyle || 'solid',
-        });
-        saveProject();
-      }, !fillEnabled, { colorTrack: opacitySliderTrack(c1Preview) });
-
-  } else if (objectFillTab === 2) {
-    // ── Fill 2: second color for gradient or pattern ──
-    if (hasColor2) {
-      const c2Init = anim.gradientToColor || animFillColor(anim) || anim.color;
-      let c2Preview = normalizeColorString(c2Init) || c2Init;
-      let c2Opacity = null;
-      const c2Row = appendHslColorPicker(panel, c2Init, (color, meta = {}) => {
-        if (!sameColor(anim.gradientToColor, color)) anim.gradientToColor = color;
-        syncObjectFillToDetectedRegions(anim, { gradientToColor: anim.gradientToColor });
-        saveProject(); if (meta.fromHueClick) renderAnimList(); draw();
-      }, {
-        withUndo: true, fallbackHue: colorToHsl(animFillColor(anim) || anim.color).h,
-        onPreviewChange(hex) { c2Preview = hex; c2Opacity?.setTrack(opacitySliderTrack(hex)); },
-      });
-      appendDropperBtn(c2Row, 'gradientTo');
-      c2Opacity = appendSliderRow(panel, 'Opacity', 0, 100, 1, Math.round((anim.gradientToOpacity ?? 0) * 100),
-        v => `${Math.round(v)}%`, v => {
-          anim.gradientToOpacity = clamp(parseFloat(v) / 100, 0, 1);
-          syncObjectFillToDetectedRegions(anim, { gradientToOpacity: anim.gradientToOpacity });
-          saveProject();
-        },
-        false, { colorTrack: opacitySliderTrack(c2Preview) });
-    } else {
-      const note = document.createElement('div');
-      note.style.cssText = 'padding: 16px 10px; font-size: 0.7rem; color: #7f849c; text-align: center; line-height: 1.6;';
-      note.textContent = 'Switch to Gradient or Pattern in the Style tab to enable a second color.';
-      panel.appendChild(note);
-    }
-
-  } else {
-    // ── Style tab ──
-    const styleRow = document.createElement('div');
-    styleRow.className = 'fill-style-row';
-    const _acPatFam = isPattern || isCustomPattern;
-    [{ key: 'solid', title: 'Solid' }, { key: 'gradient', title: 'Gradient' }, { key: 'pattern', title: 'Pattern' }].forEach(({ key, title }) => {
-      const btn = document.createElement('button');
-      const _acIsAct = key === 'pattern' ? _acPatFam : fillStyle === key;
-      btn.className = 'fill-style-btn' + (_acIsAct ? ' active' : '');
-      btn.title = title;
-      btn.appendChild(makeFillStyleIcon(key));
-      btn.addEventListener('click', e => {
-        e.stopPropagation();
-        const _acNewStyle = key === 'pattern' ? (_acPatFam ? fillStyle : 'pattern') : key;
-        if (fillStyle !== _acNewStyle) {
-          pushUndo(); anim.fillStyle = _acNewStyle;
-          if (_acNewStyle === 'gradient') ensureGradientDefaults(anim);
-          if ((_acNewStyle === 'gradient' || _acNewStyle === 'pattern') && !anim.gradientToColor) {
-            anim.gradientToColor = animFillColor(anim) || anim.color;
-            if (!isFinite(anim.gradientToOpacity)) anim.gradientToOpacity = 0;
-          }
-          syncObjectFillToDetectedRegions(anim, {
-            fillColor: animFillColor(anim), fillOpacity: animFillOpacity(anim),
-            fillStyle: anim.fillStyle || 'solid', gradientToColor: anim.gradientToColor,
-            gradientToOpacity: anim.gradientToOpacity, gradientAngle: anim.gradientAngle,
-            patternType: anim.patternType, patternAngle: anim.patternAngle,
-            patternSpacing: anim.patternSpacing,
-            customPatternSourceId: anim.customPatternSourceId ?? null,
-            customPatternMode: anim.customPatternMode ?? 'mask',
-          });
-          saveProject(); renderAnimList(); draw();
-        }
-      });
-      styleRow.appendChild(btn);
-    });
-    panel.appendChild(styleRow);
-
-    if (isGradient) {
-      const wheelRow = document.createElement('div');
-      wheelRow.className = 'direction-wheel-row';
-      const lbl = document.createElement('span');
-      lbl.className = 'direction-wheel-label';
-      lbl.textContent = 'Direction';
-      wheelRow.appendChild(lbl);
-      appendDirectionWheel(wheelRow,
-        () => anim.gradientAngle ?? Math.PI / 4,
-        a => {
-          anim.gradientAngle = a;
-          syncObjectFillToDetectedRegions(anim, { gradientAngle: anim.gradientAngle });
-          draw();
-        });
-      panel.appendChild(wheelRow);
-    }
-
-    if (_acPatFam) {
-      const patternType = anim.patternType || 'lines';
-      const typeRow = document.createElement('div');
-      typeRow.className = 'fill-style-row';
-      typeRow.style.cssText = 'margin-top:4px;grid-template-columns:repeat(4,1fr);';
-      [{ key: 'lines', title: 'Lines' }, { key: 'dots', title: 'Dots' },
-       { key: 'crosshatch', title: 'Crosshatch' }, { key: 'custom', title: 'Custom' }].forEach(({ key, title }) => {
-        const btn = document.createElement('button');
-        const _acTypeAct = key === 'custom' ? isCustomPattern : (isPattern && patternType === key);
-        btn.className = 'fill-style-btn' + (_acTypeAct ? ' active' : '');
-        btn.title = title;
-        btn.appendChild(makeFillStyleIcon(key === 'custom' ? 'custom-pattern' : key));
-        btn.addEventListener('click', e => {
-          e.stopPropagation();
-          pushUndo();
-          if (key === 'custom') {
-            anim.fillStyle = 'custom-pattern';
-            if (!anim.gradientToColor) { anim.gradientToColor = animFillColor(anim) || anim.color; anim.gradientToOpacity = anim.gradientToOpacity ?? animFillOpacity(anim); }
-          } else {
-            anim.fillStyle = 'pattern'; anim.patternType = key;
-          }
-          syncObjectFillToDetectedRegions(anim, {
-            fillStyle: anim.fillStyle, patternType: anim.patternType,
-            gradientToColor: anim.gradientToColor, gradientToOpacity: anim.gradientToOpacity,
-          });
-          saveProject(); renderAnimList(); draw();
-        });
-        typeRow.appendChild(btn);
-      });
-      panel.appendChild(typeRow);
-
-      if (isPattern) {
-        const wheelRow = document.createElement('div');
-        wheelRow.className = 'direction-wheel-row';
-        const lbl = document.createElement('span');
-        lbl.className = 'direction-wheel-label'; lbl.textContent = 'Angle';
-        wheelRow.appendChild(lbl);
-        appendDirectionWheel(wheelRow, () => anim.patternAngle ?? 0, a => {
-          anim.patternAngle = a;
-          syncObjectFillToDetectedRegions(anim, { patternAngle: anim.patternAngle });
-          draw();
-        });
-        panel.appendChild(wheelRow);
-        appendSliderRow(panel, 'Spacing', 0.01, 0.5, 0.01, getPatternSpacingFrac(anim),
-          v => `${Math.round(v * 100)}%`, v => {
-            anim.patternSpacing = parseFloat(v);
-            syncObjectFillToDetectedRegions(anim, { patternSpacing: anim.patternSpacing });
-            saveProject(); draw();
-          });
-      }
-
-      if (isCustomPattern) {
-        const _acIsPickMode = customPatternPickMode?.animId === anim.id;
-        panel.appendChild(makeCustomPatternSourceRow({
-          getSourceId: () => anim.customPatternSourceId,
-          onSetSource: (id) => {
-            pushUndo(); anim.customPatternSourceId = id;
-            syncObjectFillToDetectedRegions(anim, { customPatternSourceId: id });
-            if (id) { const src = animations.find(a => a.id === id); if (src) { const sb = selectedObjectCanvasBounds(src); if (sb) { anim.patternAngle = (sb.right - sb.left) >= (sb.bottom - sb.top) ? 0 : Math.PI / 2; syncObjectFillToDetectedRegions(anim, { patternAngle: anim.patternAngle }); } } }
-            saveProject(); renderAnimList(); draw();
-          },
-          isPickMode: _acIsPickMode,
-          onEnterPickMode: () => {
-            customPatternPickMode = {
-              animId: anim.id,
-              onPick: (picked) => {
-                pushUndo(); anim.customPatternSourceId = picked.id;
-                if (picked.croppedImageDataUrl) { anim.fillOpacity = 1.0; syncObjectFillToDetectedRegions(anim, { fillOpacity: 1.0 }); }
-                syncObjectFillToDetectedRegions(anim, { customPatternSourceId: picked.id });
-                const sb = selectedObjectCanvasBounds(picked); if (sb) { anim.patternAngle = (sb.right - sb.left) >= (sb.bottom - sb.top) ? 0 : Math.PI / 2; syncObjectFillToDetectedRegions(anim, { patternAngle: anim.patternAngle }); }
-                saveProject();
-              }
-            };
-            renderAnimList(); draw();
-          },
-          onExitPickMode: () => { customPatternPickMode = null; renderAnimList(); draw(); }
-        }));
-
-        const cpModeRow = document.createElement('div');
-        cpModeRow.className = 'fill-style-row'; cpModeRow.style.marginTop = '4px';
-        const cpCurMode = anim.customPatternMode || 'mask';
-        [{ key: 'mask', title: 'Mask' }, { key: 'blend', title: 'Blend' }].forEach(({ key, title }) => {
-          const btn = document.createElement('button');
-          btn.className = 'fill-style-btn' + (cpCurMode === key ? ' active' : '');
-          btn.style.fontSize = '0.65rem'; btn.textContent = title;
-          btn.addEventListener('click', e => {
-            e.stopPropagation();
-            if ((anim.customPatternMode || 'mask') !== key) { pushUndo(); anim.customPatternMode = key; syncObjectFillToDetectedRegions(anim, { customPatternMode: key }); saveProject(); renderAnimList(); draw(); }
-          });
-          cpModeRow.appendChild(btn);
-        });
-        panel.appendChild(cpModeRow);
-
-        const cpWheelRow = document.createElement('div');
-        cpWheelRow.className = 'direction-wheel-row';
-        const cpWlbl = document.createElement('span');
-        cpWlbl.className = 'direction-wheel-label'; cpWlbl.textContent = 'Angle';
-        cpWheelRow.appendChild(cpWlbl);
-        appendDirectionWheel(cpWheelRow, () => anim.patternAngle ?? 0, a => {
-          anim.patternAngle = a;
-          syncObjectFillToDetectedRegions(anim, { patternAngle: anim.patternAngle });
-          draw();
-        });
-        panel.appendChild(cpWheelRow);
-        appendSliderRow(panel, 'Spacing', 0.01, 0.5, 0.01, getPatternSpacingFrac(anim),
-          v => `${Math.round(v * 100)}%`, v => {
-            anim.patternSpacing = parseFloat(v);
-            syncObjectFillToDetectedRegions(anim, { patternSpacing: anim.patternSpacing });
-            saveProject(); draw();
-          });
-      }
-    }
+    root.appendChild(panel);
+    parent.appendChild(root);
+    return;
   }
 
-  root.appendChild(panel);
+  // Cropped shape: show Lightness/Opacity/Uncrop instead of the fill-style section entirely.
+  if (anim.croppedImageDataUrl) {
+    const panel = document.createElement('div');
+    panel.className = 'color-tab-content fill-active';
+    appendSliderRow(panel, 'Lightness', 0, 200, 1,
+      Math.round((anim.croppedImageLightness ?? 1.0) * 100),
+      v => `${Math.round(v)}%`, v => { anim.croppedImageLightness = parseFloat(v) / 100; saveProject(); draw(); },
+      false, { valAlign: 'center' });
+    appendSliderRow(panel, 'Opacity', 0, 100, 1,
+      Math.round(clamp(animFillOpacity(anim), 0, 1) * 100),
+      v => `${Math.round(v)}%`, v => { anim.fillOpacity = clamp(parseFloat(v) / 100, 0, 1); saveProject(); draw(); },
+      false, { valAlign: 'center' });
+    const _ucBtn = document.createElement('button');
+    _ucBtn.className = 'fill-style-btn';
+    _ucBtn.style.cssText = 'margin-top:4px;font-size:0.7rem;width:100%;';
+    _ucBtn.textContent = 'Uncrop';
+    _ucBtn.addEventListener('click', e => {
+      e.stopPropagation(); pushUndo();
+      anim.croppedImageDataUrl = null; anim._croppedImage = null;
+      saveProject(); renderAnimList(); draw();
+    });
+    panel.appendChild(_ucBtn);
+    root.appendChild(panel);
+    parent.appendChild(root);
+    return;
+  }
+
+  if (animFillStyle(anim) === 'gradient') ensureGradientDefaults(anim);
+
+  renderFillStyleSection(root, {
+    get: () => anim,
+    set: fields => {
+      Object.assign(anim, fields);
+      syncObjectFillToDetectedRegions(anim, fields);
+    },
+    subTabGet: () => objectFillTab, subTabSet: tab => { objectFillTab = tab; },
+    dropperActive: which => eyedropperTarget === (which === 'fill' ? 'fill' : 'gradientTo') && eyedropperAnimId === anim.id,
+    dropperToggle: which => {
+      const key = which === 'fill' ? 'fill' : 'gradientTo';
+      if (eyedropperTarget === key && eyedropperAnimId === anim.id) { deactivateEyedropper(); }
+      else { eyedropperTarget = key; eyedropperAnimId = anim.id; updateCursor(); }
+    },
+    isPickMode: customPatternPickMode?.animId === anim.id,
+    onEnterPickMode: () => {
+      customPatternPickMode = {
+        animId: anim.id,
+        onPick: (picked) => {
+          const added = addCustomPatternSource(getCustomPatternSourceIds(anim), picked.id);
+          if (!added) return false;
+          pushUndo(); anim.customPatternSourceIds = added.ids;
+          if (added.isFirst) { anim.customPatternStretchX = 1; anim.customPatternStretchY = 1; anim.patternAngle = 0; }
+          if (picked.croppedImageDataUrl) { anim.fillOpacity = 1.0; syncObjectFillToDetectedRegions(anim, { fillOpacity: 1.0 }); }
+          syncObjectFillToDetectedRegions(anim, added.isFirst
+            ? { customPatternSourceIds: added.ids, customPatternStretchX: 1, customPatternStretchY: 1, patternAngle: 0 }
+            : { customPatternSourceIds: added.ids });
+          saveProject();
+          return added.ids.length < CUSTOM_PATTERN_MAX_SOURCES;
+        }
+      };
+      renderAnimList(); draw();
+    },
+    onExitPickMode: () => { customPatternPickMode = null; renderAnimList(); draw(); },
+    isRegionScoped: false,
+    outline: {
+      isActive: false,
+      onClick: () => { colorEditTarget = 'outline'; openColorMenuAnimId = anim.id; renderAnimList(); },
+    },
+  });
+
   parent.appendChild(root);
 }
 
@@ -20862,7 +20458,15 @@ function renderAnimThumbnail(anim, canvasEl, size = 48) {
     tctx.globalAlpha = 0.9; tctx.fillStyle = color; tctx.fill();
   } else {
     const loop = findLoopRange(anim);
-    if (fillCol && canFillAnim(anim)) {
+    const hasThumbCrop = anim.croppedImageDataUrl && anim._croppedImage?.complete && anim._croppedImage.naturalWidth;
+    // Custom-pattern tiles are built off the shared source-object snapshot (buildCustomPatternTile
+    // temporarily redirects the global ctx to an offscreen canvas), so the same helpers the main
+    // canvas uses in drawCurveCustomPattern work here unchanged — just fed the thumbnail's own
+    // clip path/bounds instead of the main canvas's.
+    const thumbPatternSrcIds = animFillStyle(anim) === 'custom-pattern' && anim.closed && findLoopRange(anim)
+      ? getCustomPatternSourceIds(anim) : [];
+    const thumbPatternTiles = thumbPatternSrcIds.length ? buildCustomPatternSourceTiles(thumbPatternSrcIds) : null;
+    if ((fillCol || hasThumbCrop) && canFillAnim(anim)) {
       tctx.beginPath();
       let started = false;
       let componentOpen = false;
@@ -20900,8 +20504,24 @@ function renderAnimThumbnail(anim, canvasEl, size = 48) {
         if (componentOpen) tctx.closePath();
       }
       if (started) {
-        tctx.fillStyle = fillCol; tctx.globalAlpha = fillAlpha;
-        try { tctx.fill('evenodd'); } catch (_) { tctx.fill(); }
+        const tBounds = { left: ox, right: ox + (maxRe - minRe) * ts, top: PX - oy - (maxIm - minIm) * ts, bottom: PX - oy };
+        if (thumbPatternTiles?.size) {
+          tctx.save();
+          try { tctx.clip('evenodd'); } catch (_) { tctx.clip(); }
+          const thumbSeed = Math.floor((anim.id ?? 0) * 997) >>> 0;
+          _applyCustomPatternMultiTile(tctx, thumbPatternTiles, thumbPatternSrcIds, tBounds, anim.patternAngle ?? 0, getPatternSpacingFrac(anim), fillAlpha,
+            anim.customPatternStretchX ?? 1, anim.customPatternStretchY ?? 1, thumbSeed);
+          tctx.restore();
+        } else if (hasThumbCrop) {
+          tctx.save();
+          try { tctx.clip('evenodd'); } catch (_) { tctx.clip(); }
+          tctx.globalAlpha = animFillOpacity(anim);
+          tctx.drawImage(anim._croppedImage, tBounds.left, tBounds.top, tBounds.right - tBounds.left, tBounds.bottom - tBounds.top);
+          tctx.restore();
+        } else {
+          tctx.fillStyle = fillCol; tctx.globalAlpha = fillAlpha;
+          try { tctx.fill('evenodd'); } catch (_) { tctx.fill(); }
+        }
       }
     }
     tctx.globalAlpha = 0.9;
@@ -21623,6 +21243,9 @@ function makeDetectedRegion(id, boundary, prior = null, curvesMap = null) {
     patternSpacing: prior?.patternSpacing,
     customPatternSourceId: prior?.customPatternSourceId ?? null,
     customPatternMode: prior?.customPatternMode ?? 'mask',
+    customPatternSourceIds: getCustomPatternSourceIds(prior),
+    customPatternStretchX: prior?.customPatternStretchX ?? 1,
+    customPatternStretchY: prior?.customPatternStretchY ?? 1,
     fill1Arcs: _fill1 ? _fill1.arcs : (prior?.fill1Arcs ?? null),
     fill2Arcs: _fill2 ? _fill2.arcs : (prior?.fill2Arcs ?? null),
     fill1Nodes: _fill1 ? _fill1.nodes : (prior?.fill1Nodes ?? null),
@@ -22530,6 +22153,9 @@ function detectObjectTopology(anim, { skipSpatialMigration = false } = {}) {
         nr.patternSpacing = _pr.patternSpacing;
         nr.customPatternSourceId = _pr.customPatternSourceId ?? null;
         nr.customPatternMode = _pr.customPatternMode ?? 'mask';
+        nr.customPatternSourceIds = getCustomPatternSourceIds(_pr);
+        nr.customPatternStretchX = _pr.customPatternStretchX ?? 1;
+        nr.customPatternStretchY = _pr.customPatternStretchY ?? 1;
         if (_isSplit) {
           nr.fill1Arcs = _fill1.arcs; nr.fill1Nodes = _fill1.nodes;
           nr.fill2Arcs = _fill2.arcs; nr.fill2Nodes = _fill2.nodes;
@@ -24321,6 +23947,29 @@ function getPatternSpacingFrac(obj) {
   return Math.max(0.01, Math.min(0.5, v));
 }
 
+const CUSTOM_PATTERN_MAX_SOURCES = 6;
+
+// customPatternSourceIds (array, up to 6) is the current format; customPatternSourceId (single,
+// legacy) is what old saved projects still have on disk — never migrated, same as every other
+// format extension in this file, so this just reads either shape uniformly.
+function getCustomPatternSourceIds(obj) {
+  if (Array.isArray(obj?.customPatternSourceIds) && obj.customPatternSourceIds.length) {
+    return obj.customPatternSourceIds.slice(0, CUSTOM_PATTERN_MAX_SOURCES);
+  }
+  return obj?.customPatternSourceId ? [obj.customPatternSourceId] : [];
+}
+
+// Cheap deterministic 2D hash (no external deps) — same (seed, i, j) always maps to the same
+// index, so a multi-source pattern looks randomly scattered but never flickers between redraws,
+// and never repeats as a visible block the way a pre-baked "random meta-tile" would.
+function hashCell2D(seed, i, j) {
+  let h = (seed | 0) ^ Math.imul(i | 0, 0x27d4eb2d) ^ Math.imul(j | 0, 0x165667b1);
+  h = Math.imul(h ^ (h >>> 15), 0x85ebca6b);
+  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
+  h ^= h >>> 16;
+  return h >>> 0;
+}
+
 function cropAnim(anim) {
   if (!isCroppableAnim(anim)) return;
   const bounds = selectedObjectCanvasBounds(anim);
@@ -24353,47 +24002,452 @@ function cropAnim(anim) {
   anim._croppedImage.src = anim.croppedImageDataUrl;
 }
 
-function _animPickLabel(a) {
-  const k = animKind(a);
-  return k.charAt(0).toUpperCase() + k.slice(1) + ' ' + (animations.indexOf(a) + 1);
+// Pure helper (no side effects) for adding a source to a multi-source list — callers persist
+// the result field however their own panel already does. isFirst tells the caller whether this
+// was the list's first source (the moment a fresh pick should reset rotation/stretch to a clean
+// default, same as the old single-source picker did), as opposed to adding a 4th/5th/6th source
+// to an already-configured pattern, where the user likely wants their existing rotation/stretch
+// kept.
+function addCustomPatternSource(existingIds, newId) {
+  const ids = existingIds.filter(id => id !== newId);
+  if (ids.length >= CUSTOM_PATTERN_MAX_SOURCES) return null;
+  ids.push(newId);
+  return { ids, isFirst: existingIds.length === 0 };
 }
 
-function makeCustomPatternSourceRow({ getSourceId, onSetSource, isPickMode, onEnterPickMode, onExitPickMode }) {
-  const row = document.createElement('div');
-  row.style.cssText = 'margin-top:6px;display:flex;align-items:center;gap:6px;flex-wrap:nowrap;';
+function makeCustomPatternSourceRow({ getSourceIds, onRemoveSource, isPickMode, onEnterPickMode, onExitPickMode }) {
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'margin-top:6px;display:flex;flex-direction:column;gap:4px;';
   const lbl = document.createElement('span');
-  lbl.style.cssText = 'font-size:0.7rem;color:#cdd6f4;min-width:44px;flex-shrink:0;';
-  lbl.textContent = 'Source';
-  row.appendChild(lbl);
-  if (isPickMode) {
-    const prompt = document.createElement('span');
-    prompt.style.cssText = 'flex:1;font-size:0.7rem;color:#89b4fa;font-style:italic;';
-    prompt.textContent = 'Click a tile below...';
-    const cancelBtn = document.createElement('button');
-    cancelBtn.textContent = 'Cancel';
-    cancelBtn.style.cssText = 'font-size:0.65rem;padding:2px 6px;background:#313244;color:#f38ba8;border:1px solid #585b70;border-radius:4px;cursor:pointer;flex-shrink:0;';
-    cancelBtn.addEventListener('click', e => { e.stopPropagation(); onExitPickMode(); });
-    row.appendChild(prompt); row.appendChild(cancelBtn);
-  } else {
-    const srcId = getSourceId();
-    const srcAnim = srcId ? animations.find(a => a.id === srcId) : null;
-    const nameSpan = document.createElement('span');
-    nameSpan.style.cssText = 'flex:1;font-size:0.7rem;color:#cdd6f4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
-    nameSpan.textContent = srcAnim ? (srcAnim.name || _animPickLabel(srcAnim)) : '(none)';
-    const pickBtn = document.createElement('button');
-    pickBtn.textContent = srcAnim ? 'Change' : 'Pick...';
-    pickBtn.style.cssText = 'font-size:0.65rem;padding:2px 6px;background:#313244;color:#cdd6f4;border:1px solid #585b70;border-radius:4px;cursor:pointer;flex-shrink:0;';
-    pickBtn.addEventListener('click', e => { e.stopPropagation(); onEnterPickMode(); });
-    row.appendChild(nameSpan); row.appendChild(pickBtn);
+  lbl.style.cssText = 'font-size:0.7rem;color:#cdd6f4;';
+  const sourceIds = getSourceIds();
+  lbl.textContent = `Sources (${sourceIds.length}/${CUSTOM_PATTERN_MAX_SOURCES})`;
+  wrap.appendChild(lbl);
+
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex;align-items:center;gap:6px;flex-wrap:wrap;';
+
+  for (const id of sourceIds) {
+    const srcAnim = animations.find(a => a.id === id);
+    const chip = document.createElement('div');
+    chip.style.cssText = 'position:relative;display:flex;align-items:center;justify-content:center;width:30px;height:30px;background:#313244;border:1px solid #585b70;border-radius:4px;flex-shrink:0;';
+    chip.title = srcAnim ? (srcAnim.name || objectLabel(srcAnim)) : '(missing — object was deleted)';
     if (srcAnim) {
-      const clrBtn = document.createElement('button');
-      clrBtn.textContent = '×'; clrBtn.title = 'Clear source';
-      clrBtn.style.cssText = 'font-size:0.8rem;padding:0 4px;background:#313244;color:#f38ba8;border:1px solid #585b70;border-radius:4px;cursor:pointer;flex-shrink:0;';
-      clrBtn.addEventListener('click', e => { e.stopPropagation(); onSetSource(null); });
-      row.appendChild(clrBtn);
+      const thumbCanvas = document.createElement('canvas');
+      thumbCanvas.style.cssText = 'width:26px;height:26px;border-radius:2px;';
+      chip.appendChild(thumbCanvas);
+      renderAnimThumbnail(srcAnim, thumbCanvas, 26);
+    } else {
+      const missing = document.createElement('span');
+      missing.style.cssText = 'font-size:0.7rem;color:#f38ba8;';
+      missing.textContent = '?';
+      chip.appendChild(missing);
+    }
+    const rmBtn = document.createElement('button');
+    rmBtn.textContent = '×'; rmBtn.title = 'Remove source';
+    rmBtn.style.cssText = 'position:absolute;top:-6px;right:-6px;width:14px;height:14px;line-height:12px;font-size:0.7rem;padding:0;background:#45475a;color:#f38ba8;border:1px solid #585b70;border-radius:50%;cursor:pointer;';
+    rmBtn.addEventListener('click', e => { e.stopPropagation(); onRemoveSource(id); });
+    chip.appendChild(rmBtn);
+    row.appendChild(chip);
+  }
+
+  if (isPickMode) {
+    // Picking stays open across multiple adds (see the two generic pick-completion sites) up to
+    // the 6-source cap, so there needs to be an explicit "stop here, keep what I picked" action —
+    // otherwise the only way out feels like reaching 6, and this button doubles as the only thing
+    // that clears customPatternPickMode, which also blocks normal canvas panning while active.
+    // "Cancel" only means discard when nothing's been picked yet; once you have sources, exiting
+    // keeps them (onExitPickMode never touches the picked list), so it reads as "Done" instead.
+    const hasAny = sourceIds.length > 0;
+    const prompt = document.createElement('span');
+    prompt.style.cssText = 'font-size:0.7rem;color:#89b4fa;font-style:italic;';
+    prompt.textContent = hasAny ? 'Click to add another, or press Done to finish...' : 'Click an object to add as a source...';
+    const doneBtn = document.createElement('button');
+    doneBtn.textContent = hasAny ? 'Done' : 'Cancel';
+    doneBtn.style.cssText = hasAny
+      ? 'font-size:0.65rem;padding:2px 6px;background:#89b4fa;color:#1e1e2e;border:none;border-radius:4px;cursor:pointer;flex-shrink:0;font-weight:600;'
+      : 'font-size:0.65rem;padding:2px 6px;background:#313244;color:#f38ba8;border:1px solid #585b70;border-radius:4px;cursor:pointer;flex-shrink:0;';
+    doneBtn.addEventListener('click', e => { e.stopPropagation(); onExitPickMode(); });
+    row.appendChild(prompt); row.appendChild(doneBtn);
+  } else if (sourceIds.length < CUSTOM_PATTERN_MAX_SOURCES) {
+    const addBtn = document.createElement('button');
+    addBtn.textContent = sourceIds.length ? '+ Add' : 'Pick...';
+    addBtn.style.cssText = 'font-size:0.65rem;padding:2px 6px;background:#313244;color:#cdd6f4;border:1px solid #585b70;border-radius:4px;cursor:pointer;flex-shrink:0;';
+    addBtn.addEventListener('click', e => { e.stopPropagation(); onEnterPickMode(); });
+    row.appendChild(addBtn);
+  }
+
+  wrap.appendChild(row);
+  return wrap;
+}
+
+// A single color-picker + opacity + dropper row, used for both Color 1 and Color 2 (and for
+// Solid's single, unlabeled color). `get`/`set` read/write whatever data object (region, anim, or
+// a region reached through a primitive panel) this call site is actually editing.
+function appendFillColorRow(container, { get, set, field, opacityField, dropperActive, dropperToggle, fallbackColor, defaultOpacity = 0.3 }) {
+  const DROPPER_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21l1.5-4.5L15.5 6l3 3L8 20.5z"/><path d="M18.5 6l1.5-1.5c.8-.8.8-2.2 0-3s-2.2-.8-3 0L15.5 3"/></svg>`;
+  const data = get();
+  const initColor = data[field] || fallbackColor || '#ffffff';
+  let preview = normalizeColorString(initColor) || initColor;
+  let opacityCtl = null;
+  const row = appendHslColorPicker(container, initColor, (color, meta = {}) => {
+    set({ [field]: color });
+    saveProject(); if (meta.fromHueClick) renderAnimList(); draw();
+  }, { withUndo: true, fallbackHue: colorToHsl(initColor).h,
+    onPreviewChange(hex) { preview = hex; opacityCtl?.setTrack(opacitySliderTrack(hex)); } });
+  const isActive = dropperActive();
+  const dropBtn = document.createElement('button');
+  dropBtn.className = 'eyedropper-btn' + (isActive ? ' active' : '');
+  dropBtn.title = isActive ? 'Click canvas to sample (Escape to cancel)' : 'Pick color from canvas';
+  dropBtn.innerHTML = DROPPER_SVG + (isActive ? ' Sampling…' : ' Sample');
+  dropBtn.addEventListener('click', e => { e.stopPropagation(); dropperToggle(); renderAnimList(); });
+  row.appendChild(dropBtn);
+  const rawOpacity = data[opacityField];
+  const initOpacity = isFinite(rawOpacity) ? clamp(rawOpacity, 0, 1) : defaultOpacity;
+  opacityCtl = appendSliderRow(container, 'Opacity', 0, 100, 1, Math.round(initOpacity * 100),
+    v => `${Math.round(v)}%`, v => {
+      set({ [opacityField]: clamp(parseFloat(v) / 100, 0, 1) });
+      saveProject(); draw();
+    }, false, { colorTrack: opacitySliderTrack(preview) });
+}
+
+// Boundary-arc picker for a contour-gradient region — pick which arcs of the region's own
+// boundary act as "Boundary 1" (from) and "Boundary 2" (to") for the contour blend. Region-scoped
+// only: a contour gradient needs a real detected region boundary to assign arcs on, which a plain
+// (never-topologized) object doesn't have.
+function renderContourBoundaryPicker(panel, { region, isSelecting, isGroupRegion, groupId, animId, onStartSelecting }) {
+  const arcSection = document.createElement('div');
+  arcSection.className = 'contour-arc-section';
+
+  if (isSelecting) {
+    const activeMode = contourSelectMode;
+    const sideColor = activeMode.side === 'b1' ? '#89b4fa' : '#cba6f7';
+    const sideLabel = activeMode.side === 'b1' ? 'Boundary 1' : 'Boundary 2';
+
+    const modeLabel = document.createElement('div');
+    modeLabel.className = 'contour-mode-label';
+    modeLabel.style.color = sideColor;
+    modeLabel.textContent = `Setting ${sideLabel}`;
+    arcSection.appendChild(modeLabel);
+
+    const countLabel = document.createElement('div');
+    countLabel.className = 'contour-mode-count';
+    const nNodes = activeMode.nodeIndices.length;
+    countLabel.textContent = activeMode.isCenterPoint
+      ? 'Center point selected'
+      : nNodes === 0
+        ? 'Click junction nodes on canvas (or the center point)'
+        : nNodes === 1
+          ? '1 node clicked — click the next junction (CCW) or same to close'
+          : `${nNodes} nodes clicked`;
+    arcSection.appendChild(countLabel);
+
+    const canSet = activeMode.isCenterPoint || nNodes >= 2;
+    const actionRow = document.createElement('div');
+    actionRow.className = 'contour-mode-actions';
+
+    const setBtn = document.createElement('button');
+    setBtn.className = 'contour-confirm-btn';
+    setBtn.textContent = 'Set';
+    setBtn.disabled = !canSet;
+    setBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      if (!canSet) return;
+      pushUndo();
+      const _cvm = getCurvesMapForContourMode();
+      const edges = contourModeEdgesForActiveSelection(region, activeMode, _cvm);
+      const _nodes = edges.length ? contourModeNodePositions(region, activeMode, _cvm) : null;
+      if (activeMode.side === 'b1') { region.fill1Arcs = edges.length ? edges : null; region.fill1Nodes = _nodes; }
+      else { region.fill2Arcs = edges.length ? edges : null; region.fill2Nodes = _nodes; }
+      contourSelectMode = null;
+      saveProject(); renderAnimList(); draw();
+    });
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'contour-cancel-btn';
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      contourSelectMode = null;
+      renderAnimList(); draw();
+    });
+
+    actionRow.append(setBtn, cancelBtn);
+    arcSection.appendChild(actionRow);
+  } else {
+    const heading = document.createElement('div');
+    heading.className = 'contour-arc-heading';
+    heading.textContent = 'Boundaries';
+    arcSection.appendChild(heading);
+
+    ['b1', 'b2'].forEach(side => {
+      const row = document.createElement('div');
+      row.className = 'contour-arc-row';
+      const arcs = side === 'b1' ? region.fill1Arcs : region.fill2Arcs;
+      const label = document.createElement('span');
+      label.className = 'contour-arc-label';
+      label.textContent = side === 'b1' ? 'Boundary 1' : 'Boundary 2';
+      const status = document.createElement('span');
+      status.className = 'contour-arc-status';
+      status.textContent = arcs?.length === 1 && arcs[0]?.isPoint ? 'point' : arcs?.length ? `${arcs.length} arc${arcs.length === 1 ? '' : 's'}` : 'auto';
+      const btn = document.createElement('button');
+      btn.className = `contour-set-btn ${side}`;
+      btn.textContent = 'Set';
+      btn.title = `Draw ${side === 'b1' ? 'Boundary 1' : 'Boundary 2'} on canvas`;
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        onStartSelecting?.();
+        contourSelectMode = {
+          regionId: region.id,
+          groupId: isGroupRegion ? groupId : null,
+          animId: isGroupRegion ? null : animId,
+          side, loopIndex: null, nodeIndices: []
+        };
+        renderAnimList(); draw();
+      });
+      row.append(label, status, btn);
+      arcSection.appendChild(row);
+    });
+  }
+
+  panel.appendChild(arcSection);
+}
+
+// The Style sub-tab's content once Gradient or Pattern has been chosen at the top level — sub-type
+// buttons plus whatever controls that sub-type needs. isRegionScoped gates the parts that need a
+// real detected region (Radial/Contour gradient sub-types, the blend bar, the boundary-arc
+// picker): a plain object's 'gradient' style uses a different, arc-endpoint-based mechanism
+// (gradientFromArcs/gradientToArcs) that has no region, no blend bar, and only ever draws linear.
+function renderFillStyleSubTab(panel, { get, set, isRegionScoped, contour }) {
+  const data = get();
+  const style = data.fillStyle || 'solid';
+  const isGradientFamily = style === 'gradient' || style === 'radial-gradient' || style === 'contour-gradient';
+  const isPatternFamily = style === 'pattern';
+
+  if (isGradientFamily) {
+    const subRow = document.createElement('div');
+    subRow.className = 'fill-style-row';
+    subRow.style.marginTop = '4px';
+    const subTypes = isRegionScoped
+      ? [{ key: 'gradient', title: 'Linear' }, { key: 'radial-gradient', title: 'Radial' }, { key: 'contour-gradient', title: 'Contour' }]
+      : [{ key: 'gradient', title: 'Linear' }];
+    subTypes.forEach(({ key, title }) => {
+      const btn = document.createElement('button');
+      btn.className = 'fill-style-btn' + (style === key ? ' active' : '');
+      btn.title = title;
+      btn.appendChild(makeFillStyleIcon(key));
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        if (style === key) return;
+        pushUndo();
+        const d = get();
+        const fields = { fillStyle: key };
+        if (!d.gradientToColor) { fields.gradientToColor = d.fillColor || '#ffffff'; fields.gradientToOpacity = isFinite(d.gradientToOpacity) ? d.gradientToOpacity : 0; }
+        set(fields);
+        saveProject(); renderAnimList(); draw();
+      });
+      subRow.appendChild(btn);
+    });
+    panel.appendChild(subRow);
+
+    if (isRegionScoped) {
+      const region = contour?.region ?? data;
+      if (region?.id != null) {
+        const { c1: bkC1, c2: bkC2 } = getGradKnobs(region);
+        const mkC = (hex, op) => { const rgb = parseColorToRgb(hex); return rgb ? `rgba(${rgb.r},${rgb.g},${rgb.b},${op})` : `rgba(128,128,128,${op})`; };
+        appendGradientBlendBar(panel,
+          bkC1, bkC2,
+          mkC(data.fillColor || '#888888', isFinite(data.fillOpacity) ? data.fillOpacity : 0.3),
+          mkC(data.gradientToColor || data.fillColor || '#888888', data.gradientToOpacity ?? 0),
+          (c1k, c2k) => { set({ gradC1Knobs: c1k, gradC2Knobs: c2k }); saveProject(); draw(); });
+      }
+    }
+
+    if (style === 'gradient') {
+      const wheelRow = document.createElement('div');
+      wheelRow.className = 'direction-wheel-row';
+      const lbl = document.createElement('span');
+      lbl.className = 'direction-wheel-label'; lbl.textContent = 'Direction';
+      wheelRow.appendChild(lbl);
+      appendDirectionWheel(wheelRow, () => get().gradientAngle ?? Math.PI / 4, a => { set({ gradientAngle: a }); draw(); });
+      panel.appendChild(wheelRow);
+    }
+
+    if (isRegionScoped && style === 'contour-gradient' && contour?.region?.boundary?.length) {
+      renderContourBoundaryPicker(panel, contour);
     }
   }
-  return row;
+
+  if (isPatternFamily) {
+    const patternType = data.patternType || 'lines';
+    const typeRow = document.createElement('div');
+    typeRow.className = 'fill-style-row';
+    typeRow.style.cssText = 'margin-top:4px;grid-template-columns:repeat(3,1fr);';
+    [{ key: 'lines', title: 'Lines' }, { key: 'dots', title: 'Dots' }, { key: 'crosshatch', title: 'Crosshatch' }].forEach(({ key, title }) => {
+      const btn = document.createElement('button');
+      btn.className = 'fill-style-btn' + (patternType === key ? ' active' : '');
+      btn.title = title;
+      btn.appendChild(makeFillStyleIcon(key));
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        if (patternType === key) return;
+        pushUndo();
+        set({ patternType: key });
+        saveProject(); renderAnimList(); draw();
+      });
+      typeRow.appendChild(btn);
+    });
+    panel.appendChild(typeRow);
+
+    const wheelRow = document.createElement('div');
+    wheelRow.className = 'direction-wheel-row';
+    const lbl = document.createElement('span');
+    lbl.className = 'direction-wheel-label'; lbl.textContent = 'Angle';
+    wheelRow.appendChild(lbl);
+    appendDirectionWheel(wheelRow, () => get().patternAngle ?? 0, a => { set({ patternAngle: a }); draw(); });
+    panel.appendChild(wheelRow);
+    appendSliderRow(panel, 'Spacing', 0.01, 0.5, 0.01, getPatternSpacingFrac(get()),
+      v => `${Math.round(v * 100)}%`, v => { set({ patternSpacing: parseFloat(v) }); saveProject(); draw(); });
+  }
+}
+
+// The whole Fill section: Solid | Gradient | Pattern | Custom as the first choice (replacing the
+// old design where Color 1 | Color 2 | Style was the first choice and the style picker lived
+// inside "Style"). Below that, conditionally: Solid shows one unlabeled color directly; Gradient
+// or Pattern show a Color 1 | Color 2 | Style tab bar (Style now holding just the sub-type and its
+// controls, since the family picker itself moved up); Custom shows its multi-source controls
+// directly, with no color tabs, since a custom-pattern fill uses each source's own appearance, not
+// a stored color.
+function renderFillStyleSection(container, opts) {
+  const {
+    get, set, ensureRegions,
+    subTabGet, subTabSet,
+    dropperActive, dropperToggle,
+    isPickMode, onEnterPickMode, onExitPickMode,
+    isRegionScoped = false, contour,
+    outline = null, // optional { isActive, onClick } — rendered as an extra peer button in the
+                     // same row, for panels (whole-object) that mix Outline into this same tab
+                     // bar rather than splitting it out at a higher level.
+  } = opts;
+
+  const data = get();
+  const style = data.fillStyle || 'solid';
+  const isGradientFamily = style === 'gradient' || style === 'radial-gradient' || style === 'contour-gradient';
+  const isPatternFamily = style === 'pattern';
+  const isCustomPattern = style === 'custom-pattern';
+
+  const topRow = document.createElement('div');
+  topRow.className = 'fill-style-row';
+  topRow.style.gridTemplateColumns = `repeat(${outline ? 5 : 4},1fr)`;
+
+  if (outline) {
+    const btn = document.createElement('button');
+    btn.className = 'fill-style-btn' + (outline.isActive ? ' active' : '');
+    btn.title = 'Outline';
+    btn.textContent = 'Outline';
+    btn.style.fontSize = '0.62rem';
+    btn.addEventListener('click', e => { e.stopPropagation(); outline.onClick(); });
+    topRow.appendChild(btn);
+  }
+
+  [
+    { key: 'solid', title: 'Solid' },
+    { key: 'gradient', title: 'Gradient' },
+    { key: 'pattern', title: 'Pattern' },
+    { key: 'custom-pattern', title: 'Custom' },
+  ].forEach(({ key, title }) => {
+    const isActive = !outline?.isActive && (key === 'solid' ? style === 'solid'
+      : key === 'gradient' ? isGradientFamily
+      : key === 'pattern' ? isPatternFamily
+      : isCustomPattern);
+    const btn = document.createElement('button');
+    btn.className = 'fill-style-btn' + (isActive ? ' active' : '');
+    btn.title = title;
+    btn.appendChild(makeFillStyleIcon(key));
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      if (isActive) return;
+      pushUndo();
+      ensureRegions?.();
+      const d = get();
+      const fields = { fillStyle: key };
+      if (key !== 'solid' && !d.gradientToColor) {
+        fields.gradientToColor = d.fillColor || '#ffffff';
+        fields.gradientToOpacity = isFinite(d.gradientToOpacity) ? d.gradientToOpacity : 0;
+      }
+      set(fields);
+      saveProject(); renderAnimList(); draw();
+    });
+    topRow.appendChild(btn);
+  });
+  container.appendChild(topRow);
+
+  if (outline?.isActive) return;
+
+  if (style === 'solid') {
+    appendFillColorRow(container, {
+      get, set, field: 'fillColor', opacityField: 'fillOpacity',
+      dropperActive: () => dropperActive('fill'), dropperToggle: () => dropperToggle('fill'),
+      fallbackColor: data.color,
+    });
+    return;
+  }
+
+  if (isCustomPattern) {
+    container.appendChild(makeCustomPatternSourceRow({
+      getSourceIds: () => getCustomPatternSourceIds(get()),
+      onRemoveSource: (id) => {
+        pushUndo();
+        set({ customPatternSourceIds: getCustomPatternSourceIds(get()).filter(x => x !== id) });
+        saveProject(); renderAnimList(); draw();
+      },
+      isPickMode, onEnterPickMode, onExitPickMode,
+    }));
+    const wheelRow = document.createElement('div');
+    wheelRow.className = 'direction-wheel-row';
+    const lbl = document.createElement('span');
+    lbl.className = 'direction-wheel-label'; lbl.textContent = 'Angle';
+    wheelRow.appendChild(lbl);
+    appendDirectionWheel(wheelRow, () => get().patternAngle ?? 0, a => { set({ patternAngle: a }); draw(); });
+    container.appendChild(wheelRow);
+    appendSliderRow(container, 'Spacing', 0.01, 0.5, 0.01, getPatternSpacingFrac(get()),
+      v => `${Math.round(v * 100)}%`, v => { set({ patternSpacing: parseFloat(v) }); saveProject(); draw(); });
+    return;
+  }
+
+  // Gradient or Pattern: Color 1 | Color 2 | Style sub-tabs
+  const subTab = subTabGet();
+  const tabBar = document.createElement('div');
+  tabBar.className = 'gradient-stop-tab-bar';
+  [{ tab: 1, label: 'Color 1' }, { tab: 2, label: 'Color 2' }, { tab: 3, label: 'Style' }].forEach(({ tab, label }) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'gradient-stop-tab' + (subTab === tab ? ' active' : '');
+    btn.textContent = label;
+    btn.addEventListener('click', e => { e.stopPropagation(); subTabSet(tab); renderAnimList(); });
+    tabBar.appendChild(btn);
+  });
+  container.appendChild(tabBar);
+
+  const panel = document.createElement('div');
+  panel.className = 'color-tab-content fill-active';
+  container.appendChild(panel);
+
+  if (subTab === 1) {
+    appendFillColorRow(panel, {
+      get, set, field: 'fillColor', opacityField: 'fillOpacity',
+      dropperActive: () => dropperActive('fill'), dropperToggle: () => dropperToggle('fill'),
+      fallbackColor: data.color,
+    });
+  } else if (subTab === 2) {
+    appendFillColorRow(panel, {
+      get, set, field: 'gradientToColor', opacityField: 'gradientToOpacity',
+      dropperActive: () => dropperActive('fill2'), dropperToggle: () => dropperToggle('fill2'),
+      fallbackColor: data.fillColor || data.color, defaultOpacity: 0,
+    });
+  } else {
+    renderFillStyleSubTab(panel, { get, set, isRegionScoped, contour });
+  }
 }
 
 function buildCustomPatternTile(sourceAnimId) {
@@ -24431,14 +24485,11 @@ function buildCustomPatternTile(sourceAnimId) {
   ctx = contentCtx;
   _buildingPatternTile = true;
   try {
-    for (const anim of animations) {
-      if (anim.id === sourceAnimId) continue;
-      if (!isAnimEffectivelyVisible(anim) || anim.inPlacementMode) continue;
-      const ab = selectedObjectCanvasBounds(anim);
-      if (!ab) continue;
-      if (ab.right < bounds.left || ab.left > bounds.right || ab.bottom < bounds.top || ab.top > bounds.bottom) continue;
-      drawCommittedAnimation(anim, { deferOverlay: true });
-    }
+    // Only the source itself — this used to also draw every other visible object whose bounding
+    // box overlapped the source's, which silently bleeds neighboring objects' colors into the
+    // tile whenever the source sits close to (or touching) something else on the canvas. A
+    // pattern source is meant to capture that one object's own appearance in isolation.
+    drawCommittedAnimation(srcAnim, { deferOverlay: true });
   } finally {
     _buildingPatternTile = false;
     ctx = savedCtx;
@@ -24446,47 +24497,6 @@ function buildCustomPatternTile(sourceAnimId) {
   }
 
   return contentCanvas;
-}
-
-function applyCustomPatternColorMapping(contentCanvas, color1, op1, color2, op2, mode) {
-  const tileW = contentCanvas.width;
-  const tileH = contentCanvas.height;
-  const tileCanvas = document.createElement('canvas');
-  tileCanvas.width = tileW;
-  tileCanvas.height = tileH;
-  const tileCtx = tileCanvas.getContext('2d');
-
-  if (mode === 'blend' && color2) {
-    const c1 = parseColorToRgb(color1) ?? { r: 0, g: 0, b: 0 };
-    const c2 = parseColorToRgb(color2) ?? { r: 255, g: 255, b: 255 };
-    const imgData = contentCanvas.getContext('2d').getImageData(0, 0, tileW, tileH);
-    const d = imgData.data;
-    const out = tileCtx.createImageData(tileW, tileH);
-    const od = out.data;
-    for (let i = 0; i < d.length; i += 4) {
-      const a = d[i + 3] / 255;
-      if (a < 0.01) { od[i + 3] = 0; continue; }
-      const lum = (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]) / 255;
-      od[i]     = Math.round(c1.r + (c2.r - c1.r) * lum);
-      od[i + 1] = Math.round(c1.g + (c2.g - c1.g) * lum);
-      od[i + 2] = Math.round(c1.b + (c2.b - c1.b) * lum);
-      od[i + 3] = Math.round(a * op2 * 255);
-    }
-    tileCtx.putImageData(out, 0, 0);
-  } else {
-    // Mask mode: all ink pixels become Color 2
-    const c2 = color2 ? parseColorToRgb(color2) : null;
-    if (c2) {
-      tileCtx.fillStyle = rgbaCss(c2, op2);
-      tileCtx.fillRect(0, 0, tileW, tileH);
-      tileCtx.globalCompositeOperation = 'destination-in';
-      tileCtx.drawImage(contentCanvas, 0, 0);
-    } else {
-      tileCtx.drawImage(contentCanvas, 0, 0);
-    }
-  }
-
-  return tileCanvas;
 }
 
 function drawRegionPattern(ctx, region, curvesMap, opacity) {
@@ -24621,47 +24631,68 @@ function drawCurvePattern(anim) {
   ctx.restore();
 }
 
-function _applyCustomPatternTile(drawCtx, tileCanvas, bounds, angle, spacingFrac, opacity = 1) {
+// Builds each distinct source's rendered bitmap once (buildCustomPatternTile is the expensive
+// part — it redraws the source object to an offscreen canvas), so a multi-source pattern costs
+// at most CUSTOM_PATTERN_MAX_SOURCES renders per draw, never one render per grid cell. Scoped to
+// a single call — not cached across frames — so there's no invalidation logic to get wrong; it
+// just rebuilds each frame the same way a single-source pattern already did before this.
+function buildCustomPatternSourceTiles(sourceIds) {
+  const tiles = new Map();
+  for (const id of sourceIds) {
+    if (tiles.has(id)) continue;
+    const tile = buildCustomPatternTile(id);
+    if (tile) tiles.set(id, tile);
+  }
+  return tiles;
+}
+
+// Draws the shape's fill as a grid of independently-picked tiles rather than one native repeat —
+// createPattern can only repeat a single fixed image, and a pre-baked "random meta-tile" would
+// still be visibly periodic at the meta-tile's own size. Instead every grid cell independently
+// picks one of the sources via a deterministic hash of its (i,j) position (see hashCell2D) — same
+// cell always picks the same source (stable across redraws, no flicker), but there's no repeating
+// block anywhere, since every cell across the whole fill is independently determined.
+function _applyCustomPatternMultiTile(drawCtx, tiles, sourceIds, bounds, angle, spacingFrac, opacity, stretchX, stretchY, seed) {
+  if (!sourceIds.length || !tiles.size) return;
   const boundsW = bounds.right - bounds.left, boundsH = bounds.bottom - bounds.top;
-  // Scale X and Y independently from the object's own current width/height (not a single
-  // diagonal-derived scalar) so a side-handle drag that stretches only one axis stretches the
-  // tile along that same axis, instead of nudging the tile size uniformly in both directions.
-  // A uniform/corner resize still scales both axes together since width and height grow together.
-  const targetSizeX = Math.max(2 * devicePixelRatio, spacingFrac * boundsW);
-  const targetSizeY = Math.max(2 * devicePixelRatio, spacingFrac * boundsH);
-  const sx = tileCanvas.width > 0 ? targetSizeX / tileCanvas.width : 1;
-  const sy = tileCanvas.height > 0 ? targetSizeY / tileCanvas.height : 1;
-  const pattern = drawCtx.createPattern(tileCanvas, 'repeat');
-  if (!pattern) return;
-  const angleDeg = angle * 180 / Math.PI;
-  // createPattern tiles from the canvas's fixed (0,0) origin by default — anchor it to the
-  // object's own center instead (recomputed fresh from live bounds every frame) so the tiling
-  // rotates/scales about the shape and pans/moves/resizes with it, instead of staying nailed
-  // to a canvas-space position while the clip shape moves independently over it.
+  // Same isotropic-baseline-plus-stretch reconstruction as the old single-tile renderer (see
+  // resize-drag stretch tracking) — the grid cell size starts undistorted regardless of the
+  // shape's raw aspect ratio, and only an explicit resize-drag stretches it.
+  const refW = stretchX > 1e-9 ? boundsW / stretchX : boundsW;
+  const refH = stretchY > 1e-9 ? boundsH / stretchY : boundsH;
+  const baseSize = Math.max(1e-6, Math.hypot(refW, refH) / 2);
+  const cellW = Math.max(2 * devicePixelRatio, spacingFrac * baseSize * stretchX);
+  const cellH = Math.max(2 * devicePixelRatio, spacingFrac * baseSize * stretchY);
   const cx = (bounds.left + bounds.right) / 2, cy = (bounds.top + bounds.bottom) / 2;
-  pattern.setTransform(new DOMMatrix().translateSelf(cx, cy).rotateSelf(angleDeg).scaleSelf(sx, sy));
-  drawCtx.fillStyle = pattern;
+  const cosA = Math.cos(angle), sinA = Math.sin(angle);
+  const diagHalf = Math.hypot(boundsW, boundsH) / 2;
+  const steps = Math.ceil(diagHalf / Math.max(1, Math.min(cellW, cellH))) + 2;
+  drawCtx.save();
   drawCtx.globalAlpha = opacity;
-  drawCtx.fillRect(bounds.left - 2, bounds.top - 2, bounds.right - bounds.left + 4, bounds.bottom - bounds.top + 4);
+  for (let i = -steps; i <= steps; i++) {
+    for (let j = -steps; j <= steps; j++) {
+      const lx = i * cellW, ly = j * cellH;
+      const px = cx + lx * cosA - ly * sinA;
+      const py = cy + lx * sinA + ly * cosA;
+      if (px < bounds.left - cellW || px > bounds.right + cellW || py < bounds.top - cellH || py > bounds.bottom + cellH) continue;
+      const idx = hashCell2D(seed, i, j) % sourceIds.length;
+      const tile = tiles.get(sourceIds[idx]);
+      if (!tile) continue;
+      drawCtx.save();
+      drawCtx.translate(px, py);
+      drawCtx.rotate(angle);
+      drawCtx.drawImage(tile, -cellW / 2, -cellH / 2, cellW, cellH);
+      drawCtx.restore();
+    }
+  }
+  drawCtx.restore();
 }
 
 function drawRegionCustomPattern(drawCtx, region, curvesMap, opacity) {
-  const sourceId = region.customPatternSourceId;
-  if (!sourceId) return;
-  const srcAnim = animations.find(a => a.id === sourceId);
-  const contentCanvas = buildCustomPatternTile(sourceId);
-  if (!contentCanvas) return;
-  const isCroppedSrc = !!(srcAnim?.croppedImageDataUrl);
-  let tileCanvas;
-  if (isCroppedSrc) {
-    tileCanvas = contentCanvas;
-  } else {
-    const color1 = region.fillColor;
-    const color2 = region.gradientToColor;
-    const op2 = region.gradientToOpacity ?? opacity;
-    const mode = region.customPatternMode || 'mask';
-    tileCanvas = applyCustomPatternColorMapping(contentCanvas, color1, opacity, color2, op2, mode);
-  }
+  const sourceIds = getCustomPatternSourceIds(region);
+  if (!sourceIds.length) return;
+  const tiles = buildCustomPatternSourceTiles(sourceIds);
+  if (!tiles.size) return;
   const bounds = computeRegionCanvasBounds(region, curvesMap);
   if (!bounds) return;
 
@@ -24670,37 +24701,19 @@ function drawRegionCustomPattern(drawCtx, region, curvesMap, opacity) {
   addRegionBoundaryToPathLike(drawCtx, region.boundary, curvesMap);
   drawCtx.clip();
 
-  if (!isCroppedSrc) {
-    const color1 = region.fillColor;
-    if (color1) {
-      const c1 = parseColorToRgb(color1);
-      if (c1) { drawCtx.fillStyle = rgbaCss(c1, opacity); drawCtx.globalAlpha = 1; drawCtx.fill(); }
-    }
-  }
-
-  _applyCustomPatternTile(drawCtx, tileCanvas, bounds, region.patternAngle ?? 0, getPatternSpacingFrac(region), isCroppedSrc ? opacity : 1);
+  const seed = Math.floor((region.id ?? 0) * 997) >>> 0;
+  _applyCustomPatternMultiTile(drawCtx, tiles, sourceIds, bounds, region.patternAngle ?? 0, getPatternSpacingFrac(region), opacity,
+    region.customPatternStretchX ?? 1, region.customPatternStretchY ?? 1, seed);
   drawCtx.restore();
 }
 
 function drawCurveCustomPattern(anim) {
   if (!animFillColor(anim) || !anim.closed || !findLoopRange(anim)) return;
-  const sourceId = anim.customPatternSourceId;
-  if (!sourceId) return;
-  const srcAnim = animations.find(a => a.id === sourceId);
-  const contentCanvas = buildCustomPatternTile(sourceId);
-  if (!contentCanvas) return;
+  const sourceIds = getCustomPatternSourceIds(anim);
+  if (!sourceIds.length) return;
+  const tiles = buildCustomPatternSourceTiles(sourceIds);
+  if (!tiles.size) return;
   const opacity = animFillOpacity(anim);
-  const isCroppedSrc = !!(srcAnim?.croppedImageDataUrl);
-  let tileCanvas;
-  if (isCroppedSrc) {
-    tileCanvas = contentCanvas;
-  } else {
-    const color1 = animFillColor(anim);
-    const color2 = anim.gradientToColor;
-    const op2 = anim.gradientToOpacity ?? opacity;
-    const mode = anim.customPatternMode || 'mask';
-    tileCanvas = applyCustomPatternColorMapping(contentCanvas, color1, opacity, color2, op2, mode);
-  }
   const bounds = selectedObjectCanvasBounds(anim);
   if (!bounds) return;
 
@@ -24709,13 +24722,9 @@ function drawCurveCustomPattern(anim) {
   if (!addCurveFillPath(ctx, anim, true)) { ctx.restore(); return; }
   ctx.clip();
 
-  if (!isCroppedSrc) {
-    const color1 = animFillColor(anim);
-    const c1 = parseColorToRgb(color1);
-    if (c1) { ctx.fillStyle = rgbaCss(c1, opacity); ctx.globalAlpha = 1; ctx.fill(); }
-  }
-
-  _applyCustomPatternTile(ctx, tileCanvas, bounds, anim.patternAngle ?? 0, getPatternSpacingFrac(anim), isCroppedSrc ? opacity : 1);
+  const seed = Math.floor((anim.id ?? 0) * 997) >>> 0;
+  _applyCustomPatternMultiTile(ctx, tiles, sourceIds, bounds, anim.patternAngle ?? 0, getPatternSpacingFrac(anim), opacity,
+    anim.customPatternStretchX ?? 1, anim.customPatternStretchY ?? 1, seed);
   ctx.restore();
 }
 
@@ -26173,8 +26182,10 @@ function appendAnimTrayTile(tilesEl, anim, { label = '', child = true, singleOnl
     if (Date.now() < suppressTileClickUntil) return;
     if (customPatternPickMode) {
       if (customPatternPickMode.animId === anim.id) return; // can't pick self
-      customPatternPickMode.onPick(anim);
-      customPatternPickMode = null;
+      // onPick returns true while there's still room for more sources — stays in pick mode so
+      // multiple objects can be added one after another without re-clicking "+ Add" each time.
+      const keepPicking = customPatternPickMode.onPick(anim);
+      if (!keepPicking) customPatternPickMode = null;
       renderAnimList(); draw(); updateCursor();
       return;
     }
@@ -27669,7 +27680,6 @@ function renderAnimListLegacy() {
   const _animKindStr = animKind(anim);
   const _isCvtCircle = isPrimitiveAnim(anim) && (_animKindStr === 'circle' || _animKindStr === 'ellipse');
   const _isCvtRectTri = isPrimitiveAnim(anim) && (_animKindStr === 'rectangle' || _animKindStr === 'triangle');
-  const _isCvtPolygon = !isPrimitiveAnim(anim) && !!anim._isPolygon;
   const _isCvtPrimitive = isPrimitiveAnim(anim);
 
   if (_isCvtCircle) {
@@ -27736,7 +27746,7 @@ function renderAnimListLegacy() {
     detailEl.appendChild(_cvtWrap);
   }
 
-  if (_isCvtRectTri || _isCvtPolygon) {
+  if (_isCvtRectTri) {
     const _cvtWrap2 = document.createElement('div');
     _cvtWrap2.style.cssText = 'padding:8px;border-bottom:1px solid #1e1e2e;';
     const _cvtBtn2 = document.createElement('button');
@@ -27745,12 +27755,7 @@ function renderAnimListLegacy() {
     _cvtBtn2.addEventListener('click', e => {
       e.stopPropagation();
       pushUndo();
-      if (_isCvtRectTri) {
-        convertPrimitiveToPath(anim, false);
-      } else {
-        anim._isPolygon = false;
-        detectObjectTopology(anim);
-      }
+      convertPrimitiveToPath(anim, false);
       _enterArcEditAfterConvert(anim);
       saveProject(); renderAnimList(); draw();
     });
@@ -27817,6 +27822,8 @@ function renderAnimListLegacy() {
       patternSpacing: anim.patternSpacing,
       customPatternSourceId: anim.customPatternSourceId ?? null,
       customPatternMode: anim.customPatternMode ?? 'mask',
+      customPatternSourceIds: getCustomPatternSourceIds(anim),
+      customPatternStretchX: anim.customPatternStretchX ?? 1, customPatternStretchY: anim.customPatternStretchY ?? 1,
     });
     saveProject();
   }
@@ -27915,22 +27922,6 @@ function renderAnimListLegacy() {
   } else {
     // ── Regions tab ──
 
-    const _FILL_DROPPER_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21l1.5-4.5L15.5 6l3 3L8 20.5z"/><path d="M18.5 6l1.5-1.5c.8-.8.8-2.2 0-3s-2.2-.8-3 0L15.5 3"/></svg>`;
-    const _appendFillDropper = (row, targetKey, regionId) => {
-      const _isActive = eyedropperTarget === targetKey && eyedropperAnimId === anim.id && eyedropperRegionId === regionId;
-      const _db = document.createElement('button');
-      _db.className = 'eyedropper-btn' + (_isActive ? ' active' : '');
-      _db.title = _isActive ? 'Click a canvas to sample color (Escape to cancel)' : 'Pick color from canvas';
-      _db.innerHTML = _FILL_DROPPER_SVG + (_isActive ? ' Sampling…' : ' Sample');
-      _db.addEventListener('click', e => {
-        e.stopPropagation();
-        if (_isActive) { deactivateEyedropper(); }
-        else { eyedropperTarget = targetKey; eyedropperAnimId = anim.id; eyedropperRegionId = regionId; eyedropperCurveId = null; updateCursor(); }
-        renderAnimList();
-      });
-      row.appendChild(_db);
-    };
-
     // Cropped image fill — show Lightness + Opacity + Uncrop instead of normal fill controls.
     // Hoisted above the primitive/regions split below: cropping was generalized past primitives
     // (see isCroppableAnim), so this needs to apply the same way regardless of which branch this
@@ -27961,372 +27952,71 @@ function renderAnimListLegacy() {
     }
 
     if (_isCvtPrimitive) {
-      // Primitive shape fill: Color 1 | Color 2 | Style sub-tabs
+      // Primitive shape fill — shared Fill section (Solid | Gradient | Pattern | Custom, plus
+      // whatever sub-content that choice needs). Region-scoped: a primitive's non-solid style
+      // always ensures anim.regions[0] exists first, so it gets the full Radial/Contour +
+      // blend-bar treatment, same as a region reached directly through the Regions tab.
       const _fillWrap = document.createElement('div');
       _fillWrap.style.cssText = 'display:flex;flex-direction:column;gap:6px;';
-
-      const _primStyle = animFillStyle(anim);
-      const _primIsGradFam = _primStyle === 'gradient' || _primStyle === 'contour-gradient' || _primStyle === 'radial-gradient';
-      const _primIsCustomPat = _primStyle === 'custom-pattern';
-      const _primHasC2 = _primIsGradFam || _primStyle === 'pattern' || _primIsCustomPat;
 
       // Lock to Style sub-tab while in contour boundary select mode. Region ids are per-object
       // sequence numbers, not globally unique, so animId must also match the current object.
       if (contourSelectMode?.animId === anim.id && contourSelectMode?.regionId === anim.regions?.[0]?.id) regionFillSubTab = 3;
 
-      // Sub-tab bar: Color 1 | Color 2 | Style
-      const _primSubBar = document.createElement('div');
-      _primSubBar.className = 'color-tab-bar';
-      ['Color 1', 'Color 2', 'Style'].forEach((t, idx) => {
-        const _sb = document.createElement('button');
-        _sb.type = 'button';
-        _sb.className = 'color-tab' + (regionFillSubTab === idx + 1 ? ' active' : '');
-        _sb.textContent = t;
-        _sb.style.cssText = 'flex:1;padding:4px 6px;font-size:0.65rem;';
-        _sb.addEventListener('click', e => { e.stopPropagation(); regionFillSubTab = idx + 1; renderAnimList(); });
-        _primSubBar.appendChild(_sb);
+      renderFillStyleSection(_fillWrap, {
+        get: () => anim,
+        set: fields => { Object.assign(anim, fields); syncObjectFillToDetectedRegions(anim, fields); },
+        ensureRegions: () => {
+          if (anim.regions?.length) return;
+          detectObjectTopology(anim);
+          syncObjectFillToDetectedRegions(anim, {
+            fillColor: anim.fillColor, fillOpacity: animFillOpacity(anim),
+            fillStyle: anim.fillStyle, gradientToColor: anim.gradientToColor,
+            gradientToOpacity: anim.gradientToOpacity ?? 0,
+            gradientAngle: anim.gradientAngle,
+            patternType: anim.patternType, patternAngle: anim.patternAngle,
+            patternSpacing: anim.patternSpacing,
+            gradC1Knobs: anim.gradC1Knobs, gradC2Knobs: anim.gradC2Knobs,
+            customPatternSourceId: anim.customPatternSourceId ?? null,
+            customPatternMode: anim.customPatternMode ?? 'mask',
+            customPatternSourceIds: getCustomPatternSourceIds(anim),
+            customPatternStretchX: anim.customPatternStretchX ?? 1, customPatternStretchY: anim.customPatternStretchY ?? 1,
+          });
+        },
+        subTabGet: () => regionFillSubTab, subTabSet: tab => { regionFillSubTab = tab; },
+        dropperActive: which => eyedropperTarget === (which === 'fill' ? 'fill' : 'gradientTo') && eyedropperAnimId === anim.id && eyedropperRegionId == null,
+        dropperToggle: which => {
+          const key = which === 'fill' ? 'fill' : 'gradientTo';
+          if (eyedropperTarget === key && eyedropperAnimId === anim.id && eyedropperRegionId == null) { deactivateEyedropper(); }
+          else { eyedropperTarget = key; eyedropperAnimId = anim.id; eyedropperRegionId = null; eyedropperCurveId = null; updateCursor(); }
+        },
+        isPickMode: customPatternPickMode?.animId === anim.id,
+        onEnterPickMode: () => {
+          customPatternPickMode = {
+            animId: anim.id,
+            onPick: (picked) => {
+              const added = addCustomPatternSource(getCustomPatternSourceIds(anim), picked.id);
+              if (!added) return false;
+              pushUndo(); anim.customPatternSourceIds = added.ids;
+              if (added.isFirst) { anim.customPatternStretchX = 1; anim.customPatternStretchY = 1; anim.patternAngle = 0; }
+              if (picked.croppedImageDataUrl) { anim.fillOpacity = 1.0; syncObjectFillToDetectedRegions(anim, { fillOpacity: 1.0 }); }
+              syncObjectFillToDetectedRegions(anim, added.isFirst
+                ? { customPatternSourceIds: added.ids, customPatternStretchX: 1, customPatternStretchY: 1, patternAngle: 0 }
+                : { customPatternSourceIds: added.ids });
+              saveProject();
+              return added.ids.length < CUSTOM_PATTERN_MAX_SOURCES;
+            }
+          };
+          renderAnimList(); draw();
+        },
+        onExitPickMode: () => { customPatternPickMode = null; renderAnimList(); draw(); },
+        isRegionScoped: true,
+        contour: {
+          region: anim.regions?.[0], isSelecting: contourSelectMode?.animId === anim.id && contourSelectMode?.regionId === anim.regions?.[0]?.id,
+          isGroupRegion: false, groupId: null, animId: anim.id,
+          onStartSelecting: () => { regionFillSubTab = 3; },
+        },
       });
-      _fillWrap.appendChild(_primSubBar);
-
-      // Write fields to both anim and its regions (no-op when regions empty)
-      const _primSync = (fields) => {
-        Object.assign(anim, fields);
-        syncObjectFillToDetectedRegions(anim, fields);
-      };
-      // Create regions for non-solid fills if they don't exist yet, then sync all fill data
-      const _primEnsureRegions = () => {
-        if (anim.regions?.length) return;
-        detectObjectTopology(anim);
-        syncObjectFillToDetectedRegions(anim, {
-          fillColor: anim.fillColor, fillOpacity: animFillOpacity(anim),
-          fillStyle: anim.fillStyle, gradientToColor: anim.gradientToColor,
-          gradientToOpacity: anim.gradientToOpacity ?? 0,
-          gradientAngle: anim.gradientAngle,
-          patternType: anim.patternType, patternAngle: anim.patternAngle,
-          patternSpacing: anim.patternSpacing,
-          gradC1Knobs: anim.gradC1Knobs, gradC2Knobs: anim.gradC2Knobs,
-          customPatternSourceId: anim.customPatternSourceId ?? null,
-          customPatternMode: anim.customPatternMode ?? 'mask',
-        });
-      };
-
-      if (regionFillSubTab === 1) {
-        // Color 1
-        const _c1Init = anim.fillColor || anim.color;
-        let _c1Prev = normalizeColorString(_c1Init) || _c1Init;
-        let _c1Op = null;
-        const _c1Row = appendHslColorPicker(_fillWrap, _c1Init, (color, meta = {}) => {
-          _primSync({ fillColor: color });
-          saveProject(); if (meta.fromHueClick) renderAnimList(); draw();
-        }, { withUndo: true, fallbackHue: colorToHsl(_c1Init).h,
-          onPreviewChange(hex) { _c1Prev = hex; _c1Op?.setTrack(opacitySliderTrack(hex)); } });
-        _appendFillDropper(_c1Row, 'fill', null);
-        _c1Op = appendSliderRow(_fillWrap, 'Opacity', 0, 100, 1,
-          Math.round(clamp(animFillOpacity(anim), 0, 1) * 100),
-          v => `${Math.round(v)}%`, v => {
-            _primSync({ fillOpacity: clamp(parseFloat(v) / 100, 0, 1) });
-            saveProject(); draw();
-          }, false, { colorTrack: opacitySliderTrack(_c1Prev) });
-
-      } else if (regionFillSubTab === 2) {
-        // Color 2 — always editable; takes effect when style is gradient or pattern
-        // Pin gradientToColor and gradientToOpacity on first open so Color 2 doesn't follow Color 1 changes.
-        if (!anim.gradientToColor) anim.gradientToColor = anim.fillColor || anim.color;
-        if (anim.gradientToOpacity == null) anim.gradientToOpacity = animFillOpacity(anim);
-        saveProject();
-        const _c2Init = anim.gradientToColor;
-        let _c2Prev = normalizeColorString(_c2Init) || _c2Init;
-        let _c2Op = null;
-        const _c2Row = appendHslColorPicker(_fillWrap, _c2Init, (color, meta = {}) => {
-          _primSync({ gradientToColor: color });
-          saveProject(); if (meta.fromHueClick) renderAnimList(); draw();
-        }, { withUndo: true, fallbackHue: colorToHsl(anim.fillColor || anim.color).h,
-          onPreviewChange(hex) { _c2Prev = hex; _c2Op?.setTrack(opacitySliderTrack(hex)); } });
-        _appendFillDropper(_c2Row, 'gradientTo', null);
-        _c2Op = appendSliderRow(_fillWrap, 'Opacity', 0, 100, 1,
-          Math.round(clamp(anim.gradientToOpacity ?? animFillOpacity(anim), 0, 1) * 100),
-          v => `${Math.round(v)}%`, v => {
-            _primSync({ gradientToOpacity: clamp(parseFloat(v) / 100, 0, 1) });
-            saveProject(); draw();
-          }, false, { colorTrack: opacitySliderTrack(_c2Prev) });
-
-      } else {
-        // Style
-        const _pStyleRow = document.createElement('div');
-        _pStyleRow.className = 'fill-style-row';
-        const _pIsPatFam = _primStyle === 'pattern' || _primIsCustomPat;
-        [{ key: 'solid', title: 'Solid' }, { key: 'gradient', title: 'Gradient' }, { key: 'pattern', title: 'Pattern' }].forEach(({ key, title }) => {
-          const _fsb = document.createElement('button');
-          const _isAct = key === 'gradient' ? _primIsGradFam : (key === 'pattern' ? _pIsPatFam : _primStyle === key);
-          _fsb.className = 'fill-style-btn' + (_isAct ? ' active' : '');
-          _fsb.title = title;
-          _fsb.appendChild(makeFillStyleIcon(key));
-          _fsb.addEventListener('click', e => {
-            e.stopPropagation();
-            const _newStyle = key === 'gradient' ? (_primIsGradFam ? _primStyle : 'gradient') :
-              (key === 'pattern' ? (_pIsPatFam ? _primStyle : 'pattern') : key);
-            if (_primStyle !== _newStyle) {
-              pushUndo();
-              anim.fillStyle = _newStyle;
-              if (_newStyle !== 'solid' && !anim.gradientToColor) {
-                anim.gradientToColor = anim.fillColor || anim.color;
-                if (!isFinite(anim.gradientToOpacity)) anim.gradientToOpacity = 0;
-              }
-              // Pattern overlay needs a visible Color 2 opacity
-              if (_newStyle === 'pattern' && !(anim.gradientToOpacity > 0)) {
-                anim.gradientToOpacity = animFillOpacity(anim);
-              }
-              if (_newStyle === 'solid') {
-                anim.regions = []; anim._topoSplitCurves = null;
-              } else {
-                _primEnsureRegions();
-                syncObjectFillToDetectedRegions(anim, { fillStyle: _newStyle,
-                  gradientToColor: anim.gradientToColor, gradientToOpacity: anim.gradientToOpacity ?? 0 });
-              }
-              saveProject(); renderAnimList(); draw();
-            }
-          });
-          _pStyleRow.appendChild(_fsb);
-        });
-        _fillWrap.appendChild(_pStyleRow);
-
-        // Gradient sub-types: Linear | Radial | Contour
-        if (_primIsGradFam) {
-          const _pGradRow = document.createElement('div');
-          _pGradRow.className = 'fill-style-row';
-          _pGradRow.style.marginTop = '4px';
-          [{ key: 'gradient', title: 'Linear' }, { key: 'radial-gradient', title: 'Radial' }, { key: 'contour-gradient', title: 'Contour' }].forEach(({ key, title }) => {
-            const _gsb = document.createElement('button');
-            _gsb.className = 'fill-style-btn' + (_primStyle === key ? ' active' : '');
-            _gsb.title = title;
-            _gsb.appendChild(makeFillStyleIcon(key));
-            _gsb.addEventListener('click', e => {
-              e.stopPropagation();
-              if (_primStyle !== key) {
-                pushUndo(); anim.fillStyle = key;
-                if (!anim.gradientToColor) { anim.gradientToColor = anim.fillColor || anim.color; if (!isFinite(anim.gradientToOpacity)) anim.gradientToOpacity = 0; }
-                _primEnsureRegions();
-                syncObjectFillToDetectedRegions(anim, { fillStyle: key });
-                saveProject(); renderAnimList(); draw();
-              }
-            });
-            _pGradRow.appendChild(_gsb);
-          });
-          _fillWrap.appendChild(_pGradRow);
-
-          // Gradient blend bar
-          if (anim.regions?.length) {
-            const _pReg = anim.regions[0];
-            const { c1: _bkC1, c2: _bkC2 } = getGradKnobs(_pReg);
-            const _bkMkC = (hex, op) => { const _rgb = parseColorToRgb(hex); return _rgb ? `rgba(${_rgb.r},${_rgb.g},${_rgb.b},${op})` : `rgba(128,128,128,${op})`; };
-            appendGradientBlendBar(_fillWrap,
-              _bkC1, _bkC2,
-              _bkMkC(anim.fillColor || anim.color || '#888888', anim.fillOpacity ?? 0.3),
-              _bkMkC(anim.gradientToColor || anim.fillColor || anim.color || '#888888', anim.gradientToOpacity ?? 0),
-              (c1k, c2k) => {
-                anim.gradC1Knobs = c1k; anim.gradC2Knobs = c2k;
-                syncObjectFillToDetectedRegions(anim, { gradC1Knobs: c1k, gradC2Knobs: c2k });
-                saveProject(); draw();
-              });
-          }
-
-          // Direction wheel (linear gradient only)
-          if (_primStyle === 'gradient') {
-            const _pWRow = document.createElement('div');
-            _pWRow.className = 'direction-wheel-row';
-            const _pWLbl = document.createElement('span'); _pWLbl.className = 'direction-wheel-label'; _pWLbl.textContent = 'Direction';
-            _pWRow.appendChild(_pWLbl);
-            appendDirectionWheel(_pWRow,
-              () => (anim.regions?.[0]?.gradientAngle ?? anim.gradientAngle ?? Math.PI / 4),
-              a => { _primSync({ gradientAngle: a }); draw(); });
-            _fillWrap.appendChild(_pWRow);
-          }
-
-          // Boundary assignment (contour gradient only)
-          const _primReg = anim.regions?.[0];
-          if (_primStyle === 'contour-gradient' && _primReg?.boundary?.length) {
-            const _pArcSec = document.createElement('div');
-            _pArcSec.className = 'contour-arc-section';
-            const _pIsSelecting = contourSelectMode?.animId === anim.id && contourSelectMode?.regionId === _primReg.id;
-            if (_pIsSelecting) {
-              const _pCm = contourSelectMode;
-              const _pSideColor = _pCm.side === 'b1' ? '#89b4fa' : '#cba6f7';
-              const _pSideLabel = _pCm.side === 'b1' ? 'Boundary 1' : 'Boundary 2';
-              const _pModeLbl = document.createElement('div');
-              _pModeLbl.className = 'contour-mode-label';
-              _pModeLbl.style.color = _pSideColor;
-              _pModeLbl.textContent = `Setting ${_pSideLabel}`;
-              _pArcSec.appendChild(_pModeLbl);
-              const _pCntLbl = document.createElement('div');
-              _pCntLbl.className = 'contour-mode-count';
-              const _pNNodes = _pCm.nodeIndices.length;
-              _pCntLbl.textContent = _pCm.isCenterPoint ? 'Center point selected'
-                : _pNNodes === 0 ? 'Click junction nodes on canvas (or the center point)'
-                : _pNNodes === 1 ? '1 node clicked — click the next junction (CCW) or same to close'
-                : `${_pNNodes} nodes clicked`;
-              _pArcSec.appendChild(_pCntLbl);
-              const _pCanSet = _pCm.isCenterPoint || _pNNodes >= 2;
-              const _pActRow = document.createElement('div');
-              _pActRow.className = 'contour-mode-actions';
-              const _pSetBtn = document.createElement('button');
-              _pSetBtn.className = 'contour-confirm-btn';
-              _pSetBtn.textContent = 'Set';
-              _pSetBtn.disabled = !_pCanSet;
-              _pSetBtn.addEventListener('click', e => {
-                e.stopPropagation();
-                if (!_pCanSet) return;
-                pushUndo();
-                const _pCvm = getCurvesMapForContourMode();
-                const _pEdges = contourModeEdgesForActiveSelection(_primReg, _pCm, _pCvm);
-                const _pNodes = _pEdges.length ? contourModeNodePositions(_primReg, _pCm, _pCvm) : null;
-                if (_pCm.side === 'b1') { _primReg.fill1Arcs = _pEdges.length ? _pEdges : null; _primReg.fill1Nodes = _pNodes; }
-                else { _primReg.fill2Arcs = _pEdges.length ? _pEdges : null; _primReg.fill2Nodes = _pNodes; }
-                contourSelectMode = null;
-                saveProject(); renderAnimList(); draw();
-              });
-              const _pCancelBtn = document.createElement('button');
-              _pCancelBtn.className = 'contour-cancel-btn';
-              _pCancelBtn.textContent = 'Cancel';
-              _pCancelBtn.addEventListener('click', e => {
-                e.stopPropagation();
-                contourSelectMode = null;
-                renderAnimList(); draw();
-              });
-              _pActRow.append(_pSetBtn, _pCancelBtn);
-              _pArcSec.appendChild(_pActRow);
-            } else {
-              const _pBHdr = document.createElement('div');
-              _pBHdr.className = 'contour-arc-heading';
-              _pBHdr.textContent = 'Boundaries';
-              _pArcSec.appendChild(_pBHdr);
-              ['b1', 'b2'].forEach(side => {
-                const _pBRow = document.createElement('div');
-                _pBRow.className = 'contour-arc-row';
-                const _pArcs = side === 'b1' ? _primReg.fill1Arcs : _primReg.fill2Arcs;
-                const _pBLbl = document.createElement('span');
-                _pBLbl.className = 'contour-arc-label';
-                _pBLbl.textContent = side === 'b1' ? 'Boundary 1' : 'Boundary 2';
-                const _pBStatus = document.createElement('span');
-                _pBStatus.className = 'contour-arc-status';
-                _pBStatus.textContent = _pArcs?.length === 1 && _pArcs[0]?.isPoint ? 'point'
-                  : _pArcs?.length ? `${_pArcs.length} arc${_pArcs.length === 1 ? '' : 's'}` : 'auto';
-                const _pBBtn = document.createElement('button');
-                _pBBtn.className = `contour-set-btn ${side}`;
-                _pBBtn.textContent = 'Set';
-                _pBBtn.title = `Draw ${side === 'b1' ? 'Boundary 1' : 'Boundary 2'} on canvas`;
-                _pBBtn.addEventListener('click', e => {
-                  e.stopPropagation();
-                  regionFillSubTab = 3;
-                  contourSelectMode = { regionId: _primReg.id, groupId: null, animId: anim.id, side, loopIndex: null, nodeIndices: [] };
-                  renderAnimList(); draw();
-                });
-                _pBRow.append(_pBLbl, _pBStatus, _pBBtn);
-                _pArcSec.appendChild(_pBRow);
-              });
-            }
-            _fillWrap.appendChild(_pArcSec);
-          }
-        }
-
-        // Pattern + Custom Pattern sub-type controls
-        if (_pIsPatFam) {
-          const _patType = anim.regions?.[0]?.patternType || anim.patternType || 'lines';
-          const _pPatRow = document.createElement('div');
-          _pPatRow.className = 'fill-style-row';
-          _pPatRow.style.cssText = 'margin-top:4px;grid-template-columns:repeat(4,1fr);';
-          [{ key: 'lines', title: 'Lines' }, { key: 'dots', title: 'Dots' },
-           { key: 'crosshatch', title: 'Crosshatch' }, { key: 'custom', title: 'Custom' }].forEach(({ key, title }) => {
-            const _pb = document.createElement('button');
-            const _pbAct = key === 'custom' ? _primIsCustomPat : (_primStyle === 'pattern' && _patType === key);
-            _pb.className = 'fill-style-btn' + (_pbAct ? ' active' : '');
-            _pb.title = title;
-            _pb.appendChild(makeFillStyleIcon(key === 'custom' ? 'custom-pattern' : key));
-            _pb.addEventListener('click', e => {
-              e.stopPropagation(); pushUndo();
-              if (key === 'custom') {
-                anim.fillStyle = 'custom-pattern';
-                if (!anim.gradientToColor) { anim.gradientToColor = anim.fillColor || anim.color; anim.gradientToOpacity = anim.gradientToOpacity ?? animFillOpacity(anim); }
-                _primEnsureRegions();
-                syncObjectFillToDetectedRegions(anim, { fillStyle: 'custom-pattern', gradientToColor: anim.gradientToColor, gradientToOpacity: anim.gradientToOpacity });
-              } else {
-                anim.fillStyle = 'pattern'; anim.patternType = key;
-                _primSync({ patternType: key, fillStyle: 'pattern' });
-              }
-              saveProject(); renderAnimList(); draw();
-            });
-            _pPatRow.appendChild(_pb);
-          });
-          _fillWrap.appendChild(_pPatRow);
-
-          if (_primStyle === 'pattern') {
-            const _pPWRow = document.createElement('div');
-            _pPWRow.className = 'direction-wheel-row';
-            _pPWRow.style.marginTop = '4px';
-            const _pPWLbl = document.createElement('span'); _pPWLbl.className = 'direction-wheel-label'; _pPWLbl.textContent = 'Direction';
-            _pPWRow.appendChild(_pPWLbl);
-            appendDirectionWheel(_pPWRow,
-              () => (anim.regions?.[0]?.patternAngle ?? anim.patternAngle ?? 0),
-              a => { _primSync({ patternAngle: a }); draw(); });
-            _fillWrap.appendChild(_pPWRow);
-            appendSliderRow(_fillWrap, 'Spacing', 0.01, 0.5, 0.01, getPatternSpacingFrac(anim.regions?.[0] ?? anim),
-              v => `${Math.round(v * 100)}%`, v => { _primSync({ patternSpacing: parseFloat(v) }); saveProject(); draw(); },
-              false, { valAlign: 'center' });
-          }
-
-          if (_primIsCustomPat) {
-            const _mpIsPickMode = customPatternPickMode?.animId === anim.id;
-            _fillWrap.appendChild(makeCustomPatternSourceRow({
-              getSourceId: () => anim.customPatternSourceId,
-              onSetSource: (id) => {
-                pushUndo(); anim.customPatternSourceId = id; _primSync({ customPatternSourceId: id });
-                if (id) { const src = animations.find(a => a.id === id); if (src) { const sb = selectedObjectCanvasBounds(src); if (sb) { anim.patternAngle = (sb.right - sb.left) >= (sb.bottom - sb.top) ? 0 : Math.PI / 2; _primSync({ patternAngle: anim.patternAngle }); } } }
-                saveProject(); renderAnimList(); draw();
-              },
-              isPickMode: _mpIsPickMode,
-              onEnterPickMode: () => {
-                customPatternPickMode = {
-                  animId: anim.id,
-                  onPick: (picked) => {
-                    pushUndo(); anim.customPatternSourceId = picked.id; _primSync({ customPatternSourceId: picked.id });
-                    if (picked.croppedImageDataUrl) { anim.fillOpacity = 1.0; _primSync({ fillOpacity: 1.0 }); }
-                    const sb = selectedObjectCanvasBounds(picked); if (sb) { anim.patternAngle = (sb.right - sb.left) >= (sb.bottom - sb.top) ? 0 : Math.PI / 2; _primSync({ patternAngle: anim.patternAngle }); }
-                    saveProject();
-                  }
-                };
-                renderAnimList(); draw();
-              },
-              onExitPickMode: () => { customPatternPickMode = null; renderAnimList(); draw(); }
-            }));
-
-            const _cpModeRow = document.createElement('div');
-            _cpModeRow.className = 'fill-style-row'; _cpModeRow.style.marginTop = '4px';
-            const _cpCurMode = anim.customPatternMode || 'mask';
-            [{ key: 'mask', title: 'Mask' }, { key: 'blend', title: 'Blend' }].forEach(({ key, title }) => {
-              const _mb = document.createElement('button');
-              _mb.className = 'fill-style-btn' + (_cpCurMode === key ? ' active' : '');
-              _mb.style.fontSize = '0.65rem'; _mb.textContent = title;
-              _mb.addEventListener('click', e => {
-                e.stopPropagation();
-                if (_cpCurMode !== key) { pushUndo(); anim.customPatternMode = key; _primSync({ customPatternMode: key }); saveProject(); renderAnimList(); draw(); }
-              });
-              _cpModeRow.appendChild(_mb);
-            });
-            _fillWrap.appendChild(_cpModeRow);
-
-            const _cpWRow = document.createElement('div');
-            _cpWRow.className = 'direction-wheel-row'; _cpWRow.style.marginTop = '4px';
-            const _cpWLbl = document.createElement('span'); _cpWLbl.className = 'direction-wheel-label'; _cpWLbl.textContent = 'Angle';
-            _cpWRow.appendChild(_cpWLbl);
-            appendDirectionWheel(_cpWRow,
-              () => (anim.regions?.[0]?.patternAngle ?? anim.patternAngle ?? 0),
-              a => { _primSync({ patternAngle: a }); draw(); });
-            _fillWrap.appendChild(_cpWRow);
-            appendSliderRow(_fillWrap, 'Spacing', 0.01, 0.5, 0.01, getPatternSpacingFrac(anim.regions?.[0] ?? anim),
-              v => `${Math.round(v * 100)}%`, v => { _primSync({ patternSpacing: parseFloat(v) }); saveProject(); draw(); },
-              false, { valAlign: 'center' });
-          }
-        }
-      }
 
       _dtContent.appendChild(_fillWrap);
     } else {
@@ -28343,336 +28033,66 @@ function renderAnimListLegacy() {
       const _activeReg = _selRegObjs[0] ?? _regions[0];
       const _applyTargets = _selRegObjs.length > 0 ? _selRegObjs : [_regions[0]];
 
+      // Give a freshly-detected region some initial fill color so the renderer never skips it —
+      // prefer an existing sibling region's color so the default isn't jarring.
+      if (!_activeReg.fillColor) {
+        const _sib = _regions.find(r => r !== _activeReg && r.fillColor);
+        if (_sib) {
+          _activeReg.fillColor = _sib.fillColor;
+          if (!isFinite(_activeReg.fillOpacity) || _activeReg.fillOpacity <= 0) _activeReg.fillOpacity = _sib.fillOpacity ?? 0.3;
+        } else {
+          const _dc = normalizeColorString(globalSettings.defaultColor);
+          const _dh = _dc ? colorToHsl(_dc).h : 0;
+          _activeReg.fillColor = hslToHex(_dh, 100, 50);
+          if (!isFinite(_activeReg.fillOpacity) || _activeReg.fillOpacity <= 0) _activeReg.fillOpacity = 0.3;
+        }
+        saveProject();
+      }
+
       const _fillWrap = document.createElement('div');
       _fillWrap.style.cssText = 'display:flex;flex-direction:column;gap:6px;';
-
-      const _fillStyle = _activeReg.fillStyle || 'solid';
-      const _hasColor2 = _fillStyle !== 'solid';
-
-      // Disagreement detection for multi-select
-      const _multiSel = _selRegObjs.length > 1;
-      const _initFillOpacity = _activeReg.fillOpacity ?? 0.3;
-      const _mixedFillOp = _multiSel && !_selRegObjs.every(r => (r.fillOpacity ?? 0.3) === _initFillOpacity);
 
       // Lock to Style sub-tab while in contour boundary select mode. Region ids are per-object
       // sequence numbers, not globally unique, so animId must also match the current object.
       if (contourSelectMode?.animId === anim.id && contourSelectMode?.regionId === _activeReg.id) regionFillSubTab = 3;
-      // Sub-tabs: Color 1 | Color 2 | Style
-      const _subBar = document.createElement('div');
-      _subBar.className = 'color-tab-bar';
-      ['Color 1', 'Color 2', 'Style'].forEach((t, idx) => {
-        const _sb = document.createElement('button');
-        _sb.type = 'button';
-        _sb.className = 'color-tab' + (regionFillSubTab === idx + 1 ? ' active' : '');
-        _sb.textContent = t;
-        _sb.style.cssText = 'flex:1;padding:4px 6px;font-size:0.65rem;';
-        _sb.disabled = (idx === 1 && !_hasColor2);
-        _sb.addEventListener('click', e => { e.stopPropagation(); regionFillSubTab = idx + 1; renderAnimList(); });
-        _subBar.appendChild(_sb);
-      });
-      _fillWrap.appendChild(_subBar);
 
-      const _applyReg = updates => { _applyTargets.forEach(r => Object.assign(r, updates)); };
-
-      if (regionFillSubTab === 1) {
-        // Color 1
-        if (!_activeReg.fillColor) {
-          // Prefer an existing sibling region's color so the default isn't jarring
-          const _sib = _regions.find(r => r !== _activeReg && r.fillColor);
-          if (_sib) {
-            _activeReg.fillColor = _sib.fillColor;
-            if (!isFinite(_activeReg.fillOpacity) || _activeReg.fillOpacity <= 0) _activeReg.fillOpacity = _sib.fillOpacity ?? 0.3;
-          } else {
-            const _dc = normalizeColorString(globalSettings.defaultColor);
-            const _dh = _dc ? colorToHsl(_dc).h : 0;
-            _activeReg.fillColor = hslToHex(_dh, 100, 50);
-            if (!isFinite(_activeReg.fillOpacity) || _activeReg.fillOpacity <= 0) _activeReg.fillOpacity = 0.3;
-          }
-          saveProject();
-        }
-        let _c1Prev = normalizeColorString(_activeReg.fillColor) || _activeReg.fillColor;
-        let _c1Op = null;
-        const _c1Row = appendHslColorPicker(_fillWrap, _activeReg.fillColor, (color, meta = {}) => {
-          _applyReg({ fillColor: color });
-          saveProject(); if (meta.fromHueClick) renderAnimList(); draw();
-        }, { withUndo: true, fallbackHue: colorToHsl(_activeReg.fillColor).h,
-          onPreviewChange(hex) { _c1Prev = hex; _c1Op?.setTrack(opacitySliderTrack(hex)); } });
-        _appendFillDropper(_c1Row, 'region-fill', _activeReg.id);
-        _c1Op = appendSliderRow(_fillWrap, 'Opacity', 0, 100, 1, Math.round(_initFillOpacity * 100),
-          v => `${Math.round(v)}%`, v => { _applyReg({ fillOpacity: clamp(parseFloat(v) / 100, 0, 1) }); saveProject(); draw(); },
-          false, { colorTrack: opacitySliderTrack(_c1Prev), mixed: _mixedFillOp });
-
-      } else if (regionFillSubTab === 2) {
-        // Color 2
-        if (!_hasColor2) {
-          const _no2 = document.createElement('div');
-          _no2.style.cssText = 'padding:12px 4px;font-size:0.7rem;color:#6c7086;text-align:center;';
-          _no2.textContent = 'Switch to Gradient or Pattern in Style tab.';
-          _fillWrap.appendChild(_no2);
-        } else {
-          const _c2Init = _activeReg.gradientToColor || _activeReg.fillColor || anim.color;
-          const _initGradOp = _activeReg.gradientToOpacity ?? 0;
-          const _mixedGradOp = _multiSel && !_selRegObjs.every(r => (r.gradientToOpacity ?? 0) === _initGradOp);
-          let _c2Prev = normalizeColorString(_c2Init) || _c2Init;
-          let _c2Op = null;
-          const _c2Row = appendHslColorPicker(_fillWrap, _c2Init, (color, meta = {}) => {
-            _applyReg({ gradientToColor: color });
-            saveProject(); if (meta.fromHueClick) renderAnimList(); draw();
-          }, { withUndo: true, fallbackHue: colorToHsl(_activeReg.fillColor || anim.color).h,
-            onPreviewChange(hex) { _c2Prev = hex; _c2Op?.setTrack(opacitySliderTrack(hex)); } });
-          _appendFillDropper(_c2Row, 'region-fill2', _activeReg.id);
-          _c2Op = appendSliderRow(_fillWrap, 'Opacity', 0, 100, 1, Math.round(_initGradOp * 100),
-            v => `${Math.round(v)}%`, v => { _applyReg({ gradientToOpacity: clamp(parseFloat(v) / 100, 0, 1) }); saveProject(); draw(); },
-            false, { colorTrack: opacitySliderTrack(_c2Prev), mixed: _mixedGradOp });
-        }
-
-      } else {
-        // Style
-        const _isGradFam = _fillStyle === 'gradient' || _fillStyle === 'contour-gradient' || _fillStyle === 'radial-gradient';
-        const _mrIsPatFam = _fillStyle === 'pattern' || _fillStyle === 'custom-pattern';
-        const _styleRow = document.createElement('div');
-        _styleRow.className = 'fill-style-row';
-        [{ key: 'solid', title: 'Solid' }, { key: 'gradient', title: 'Gradient' }, { key: 'pattern', title: 'Pattern' }].forEach(({ key, title }) => {
-          const _fsb = document.createElement('button');
-          const _isActive = key === 'gradient' ? _isGradFam : (key === 'pattern' ? _mrIsPatFam : _fillStyle === key);
-          _fsb.className = 'fill-style-btn' + (_isActive ? ' active' : '');
-          _fsb.title = title;
-          _fsb.appendChild(makeFillStyleIcon(key));
-          _fsb.addEventListener('click', e => {
-            e.stopPropagation();
-            const _newStyle = key === 'gradient' ? (_isGradFam ? _fillStyle : 'gradient') :
-              (key === 'pattern' ? (_mrIsPatFam ? _fillStyle : 'pattern') : key);
-            if (_fillStyle !== _newStyle) {
-              pushUndo(); _applyReg({ fillStyle: _newStyle });
-              if (_newStyle !== 'solid' && !_activeReg.gradientToColor) _applyReg({ gradientToColor: _activeReg.fillColor || anim.color, gradientToOpacity: 0 });
-              saveProject(); renderAnimList(); draw();
-            }
-          });
-          _styleRow.appendChild(_fsb);
-        });
-        _fillWrap.appendChild(_styleRow);
-
-        // Gradient sub-type: Linear | Contour
-        if (_isGradFam) {
-          const _subRow = document.createElement('div');
-          _subRow.className = 'fill-style-row';
-          _subRow.style.marginTop = '4px';
-          [{ key: 'gradient', title: 'Linear' }, { key: 'radial-gradient', title: 'Radial' }, { key: 'contour-gradient', title: 'Contour' }].forEach(({ key, title }) => {
-            const _gsb = document.createElement('button');
-            _gsb.className = 'fill-style-btn' + (_fillStyle === key ? ' active' : '');
-            _gsb.title = title;
-            _gsb.appendChild(makeFillStyleIcon(key));
-            _gsb.addEventListener('click', e => {
-              e.stopPropagation();
-              if (_fillStyle !== key) {
-                pushUndo(); _applyReg({ fillStyle: key });
-                if (!_activeReg.gradientToColor) _applyReg({ gradientToColor: _activeReg.fillColor || anim.color, gradientToOpacity: 0 });
-                saveProject(); renderAnimList(); draw();
-              }
-            });
-            _subRow.appendChild(_gsb);
-          });
-          _fillWrap.appendChild(_subRow);
-        }
-
-        if (_isGradFam) {
-          const { c1: _bkC1, c2: _bkC2 } = getGradKnobs(_activeReg);
-          const _bkMkC = (hex, op) => {
-            const _rgb = parseColorToRgb(hex);
-            return _rgb ? `rgba(${_rgb.r},${_rgb.g},${_rgb.b},${op})` : `rgba(128,128,128,${op})`;
-          };
-          const _bkC1hex = _activeReg.fillColor || anim.color || '#888888';
-          const _bkC2hex = _activeReg.gradientToColor || _activeReg.fillColor || anim.color || '#888888';
-          appendGradientBlendBar(_fillWrap,
-            _bkC1, _bkC2,
-            _bkMkC(_bkC1hex, _activeReg.fillOpacity ?? 0.3),
-            _bkMkC(_bkC2hex, _activeReg.gradientToOpacity ?? 0),
-            (c1k, c2k) => { _applyReg({ gradC1Knobs: c1k, gradC2Knobs: c2k }); });
-        }
-
-        if (_fillStyle === 'gradient') {
-          const _wRow = document.createElement('div');
-          _wRow.className = 'direction-wheel-row';
-          const _wLbl = document.createElement('span'); _wLbl.className = 'direction-wheel-label'; _wLbl.textContent = 'Direction';
-          _wRow.appendChild(_wLbl);
-          appendDirectionWheel(_wRow, () => _activeReg.gradientAngle ?? Math.PI / 4, a => { _applyReg({ gradientAngle: a }); draw(); });
-          _fillWrap.appendChild(_wRow);
-        }
-
-        if (_mrIsPatFam) {
-          const _patType = _activeReg.patternType || 'lines';
-          const _patRow = document.createElement('div');
-          _patRow.className = 'fill-style-row';
-          _patRow.style.cssText = 'margin-top:4px;grid-template-columns:repeat(4,1fr);';
-          [{ key: 'lines', title: 'Lines' }, { key: 'dots', title: 'Dots' },
-           { key: 'crosshatch', title: 'Crosshatch' }, { key: 'custom', title: 'Custom' }].forEach(({ key, title }) => {
-            const _pb = document.createElement('button');
-            const _pbAct = key === 'custom' ? _fillStyle === 'custom-pattern' : (_fillStyle === 'pattern' && _patType === key);
-            _pb.className = 'fill-style-btn' + (_pbAct ? ' active' : '');
-            _pb.title = title;
-            _pb.appendChild(makeFillStyleIcon(key === 'custom' ? 'custom-pattern' : key));
-            _pb.addEventListener('click', e => {
-              e.stopPropagation(); pushUndo();
-              if (key === 'custom') {
-                _applyReg({ fillStyle: 'custom-pattern' });
-                if (!_activeReg.gradientToColor) _applyReg({ gradientToColor: _activeReg.fillColor || anim.color, gradientToOpacity: 1 });
-              } else {
-                _applyReg({ fillStyle: 'pattern', patternType: key });
-              }
-              saveProject(); renderAnimList(); draw();
-            });
-            _patRow.appendChild(_pb);
-          });
-          _fillWrap.appendChild(_patRow);
-
-          if (_fillStyle === 'pattern') {
-            const _pWRow = document.createElement('div');
-            _pWRow.className = 'direction-wheel-row'; _pWRow.style.marginTop = '4px';
-            const _pWLbl = document.createElement('span'); _pWLbl.className = 'direction-wheel-label'; _pWLbl.textContent = 'Direction';
-            _pWRow.appendChild(_pWLbl);
-            appendDirectionWheel(_pWRow, () => _activeReg.patternAngle ?? 0, a => { _applyReg({ patternAngle: a }); draw(); });
-            _fillWrap.appendChild(_pWRow);
-            appendSliderRow(_fillWrap, 'Spacing', 0.01, 0.5, 0.01, getPatternSpacingFrac(_activeReg),
-              v => `${Math.round(v * 100)}%`, v => { _applyReg({ patternSpacing: parseFloat(v) }); saveProject(); draw(); },
-              false, { valAlign: 'center' });
-          }
-
-          if (_fillStyle === 'custom-pattern') {
-            const _mrIsPickMode = customPatternPickMode?.regionId === _activeReg.id;
-            _fillWrap.appendChild(makeCustomPatternSourceRow({
-              getSourceId: () => _activeReg.customPatternSourceId,
-              onSetSource: (id) => {
-                pushUndo(); _applyReg({ customPatternSourceId: id });
-                if (id) { const src = animations.find(a => a.id === id); if (src) { const sb = selectedObjectCanvasBounds(src); if (sb) _applyReg({ patternAngle: (sb.right - sb.left) >= (sb.bottom - sb.top) ? 0 : Math.PI / 2 }); } }
-                saveProject(); renderAnimList(); draw();
-              },
-              isPickMode: _mrIsPickMode,
-              onEnterPickMode: () => {
-                customPatternPickMode = {
-                  regionId: _activeReg.id,
-                  onPick: (picked) => {
-                    pushUndo(); _applyReg({ customPatternSourceId: picked.id });
-                    if (picked.croppedImageDataUrl) _applyReg({ fillOpacity: 1.0 });
-                    const sb = selectedObjectCanvasBounds(picked); if (sb) _applyReg({ patternAngle: (sb.right - sb.left) >= (sb.bottom - sb.top) ? 0 : Math.PI / 2 });
-                    saveProject();
-                  }
-                };
-                renderAnimList(); draw();
-              },
-              onExitPickMode: () => { customPatternPickMode = null; renderAnimList(); draw(); }
-            }));
-
-            const _mrModeRow = document.createElement('div');
-            _mrModeRow.className = 'fill-style-row'; _mrModeRow.style.marginTop = '4px';
-            const _mrCurMode = _activeReg.customPatternMode || 'mask';
-            [{ key: 'mask', title: 'Mask' }, { key: 'blend', title: 'Blend' }].forEach(({ key, title }) => {
-              const _mb = document.createElement('button');
-              _mb.className = 'fill-style-btn' + (_mrCurMode === key ? ' active' : '');
-              _mb.style.fontSize = '0.65rem'; _mb.textContent = title;
-              _mb.addEventListener('click', e => {
-                e.stopPropagation();
-                if (_mrCurMode !== key) { pushUndo(); _applyReg({ customPatternMode: key }); saveProject(); renderAnimList(); draw(); }
-              });
-              _mrModeRow.appendChild(_mb);
-            });
-            _fillWrap.appendChild(_mrModeRow);
-
-            const _mrWRow = document.createElement('div');
-            _mrWRow.className = 'direction-wheel-row'; _mrWRow.style.marginTop = '4px';
-            const _mrWLbl = document.createElement('span'); _mrWLbl.className = 'direction-wheel-label'; _mrWLbl.textContent = 'Angle';
-            _mrWRow.appendChild(_mrWLbl);
-            appendDirectionWheel(_mrWRow, () => _activeReg.patternAngle ?? 0, a => { _applyReg({ patternAngle: a }); draw(); });
-            _fillWrap.appendChild(_mrWRow);
-            appendSliderRow(_fillWrap, 'Spacing', 0.01, 0.5, 0.01, getPatternSpacingFrac(_activeReg),
-              v => `${Math.round(v * 100)}%`, v => { _applyReg({ patternSpacing: parseFloat(v) }); saveProject(); draw(); },
-              false, { valAlign: 'center' });
-          }
-        }
-
-        // Boundary assignment (contour gradient only)
-        if (_fillStyle === 'contour-gradient' && _activeReg.boundary?.length) {
-          const _arcSec = document.createElement('div');
-          _arcSec.className = 'contour-arc-section';
-          const _isSelecting = contourSelectMode?.animId === anim.id && contourSelectMode?.regionId === _activeReg.id;
-          if (_isSelecting) {
-            const _cm = contourSelectMode;
-            const _sideColor = _cm.side === 'b1' ? '#89b4fa' : '#cba6f7';
-            const _sideLabel = _cm.side === 'b1' ? 'Boundary 1' : 'Boundary 2';
-            const _modeLbl = document.createElement('div');
-            _modeLbl.className = 'contour-mode-label';
-            _modeLbl.style.color = _sideColor;
-            _modeLbl.textContent = `Setting ${_sideLabel}`;
-            _arcSec.appendChild(_modeLbl);
-            const _cntLbl = document.createElement('div');
-            _cntLbl.className = 'contour-mode-count';
-            const _nNodes = _cm.nodeIndices.length;
-            _cntLbl.textContent = _cm.isCenterPoint ? 'Center point selected'
-              : _nNodes === 0 ? 'Click junction nodes on canvas (or the center point)'
-              : _nNodes === 1 ? '1 node clicked — click the next junction (CCW) or same to close'
-              : `${_nNodes} nodes clicked`;
-            _arcSec.appendChild(_cntLbl);
-            const _canSet = _cm.isCenterPoint || _nNodes >= 2;
-            const _actRow = document.createElement('div');
-            _actRow.className = 'contour-mode-actions';
-            const _setBtn = document.createElement('button');
-            _setBtn.className = 'contour-confirm-btn';
-            _setBtn.textContent = 'Set';
-            _setBtn.disabled = !_canSet;
-            _setBtn.addEventListener('click', e => {
-              e.stopPropagation();
-              if (!_canSet) return;
+      renderFillStyleSection(_fillWrap, {
+        get: () => _activeReg,
+        set: fields => _applyTargets.forEach(r => Object.assign(r, fields)),
+        subTabGet: () => regionFillSubTab, subTabSet: tab => { regionFillSubTab = tab; },
+        dropperActive: which => eyedropperTarget === (which === 'fill' ? 'region-fill' : 'region-fill2') && eyedropperAnimId === anim.id && eyedropperRegionId === _activeReg.id,
+        dropperToggle: which => {
+          const key = which === 'fill' ? 'region-fill' : 'region-fill2';
+          if (eyedropperTarget === key && eyedropperAnimId === anim.id && eyedropperRegionId === _activeReg.id) { deactivateEyedropper(); }
+          else { eyedropperTarget = key; eyedropperAnimId = anim.id; eyedropperRegionId = _activeReg.id; eyedropperCurveId = null; updateCursor(); }
+        },
+        isPickMode: customPatternPickMode?.regionId === _activeReg.id,
+        onEnterPickMode: () => {
+          customPatternPickMode = {
+            regionId: _activeReg.id,
+            onPick: (picked) => {
+              const added = addCustomPatternSource(getCustomPatternSourceIds(_activeReg), picked.id);
+              if (!added) return false;
               pushUndo();
-              const _cvm2 = getCurvesMapForContourMode();
-              const _edges = contourModeEdgesForActiveSelection(_activeReg, _cm, _cvm2);
-              const _nodes2 = _edges.length ? contourModeNodePositions(_activeReg, _cm, _cvm2) : null;
-              if (_cm.side === 'b1') { _activeReg.fill1Arcs = _edges.length ? _edges : null; _activeReg.fill1Nodes = _nodes2; }
-              else { _activeReg.fill2Arcs = _edges.length ? _edges : null; _activeReg.fill2Nodes = _nodes2; }
-              contourSelectMode = null;
-              saveProject(); renderAnimList(); draw();
-            });
-            const _cancelBtn = document.createElement('button');
-            _cancelBtn.className = 'contour-cancel-btn';
-            _cancelBtn.textContent = 'Cancel';
-            _cancelBtn.addEventListener('click', e => {
-              e.stopPropagation();
-              contourSelectMode = null;
-              renderAnimList(); draw();
-            });
-            _actRow.append(_setBtn, _cancelBtn);
-            _arcSec.appendChild(_actRow);
-          } else {
-            const _bHdr = document.createElement('div');
-            _bHdr.className = 'contour-arc-heading';
-            _bHdr.textContent = 'Boundaries';
-            _arcSec.appendChild(_bHdr);
-            ['b1', 'b2'].forEach(side => {
-              const _bRow = document.createElement('div');
-              _bRow.className = 'contour-arc-row';
-              const _arcs = side === 'b1' ? _activeReg.fill1Arcs : _activeReg.fill2Arcs;
-              const _bLbl = document.createElement('span');
-              _bLbl.className = 'contour-arc-label';
-              _bLbl.textContent = side === 'b1' ? 'Boundary 1' : 'Boundary 2';
-              const _bStatus = document.createElement('span');
-              _bStatus.className = 'contour-arc-status';
-              _bStatus.textContent = _arcs?.length === 1 && _arcs[0]?.isPoint ? 'point'
-                : _arcs?.length ? `${_arcs.length} arc${_arcs.length === 1 ? '' : 's'}` : 'auto';
-              const _bBtn = document.createElement('button');
-              _bBtn.className = `contour-set-btn ${side}`;
-              _bBtn.textContent = 'Set';
-              _bBtn.title = `Draw ${side === 'b1' ? 'Boundary 1' : 'Boundary 2'} on canvas`;
-              _bBtn.addEventListener('click', e => {
-                e.stopPropagation();
-                regionFillSubTab = 3;
-                contourSelectMode = { regionId: _activeReg.id, groupId: null, animId: anim.id, side, loopIndex: null, nodeIndices: [] };
-                renderAnimList(); draw();
-              });
-              _bRow.append(_bLbl, _bStatus, _bBtn);
-              _arcSec.appendChild(_bRow);
-            });
-          }
-          _fillWrap.appendChild(_arcSec);
-        }
-      }
+              const _fields = added.isFirst
+                ? { customPatternSourceIds: added.ids, customPatternStretchX: 1, customPatternStretchY: 1, patternAngle: 0 }
+                : { customPatternSourceIds: added.ids };
+              _applyTargets.forEach(r => Object.assign(r, _fields));
+              if (picked.croppedImageDataUrl) _applyTargets.forEach(r => { r.fillOpacity = 1.0; });
+              saveProject();
+              return added.ids.length < CUSTOM_PATTERN_MAX_SOURCES;
+            }
+          };
+          renderAnimList(); draw();
+        },
+        onExitPickMode: () => { customPatternPickMode = null; renderAnimList(); draw(); },
+        isRegionScoped: true,
+        contour: {
+          region: _activeReg, isSelecting: contourSelectMode?.animId === anim.id && contourSelectMode?.regionId === _activeReg.id,
+          isGroupRegion: false, groupId: null, animId: anim.id,
+          onStartSelecting: () => { regionFillSubTab = 3; },
+        },
+      });
 
       _dtContent.appendChild(_fillWrap);
     }
