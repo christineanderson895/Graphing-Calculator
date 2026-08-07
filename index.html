@@ -24417,6 +24417,10 @@ function renderFillStyleSection(container, opts) {
     container.appendChild(wheelRow);
     appendSliderRow(container, 'Spacing', 0.01, 0.5, 0.01, getPatternSpacingFrac(get()),
       v => `${Math.round(v * 100)}%`, v => { set({ patternSpacing: parseFloat(v) }); saveProject(); draw(); });
+    const _cpRawOpacity = get().fillOpacity;
+    const _cpInitOpacity = isFinite(_cpRawOpacity) ? clamp(_cpRawOpacity, 0, 1) : 0.3;
+    appendSliderRow(container, 'Opacity', 0, 100, 1, Math.round(_cpInitOpacity * 100),
+      v => `${Math.round(v)}%`, v => { set({ fillOpacity: clamp(parseFloat(v) / 100, 0, 1) }); saveProject(); draw(); });
     return;
   }
 
