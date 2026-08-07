@@ -873,7 +873,7 @@
     .color-expansion {
       display: flex;
       flex-direction: column;
-      padding: 6px;
+      padding: 4px;
     }
     .color-tab-bar {
       display: flex;
@@ -907,7 +907,7 @@
     .seg-rigid-btn.inactive { color: #45475a; border-color: #313244; }
     .seg-rigid-btn:hover { background: #313244; }
     .color-tab {
-      padding: 4px 14px;
+      padding: 4px 16px;
       font-size: 0.72rem;
       font-weight: 600;
       color: #6c7086;
@@ -922,6 +922,7 @@
     .color-tab.active {
       background: #181825;
       color: #cdd6f4;
+      border-color: #cdd6f4;
       border-bottom: 1px solid #181825;
       z-index: 1;
     }
@@ -934,7 +935,7 @@
       background: #181825;
       border: 1px solid #45475a;
       border-radius: 0 6px 6px 6px;
-      padding: 8px;
+      padding: 6px;
       display: flex;
       flex-direction: column;
       gap: 6px;
@@ -962,8 +963,8 @@
     .hue-wheel-row {
       display: flex;
       align-items: flex-start;
-      gap: 14px;
-      padding: 4px 8px 4px 12px;
+      gap: 10px;
+      padding: 4px 6px 4px 8px;
     }
     .hue-wheel-wrap {
       display: flex;
@@ -1322,12 +1323,12 @@
     .tree-input-row input:focus { border-color: #cba6f7; }
     .tree-input-row input.error { border-color: #f38ba8; }
     .tree-slider-row {
-      display: flex; align-items: center; gap: 5px;
+      display: flex; align-items: center; gap: 4px;
       font-size: 0.7rem; color: #a6adc8;
       padding: 4px 6px;
     }
     .tree-slider-row label { white-space: nowrap; min-width: 62px; }
-    .tree-slider-row input[type=range] { flex: 1; accent-color: #cba6f7; cursor: pointer; }
+    .tree-slider-row input[type=range] { flex: 1; min-width: 0; accent-color: #cba6f7; cursor: pointer; }
     .tree-slider-row input[type=range].color-range-slider {
       -webkit-appearance: none;
       appearance: none;
@@ -19397,7 +19398,7 @@ function makeFillStyleIcon(style) {
 function appendSliderRow(parent, labelText, min, max, step, value, formatValue, onInput, disabled = false, options = {}) {
   const row = document.createElement('div');
   row.className = 'tree-slider-row';
-  row.style.padding = '2px 8px 2px 0';
+  row.style.padding = '2px 6px 2px 0';
   const label = document.createElement('label');
   label.textContent = labelText;
   const slider = document.createElement('input');
@@ -19810,6 +19811,10 @@ function appendRegionColorExpansion(parent, region, group) {
     onEnterPickMode: () => {
       customPatternPickMode = {
         regionId: region.id,
+        // Region ids aren't globally unique — must scope staleness checks to the owning
+        // group/anim, same as contourSelectMode does (see renderAnimList).
+        groupId: isGroupRegion ? group.id : null,
+        animId: isGroupRegion ? null : group.id,
         onPick: (picked) => {
           const added = addCustomPatternSource(getCustomPatternSourceIds(region), picked.id);
           if (!added) return false;
@@ -27794,7 +27799,7 @@ function renderAnimListLegacy() {
 
   const _dtContent = document.createElement('div');
   _dtContent.className = 'color-tab-content';
-  _dtContent.style.cssText = 'padding:10px;max-height:320px;overflow-y:auto;';
+  _dtContent.style.cssText = 'padding:6px;max-height:320px;overflow-y:auto;';
   _dtContent.addEventListener('mousedown', e => e.stopPropagation());
   _dtContent.addEventListener('click', e => e.stopPropagation());
   detailEl.appendChild(_dtContent);
@@ -28070,6 +28075,7 @@ function renderAnimListLegacy() {
         onEnterPickMode: () => {
           customPatternPickMode = {
             regionId: _activeReg.id,
+            animId: anim.id,
             onPick: (picked) => {
               const added = addCustomPatternSource(getCustomPatternSourceIds(_activeReg), picked.id);
               if (!added) return false;
@@ -28606,6 +28612,16 @@ function renderAnimList() {
       ? contourSelectMode.groupId === selectedGroupId
       : contourSelectMode.animId === detailAnim?.id;
     if (!stillValid) contourSelectMode = null;
+  }
+  // Same staleness problem as contourSelectMode above: if the object/group whose panel opened
+  // pick mode gets deselected (closed, deleted, navigated away from) by any means other than
+  // the pick-mode Done/Cancel button or Escape, the global flag was never cleared — leaving
+  // every future canvas/tile click intercepted as a source pick instead of a normal selection.
+  if (customPatternPickMode) {
+    const stillValid = customPatternPickMode.groupId
+      ? customPatternPickMode.groupId === selectedGroupId
+      : customPatternPickMode.animId === detailAnim?.id;
+    if (!stillValid) customPatternPickMode = null;
   }
   renderAnimListLegacy();
   renderObjectTray(detailAnim);
